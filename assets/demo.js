@@ -41,7 +41,30 @@ function buildDraft(item) {
   return `Hi ${item.name}, thanks for your ${item.service.toLowerCase()} enquiry. ${timing}\n\nThis is a draft only. Review it before sending.`;
 }
 
-if (typeof module !== 'undefined') module.exports = {normaliseItems, buildDraft, friendlyDate, isIsoDate, seed};
+const FILTERS = ['All', ...STATUSES];
+const normaliseFilter = value => FILTERS.includes(value) ? value : 'All';
+
+// Text cue for open requests whose preferred date is today or already past.
+function attentionLabel(item, todayIso) {
+  if (!item || item.status === 'Done' || !isIsoDate(item.date) || !isIsoDate(todayIso)) return '';
+  if (item.date === todayIso) return 'Due today';
+  return item.date < todayIso ? 'Date passed' : '';
+}
+
+// View-only: filtered copy, open items first, Done last, then earliest date (no date last).
+function visibleItems(list, filter) {
+  const active = normaliseFilter(filter);
+  const rank = item => item.status === 'Done' ? 1 : 0;
+  return (Array.isArray(list) ? list : [])
+    .map((item, index) => ({item, index}))
+    .filter(({item}) => active === 'All' || item.status === active)
+    .sort((a, b) => rank(a.item) - rank(b.item)
+      || (a.item.date || '9999-99-99').localeCompare(b.item.date || '9999-99-99')
+      || a.index - b.index)
+    .map(({item}) => item);
+}
+
+if (typeof module !== 'undefined') module.exports = {normaliseItems, buildDraft, friendlyDate, isIsoDate, attentionLabel, visibleItems, normaliseFilter, seed};
 
 if (typeof document !== 'undefined') {
   const $ = selector => document.querySelector(selector);
@@ -53,30 +76,43 @@ if (typeof document !== 'undefined') {
   const localToday = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
   function save(){try{localStorage.setItem(STORAGE_KEY,JSON.stringify(items));return true;}catch{say('Browser storage is unavailable. Your changes will last only until this page closes.');return false;}}
   function textElement(tag,value){const node=document.createElement(tag);node.textContent=value;return node;}
-  function render(){
+  let filter='All';
+  function render(focusId){
     const body=$('#requests');body.replaceChildren();
-    if(!items.some(item=>item.id===selectedId))selectedId=null;
-    for(const item of items){
+    const shown=visibleItems(items,filter);
+    if(!shown.some(item=>item.id===selectedId))selectedId=null;
+    const today=localToday();
+    if(!shown.length){
+      const tr=document.createElement('tr');const td=textElement('td',filter==='All'?'No requests yet. Add a sample request below.':`No ${filter} requests.`);
+      td.colSpan=5;tr.append(td);body.append(tr);
+    }
+    for(const item of shown){
       const tr=document.createElement('tr');
       if(item.id===selectedId)tr.className='selected';
       [item.name,item.service,friendlyDate(item.date)||'Not set'].forEach(value=>tr.append(textElement('td',value)));
       const status=document.createElement('td');
       const pill=textElement('span',item.status);
       pill.className='pill'+(item.status==='New'?' open':item.status==='Done'?' done':'');
-      status.append(pill);tr.append(status);
+      status.append(pill);
+      const attention=attentionLabel(item,today);
+      if(attention){const cue=textElement('span',attention);cue.className='pill open';cue.style.marginLeft='.4rem';status.append(cue);}
+      tr.append(status);
       const action=document.createElement('td');action.className='actions';
       const select=document.createElement('select');select.className='table-action';
       select.setAttribute('aria-label','Status for '+item.name);
       for(const option of STATUSES){const o=textElement('option',option);o.value=option;o.selected=option===item.status;select.append(o);}
       select.addEventListener('change',()=>{
         if(!STATUSES.includes(select.value))return;
-        item.status=select.value;const stored=save();render();
-        say(stored?`${item.name} marked ${item.status}.`:'Status changed, but browser storage is unavailable.');
+        item.status=select.value;const stored=save();
+        const hidden=filter!=='All'&&item.status!==filter;
+        render(hidden?undefined:item.id);
+        say(stored?`${item.name} marked ${item.status}.${hidden?` Hidden by the ${filter} filter.`:''}`:'Status changed, but browser storage is unavailable.');
       });
       const draftButton=textElement('button','Draft reply');draftButton.className='table-action';draftButton.type='button';
       draftButton.setAttribute('aria-pressed',String(item.id===selectedId));
       draftButton.addEventListener('click',()=>{selectedId=item.id;render();say(`Draft prepared for ${item.name}. Nothing was sent.`);});
       action.append(select,draftButton);tr.append(action);body.append(tr);
+      if(item.id===focusId)select.focus();
     }
     $('#count-new').textContent=items.filter(item=>item.status==='New').length;
     $('#count-followup').textContent=items.filter(item=>item.status==='Follow-up').length;
@@ -85,6 +121,11 @@ if (typeof document !== 'undefined') {
     $('#request-details').textContent=selected?`Request details from ${selected.name}: ${selected.note||'No details provided.'}`:'';
     $('#followup-draft').value=buildDraft(selected);
   }
+  $('#status-filter').addEventListener('change',event=>{
+    filter=normaliseFilter(event.target.value);event.target.value=filter;render();
+    const count=visibleItems(items,filter).length;
+    say(count?`Showing ${count} ${filter==='All'?'':filter+' '}request${count===1?'':'s'}.`:(filter==='All'?'No requests yet.':`No ${filter} requests.`));
+  });
   const draftBox=$('#followup-draft');
   const detailsNode=document.createElement('p');detailsNode.id='request-details';detailsNode.className='note';
   draftBox.parentNode.insertBefore(detailsNode,draftBox);
@@ -102,7 +143,7 @@ if (typeof document !== 'undefined') {
     items.unshift({id:crypto.randomUUID(),name,service,date:isIsoDate(date)?date:'',note:cleanText(String(data.get('note')),500),status:'New',created:localToday()});
     const stored=save();render();form.reset();if(stored)say('Sample request added on this device.');
   });
-  $('#reset-demo').addEventListener('click',()=>{items=structuredClone(seed);selectedId=null;const stored=save();render();if(stored)say('Sample data restored.');});
+  $('#reset-demo').addEventListener('click',()=>{items=structuredClone(seed);selectedId=null;filter='All';$('#status-filter').value='All';const stored=save();render();if(stored)say('Sample data restored.');});
   $('#copy-followup').addEventListener('click',async()=>{
     const draft=$('#followup-draft');
     if(!selectedId){say('Choose "Draft reply" on a request first.');return;}

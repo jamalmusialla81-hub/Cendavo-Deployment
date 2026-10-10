@@ -7,7 +7,7 @@ from pathlib import Path
 DEMO = Path(__file__).resolve().parents[1] / 'assets' / 'demo.js'
 
 SCRIPT = r"""
-const {normaliseItems, buildDraft, friendlyDate, isIsoDate, seed} = require(process.argv[1]);
+const {normaliseItems, buildDraft, friendlyDate, isIsoDate, attentionLabel, visibleItems, normaliseFilter, seed} = require(process.argv[1]);
 const good = {id:'a',name:'Pat',service:'Cleaning',date:'2026-10-14',note:'x',status:'Done',created:'2026-10-01'};
 console.log(JSON.stringify({
   nonArray: normaliseItems({}).length === seed.length,
@@ -24,6 +24,19 @@ console.log(JSON.stringify({
   leapBad: isIsoDate('2027-02-29'),
   y1: friendlyDate('2026-10-14'),
   y2: friendlyDate('2037-10-14'),
+  attn: ['2026-10-11', '2026-10-10', '2026-10-12', ''].map(d => attentionLabel({...good, status:'New', date:d}, '2026-10-11')),
+  attnDone: attentionLabel({...good, date:'2026-10-01'}, '2026-10-11'),
+  attnBadToday: attentionLabel({...good, status:'New'}, 'x'),
+  filt: normaliseFilter('Bogus') + normaliseFilter('Done') + normaliseFilter(undefined),
+  order: visibleItems([
+    {...good, id:'d', status:'Done', date:'2026-10-01'},
+    {...good, id:'n', status:'New', date:''},
+    {...good, id:'f', status:'Follow-up', date:'2026-10-20'},
+    {...good, id:'e', status:'New', date:'2026-10-12'},
+  ], 'All').map(i => i.id),
+  onlyDone: visibleItems([good, {...good, id:'z', status:'New'}], 'Done').map(i => i.id),
+  unknownFilter: visibleItems([good, {...good, id:'z', status:'New'}], 'Bogus').length,
+  notArray: visibleItems(null, 'All').length,
 }));
 """
 
@@ -60,6 +73,18 @@ class DemoScriptTests(unittest.TestCase):
         self.assertIn('what date and time work', self.r['noDate'])
         self.assertIn('<script>alert(1)</script>', self.r['script'])
         self.assertIn('Draft reply', self.r['empty'])
+
+    def test_attention_label_is_text_and_ignores_done(self):
+        self.assertEqual(self.r['attn'], ['Due today', 'Date passed', '', ''])
+        self.assertEqual(self.r['attnDone'], '')
+        self.assertEqual(self.r['attnBadToday'], '')
+
+    def test_filter_and_sort(self):
+        self.assertEqual(self.r['filt'], 'AllDoneAll')
+        self.assertEqual(self.r['order'], ['e', 'f', 'n', 'd'])
+        self.assertEqual(self.r['onlyDone'], ['a'])
+        self.assertEqual(self.r['unknownFilter'], 2)
+        self.assertEqual(self.r['notArray'], 0)
 
 
 if __name__ == '__main__':
