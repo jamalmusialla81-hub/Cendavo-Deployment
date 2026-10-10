@@ -34,11 +34,21 @@ function friendlyDate(value) {
   return new Date(value + 'T00:00:00Z').toLocaleDateString('en-AU', {weekday: 'short', day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC'});
 }
 
+// Static clarifying question per service. Unknown services get none.
+const SERVICE_CLAUSES = {
+  Alteration: 'Could you send a photo of the item and tell us what change you need?',
+  Cleaning: 'How many bedrooms and bathrooms does the property have?',
+  Laundry: 'Roughly how many items or bags do you have, and are there any special care needs?',
+  Repair: 'Could you send a photo of the damage and tell us what happened?',
+  Other: 'Could you tell us a little more about what you need?'
+};
+
 function buildDraft(item) {
   if (!item || typeof item.name !== 'string' || typeof item.service !== 'string') return EMPTY_DRAFT;
   const when = friendlyDate(item.date);
   const timing = when ? `We can discuss your request for ${when}. Please let us know what time works for you.` : 'Please let us know what date and time work for you.';
-  return `Hi ${item.name}, thanks for your ${item.service.toLowerCase()} enquiry. ${timing}\n\nThis is a draft only. Review it before sending.`;
+  const clause = Object.hasOwn(SERVICE_CLAUSES, item.service) ? ` ${SERVICE_CLAUSES[item.service]}` : '';
+  return `Hi ${item.name}, thanks for your ${item.service.toLowerCase()} enquiry. ${timing}${clause}\n\nThis is a draft only. Review it before sending.`;
 }
 
 const FILTERS = ['All', ...STATUSES];

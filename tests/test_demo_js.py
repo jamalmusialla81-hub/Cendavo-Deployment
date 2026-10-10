@@ -19,6 +19,9 @@ console.log(JSON.stringify({
   noDate: buildDraft({...good, date:''}),
   script: buildDraft({...good, name:'<script>alert(1)</script>'}),
   empty: buildDraft(undefined),
+  clauses: Object.fromEntries(['Alteration','Cleaning','Laundry','Repair','Other'].map(s => [s, buildDraft({...good, service:s})])),
+  unknownService: buildDraft({...good, service:'<script>x</script>'}),
+  protoService: buildDraft({...good, service:'constructor'}),
   feb31: isIsoDate('2026-02-31'),
   leapOk: isIsoDate('2028-02-29'),
   leapBad: isIsoDate('2027-02-29'),
@@ -61,6 +64,31 @@ class DemoScriptTests(unittest.TestCase):
         self.assertRegex(self.r['normal'], r'Wed,? 14 Oct')
         self.assertNotIn('2026-10-14', self.r['normal'])
         self.assertIn('draft only', self.r['normal'])
+
+    def test_draft_is_service_specific(self):
+        expected = {
+            'Alteration': 'photo of the item',
+            'Cleaning': 'bedrooms and bathrooms',
+            'Laundry': 'items or bags',
+            'Repair': 'photo of the damage',
+            'Other': 'a little more about what you need',
+        }
+        for service, text in expected.items():
+            draft = self.r['clauses'][service]
+            self.assertIn(text, draft)
+            self.assertIn('draft only', draft)
+            for other, other_text in expected.items():
+                if other != service:
+                    self.assertNotIn(other_text, draft)
+
+    def test_unknown_service_uses_generic_draft(self):
+        for key in ('unknownService', 'protoService'):
+            draft = self.r[key]
+            self.assertIn('draft only', draft)
+            self.assertIn('Please let us know what time works', draft)
+            for text in ('photo of', 'bedrooms', 'items or bags', 'a little more'):
+                self.assertNotIn(text, draft)
+        self.assertIn('<script>x</script>', self.r['unknownService'])
 
     def test_dates_are_real_calendar_dates_and_show_year(self):
         self.assertFalse(self.r['feb31'])
