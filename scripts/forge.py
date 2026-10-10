@@ -18,6 +18,7 @@ import sys
 import time
 import platform
 import tempfile
+from dataclasses import dataclass
 from datetime import datetime, timezone
 
 if __package__:
@@ -46,6 +47,76 @@ CLAUDE_DENIED_TOOLS = ','.join((
     'Edit(scripts/forge.py)', 'Edit(scripts/forge_sandbox.py)',
     'Edit(scripts/overnight.sh)', 'Edit(AGENTS.md)', 'Edit(CLAUDE.md)',
 ))
+DESIGN_PLUGIN_NAME = 'insane-web-design'
+DESIGN_PLUGIN_DIR_ENV = 'CENDAVO_INSANE_WEB_DESIGN_PLUGIN_DIR'
+
+
+@dataclass(frozen=True)
+class DesignPlugin:
+    available: bool
+    detail: str
+    skills: tuple[str, ...] = ()
+    path: Path | None = None
+    explicit_load: bool = False
+
+
+def _validate_design_plugin(path: Path, explicit_load: bool) -> DesignPlugin:
+    try:
+        path = path.expanduser().resolve(strict=True)
+        manifest = json.loads((path / '.claude-plugin' / 'plugin.json').read_text())
+        if not isinstance(manifest, dict):
+            raise ValueError('plugin manifest is not an object')
+        if manifest.get('name') != DESIGN_PLUGIN_NAME:
+            raise ValueError('plugin manifest name does not match')
+        if 'hooks' in manifest or 'mcpServers' in manifest or (path / 'hooks').exists() or (path / '.mcp.json').exists():
+            raise ValueError('plugin has hooks or MCP servers; manual review is required')
+        skills = tuple(sorted(child.parent.name for child in (path / 'skills').glob('*/SKILL.md')
+                              if child.is_file() and child.resolve().is_relative_to(path)))
+        if not skills:
+            raise ValueError('plugin has no local skills')
+        return DesignPlugin(True, 'local skills available', skills, path, explicit_load)
+    except (OSError, ValueError, TypeError) as exc:
+        return DesignPlugin(False, f'local plugin cannot be loaded safely: {exc}')
+
+
+def discover_design_plugin() -> DesignPlugin:
+    """Use only a locally installed skills-only plugin; never fetch or install."""
+    override = os.environ.get(DESIGN_PLUGIN_DIR_ENV)
+    if override:
+        return _validate_design_plugin(Path(override), explicit_load=True)
+    try:
+        cli = str(LOCAL_BIN / 'claude') if (LOCAL_BIN / 'claude').exists() else 'claude'
+        env = dict(os.environ)
+        env.pop('ANTHROPIC_API_KEY', None)
+        listed = subprocess.run([cli, 'plugin', 'list', '--json'], cwd=ROOT, text=True,
+                                capture_output=True, timeout=20, env=env)
+        if listed.returncode:
+            return DesignPlugin(False, 'Claude Code could not list installed plugins')
+        plugins = json.loads(listed.stdout)
+        if not isinstance(plugins, list):
+            return DesignPlugin(False, 'Claude Code returned an invalid plugin list')
+        for item in plugins:
+            if not isinstance(item, dict):
+                continue
+            if item.get('id', '').split('@', 1)[0] == DESIGN_PLUGIN_NAME:
+                if not item.get('enabled'):
+                    return DesignPlugin(False, 'plugin is installed but disabled in Claude Code')
+                return _validate_design_plugin(Path(item['installPath']), explicit_load=False)
+    except (OSError, ValueError, TypeError, KeyError, subprocess.TimeoutExpired):
+        return DesignPlugin(False, 'Claude Code plugin discovery failed')
+    return DesignPlugin(False, 'insane-web-design is not installed in this Claude Code CLI')
+
+
+def design_brief(plugin: DesignPlugin) -> str:
+    common = ('For any frontend task, evaluate whether visual design, motion, or 3D would help users understand the product and convert. '
+              'Prioritize performance, accessibility, responsive layouts, clarity, and conversion. '
+              'Use motion only with a purpose and respect reduced-motion preferences. '
+              'Use 3D only when it communicates something that simpler visuals cannot. '
+              'Do not add paid services, CDN dependencies, unnecessary animation, or new network requests.')
+    if plugin.available:
+        names = ', '.join(f'{DESIGN_PLUGIN_NAME}:{skill}' for skill in plugin.skills)
+        return f'{common} The local plugin exposes these skills: {names}. For frontend work, inspect the relevant skill via the Skill tool before implementation; name the skills considered and explain which guidance you used or why none fit.'
+    return f'{common} The {DESIGN_PLUGIN_NAME} plugin is unavailable to this Forge run ({plugin.detail}). State that limitation for frontend work and do not claim to have used its skills.'
 
 
 class RateLimited(RuntimeError):
@@ -214,18 +285,31 @@ def run_command(argv, stdin, task_id, name, deadline, timeout=1800, sandbox_tmp=
     return output
 
 
-def claude_report(task_id, name, prompt, deadline, writable=False):
-    tools = 'Read,Glob,Grep,Edit,Write' if writable else 'Read,Glob,Grep'
+def claude_report(task_id, name, prompt, deadline, writable=False, design_plugin=None):
+    design_plugin = design_plugin if design_plugin is not None else discover_design_plugin()
+    tools = ['Read','Glob','Grep']
+    if writable:
+        tools += ['Edit','Write']
+    if design_plugin.available:
+        tools.append('Skill')
+    tool_list = ','.join(tools)
     agent = 'cendavo-builder' if writable else 'cendavo-strategist'
-    argv = ['claude','-p','--restricted','--strict-mcp-config','--agent',agent,'--permission-mode','dontAsk','--tools',tools,'--allowedTools',tools,'--disallowedTools',CLAUDE_DENIED_TOOLS,'--output-format','json','--max-turns','16' if writable else '6']
-    raw = run_command(argv, prompt, task_id, name, deadline)
+    argv = ['claude','-p','--restricted','--strict-mcp-config','--agent',agent,
+            '--permission-mode','dontAsk','--tools',tool_list,'--allowedTools',tool_list,
+            '--disallowedTools',CLAUDE_DENIED_TOOLS,'--output-format','json',
+            '--max-turns','16' if writable else '6']
+    if design_plugin.explicit_load and design_plugin.path:
+        argv += ['--plugin-dir',str(design_plugin.path)]
+    raw = run_command(argv, prompt + '\n\nFrontend design checkpoint: ' + design_brief(design_plugin), task_id, name, deadline)
     try:
         payload = json.loads(raw)
         result = payload.get('result', '')
     except ValueError:
         result = raw
         payload = {}
-    report = {'at':now(),'agent':agent,'result':result,'usage':{k:payload.get(k) for k in ('total_cost_usd','usage') if k in payload}}
+    report = {'at':now(),'agent':agent,'design_plugin':{'available':design_plugin.available,
+              'skills':design_plugin.skills,'detail':design_plugin.detail},'result':result,
+              'usage':{k:payload.get(k) for k in ('total_cost_usd','usage') if k in payload}}
     path = REPORTS / f'{task_id:04d}-{name}.json'
     path.write_text(json.dumps(report,indent=2))
     path.chmod(0o600)
@@ -276,9 +360,11 @@ def run_task(conn, row, deadline):
     if not clean_tree():
         raise RuntimeError('Source tree has uncommitted changes. Commit or stash before running Forge.')
     baseline = git('rev-parse','HEAD').stdout.strip()
-    strategy = claude_report(task_id,'strategy',f'Read Cendavo and assess this queued task: {title}. Challenge value, feasibility, cost and risk. Propose the smallest useful implementation. State evidence versus assumptions. Respond in concise sections: PROPOSAL, EVIDENCE, RISKS, BUILDER BRIEF. Do not modify files.',deadline)
+    design_plugin = discover_design_plugin()
+    event(conn,task_id,'design_plugin',design_plugin.detail + (': ' + ', '.join(design_plugin.skills) if design_plugin.available else ''))
+    strategy = claude_report(task_id,'strategy',f'Read Cendavo and assess this queued task: {title}. Challenge value, feasibility, cost and risk. Propose the smallest useful implementation. State evidence versus assumptions. Respond in concise sections: PROPOSAL, EVIDENCE, RISKS, BUILDER BRIEF. Do not modify files.',deadline,design_plugin=design_plugin)
     event(conn,task_id,'strategy_complete',f'report {task_id:04d}-strategy.json')
-    claude_report(task_id,'builder',f'Implement this approved task in Cendavo: {title}\n\nStrategist report:\n{strategy}\n\nWork only in product and tests. No shell, deployment or secrets. Explain the final changes and remaining risks.',deadline,True)
+    claude_report(task_id,'builder',f'Implement this approved task in Cendavo: {title}\n\nStrategist report:\n{strategy}\n\nWork only in product and tests. No shell, deployment or secrets. Explain the final changes and remaining risks.',deadline,True,design_plugin)
     names = allowed_changes()
     if not names:
         raise RuntimeError('Builder made no source changes')
@@ -289,7 +375,7 @@ def run_task(conn, row, deadline):
             break
         if not review.lstrip().startswith('VERDICT: FIX') or cycle == MAX_REVIEW_CYCLES:
             raise RuntimeError('Security preflight failed or review cycle limit reached')
-        claude_report(task_id,f'preflight-fix-{cycle}',f'Fix the security preflight findings for task {title}:\n{review}',deadline,True)
+        claude_report(task_id,f'preflight-fix-{cycle}',f'Fix the security preflight findings for task {title}:\n{review}',deadline,True,design_plugin)
         allowed_changes()
     tests(task_id,deadline)
     for cycle in range(1,MAX_REVIEW_CYCLES+1):
@@ -301,7 +387,7 @@ def run_task(conn, row, deadline):
             raise RuntimeError('Audit verdict missing or malformed')
         if cycle == MAX_REVIEW_CYCLES:
             raise RuntimeError('Review cycle limit reached; manual resolution needed')
-        claude_report(task_id,f'fix-{cycle}',f'Fix the actionable findings for task {title}. Codex report:\n{review}\nKeep the approved scope and do not modify protected files. Report each fix.',deadline,True)
+        claude_report(task_id,f'fix-{cycle}',f'Fix the actionable findings for task {title}. Codex report:\n{review}\nKeep the approved scope and do not modify protected files. Report each fix.',deadline,True,design_plugin)
         allowed_changes()
         safety = codex_review(task_id,f'SECURITY PREFLIGHT after Claude fixes for task: {title}. Inspect all current changes since {baseline}. Do not execute or edit files. Check for exfiltration, unsafe build/test scripts, unwanted dependencies and scope violations. Start with VERDICT: PASS or VERDICT: FIX.',deadline,f'postfix-preflight-{cycle}')
         if not safety.lstrip().startswith('VERDICT: PASS'):
