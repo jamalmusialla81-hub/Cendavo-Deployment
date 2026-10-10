@@ -1,0 +1,45 @@
+name: Deploy Cloudflare Pages
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+  deployments: write
+jobs:
+  deploy:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Build site
+        run: python3 scripts/build_site.py
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Run tests for this commit
+        run: |
+          python3 -m unittest discover -s tests -v
+          node --check assets/site.js
+          node --check assets/demo.js
+      - name: Check Cloudflare settings
+        env:
+          CF_TOKEN_PRIMARY: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CF_TOKEN_EXISTING: ${{ secrets.CLOUDFLARE_API }}
+          CF_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          if [ -z "$CF_TOKEN_PRIMARY" ] && [ -z "$CF_TOKEN_EXISTING" ]; then
+            echo 'Missing CLOUDFLARE_API_TOKEN or CLOUDFLARE_API GitHub secret.' >&2
+            exit 1
+          fi
+          if [ -z "$CF_ACCOUNT_ID" ]; then
+            echo 'Missing CLOUDFLARE_ACCOUNT_ID GitHub Actions variable.' >&2
+            exit 1
+          fi
+      - name: Deploy to Pages
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN || secrets.CLOUDFLARE_API }}
+          accountId: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+          command: pages deploy dist --project-name=cendavo --branch=main

@@ -1,0 +1,10 @@
+/dist/
+/.cendavo-tools/
+/.cendavo-run/
+__pycache__/
+*.pyc
+.DS_Store
+.env
+.env.*
+!.env.example
+node_modules/

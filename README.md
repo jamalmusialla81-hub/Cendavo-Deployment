@@ -1,0 +1,24 @@
+# Cendavo
+
+An early business website and product demo for a reusable local service admin platform. The first increment lets visitors try a browser-local request queue, change statuses, and prepare follow-up drafts. It uses synthetic data and does not send messages, store customer data online or take payments.
+
+## Run locally
+
+```sh
+python3 scripts/build_site.py
+python3 -m http.server 8000 --directory dist
+```
+
+Open `http://localhost:8000`. To validate: `python3 -m unittest discover -s tests -v`, then `node --check assets/site.js` and `node --check assets/demo.js`.
+
+## Development loop
+
+[Forge instructions](docs/FORGE.md) explain the local Claude Strategist → Claude Builder → Codex Auditor runner, persistent queue, logs, stop switch and overnight launcher. [Decision record](docs/DECISIONS.md) explains the first product and deployment choices.
+
+## Deployment
+
+The site builds into `dist/` with Python's standard library. For the Git-linked Cloudflare Pages project, configure the build command `python3 scripts/build_site.py` and output directory `dist`; pushes to `main` then deploy automatically. The backup GitHub Actions deployment workflow is manual and restricted to `main`. It needs a repository secret `CLOUDFLARE_API_TOKEN` (or the existing `CLOUDFLARE_API`), repository variable `CLOUDFLARE_ACCOUNT_ID`, and a Pages project named `cendavo`. GitHub's check workflow runs on pushes and pull requests. Review local Forge checkpoints before pushing because a `main` push can publish them.
+
+## Current scope
+
+The demo is suitable for workflow evaluation only. A secure multi-tenant backend, sign-in, audit logging, data retention policy and real business onboarding are still required before using real customer data. A$49–99/month is a pricing hypothesis, not a subscription offer.
