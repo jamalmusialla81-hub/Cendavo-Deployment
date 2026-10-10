@@ -13,7 +13,7 @@ Open `http://localhost:8000`. To validate: `python3 -m unittest discover -s test
 
 ## Development loop
 
-[Forge instructions](docs/FORGE.md) explain the local Claude Strategist → Claude Builder → Codex Auditor runner, persistent queue, logs, stop switch and overnight launcher. [Decision record](docs/DECISIONS.md) explains the first product and deployment choices.
+[Forge instructions](docs/FORGE.md) explain the local Claude-only Strategist → Builder → Security Reviewer → tests → Functional Auditor runner, persistent queue, logs, stop switch and overnight launcher. [Decision record](docs/DECISIONS.md) explains the first product and deployment choices.
 [Progress and assumptions](docs/PROGRESS.md) tracks MVP completeness, unvalidated pricing, security work and the queued improvements.
 
 ## Deployment

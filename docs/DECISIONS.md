@@ -18,10 +18,17 @@
 
 ## 003 — Agent billing
 
-**Decision:** Forge uses the authenticated Claude Code and Codex CLIs. It does not use API keys, does not start without Claude Code, and strips `ANTHROPIC_API_KEY` from agent subprocesses. Claude Max CLI usage and limits must be checked in the user's account; API billing is not assumed.
+**Decision:** Forge uses only the authenticated Claude Code CLI (Codex was removed from the pipeline in decision 004). It does not use API keys, does not start without Claude Code, and strips `ANTHROPIC_API_KEY` from agent subprocesses. Claude Max CLI usage and limits must be checked in the user's account; API billing is not assumed.
 
 ## 004 — First release result
 
 **Outcome:** The production project is `cendavo-deployment`. Cloudflare builds with `python3 scripts/build_site.py` and serves `dist`. The live home and demo routes returned HTTP 200. GitHub Checks and the manual Pages workflow passed on commit `2d83b7b`.
 
 **Remaining constraint:** Claude Code is installed locally but not authenticated. Forge's first start attempt recorded a pause before any agent task began. The user must review and authorize the Claude Code account connection before the three queued tasks can run.
+
+## 004 — Claude-only Forge pipeline
+
+**Decision:** Replace the Codex security preflight and audit with independent Claude sessions. Each reviewer is a fresh `claude -p --no-session-persistence` call with read-only tools (Read, Glob, Grep), no shared context with the Builder, and only the task, Strategist requirements and the change itself as input. Agents are passed inline (`--agents`, built from `.claude/agents/*.md`) so discovery no longer depends on the child CLI's working directory or settings.
+
+**Trade-off:** Reviewer calls still consume Claude allowance; the saving is Codex quota only. A Claude reviewer shares model-family blind spots with the Builder, so deterministic tests and the protected-file checks stay mandatory.
+
