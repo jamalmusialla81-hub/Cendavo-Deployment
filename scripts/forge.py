@@ -36,7 +36,8 @@ MAX_REVIEW_CYCLES = 2
 LOCAL_BIN = ROOT / '.cendavo-tools' / 'node_modules' / '.bin'
 AGENT_DIR = ROOT / '.claude' / 'agents'
 AGENTS_FILE = STATE / 'agents.json'
-REQUIRED_AGENTS = ('cendavo-strategist', 'cendavo-builder', 'cendavo-security-reviewer', 'cendavo-auditor')
+REQUIRED_AGENTS = ('cendavo-strategist', 'cendavo-builder', 'cendavo-security-reviewer', 'cendavo-auditor', 'cendavo-maintainer')
+WRITABLE_AGENTS = ('cendavo-builder', 'cendavo-maintainer')
 READ_ONLY_TOOLS = 'Read,Glob,Grep'
 BUILD_TOOLS = 'Read,Glob,Grep,Edit,Write'
 FRONTEND_PLUGIN = 'insane-web-design'
@@ -47,6 +48,8 @@ MAX_DIFF_CHARS = 120_000
 DENY_TOOLS = ('mcp__*', 'Bash', 'Read(.env*)', 'Read(**/.env*)', 'Read(.cendavo-run/**)', 'Read(~/.ssh/**)', 'Read(~/.aws/**)', 'Read(~/.config/**)')
 BUILDER_DENY = ('Edit(.github/**)', 'Edit(.claude/**)', 'Edit(scripts/forge.py)', 'Edit(AGENTS.md)', 'Edit(CLAUDE.md)', 'Edit(.env*)',
                 'Write(.github/**)', 'Write(.claude/**)', 'Write(scripts/forge.py)', 'Write(AGENTS.md)', 'Write(CLAUDE.md)', 'Write(.env*)')
+# The maintainer works only inside an isolated worktree; the supervisor's patch policy decides what may be integrated.
+MAINTAINER_DENY = ('Edit(.env*)', 'Write(.env*)', 'Edit(.git/**)', 'Write(.git/**)', 'Edit(.cendavo-run/**)', 'Write(.cendavo-run/**)')
 LIMIT_TERMS = ('rate limit', 'usage limit', 'quota exceeded', 'overloaded', 'limit reached', 'limit will reset')
 
 
@@ -56,6 +59,29 @@ class RateLimited(RuntimeError):
 
 class SecurityFailure(RuntimeError):
     """Security review blocked the change; never retried automatically."""
+
+
+class StageFailure(RuntimeError):
+    """A command exited non-zero; carries the stage name and log path for diagnosis."""
+
+    def __init__(self, message, stage, log):
+        super().__init__(message)
+        self.stage = stage
+        self.log = Path(log)
+
+
+# Subscription-only: these would route Claude Code to API billing or another paid provider.
+BILLING_ENV = ('ANTHROPIC_API_KEY', 'ANTHROPIC_AUTH_TOKEN', 'ANTHROPIC_BASE_URL', 'CLAUDE_CODE_USE_BEDROCK', 'CLAUDE_CODE_USE_VERTEX',
+               'CLAUDE_CODE_USE_FOUNDRY', 'AWS_BEARER_TOKEN_BEDROCK', 'ANTHROPIC_VERTEX_PROJECT_ID', 'OPENAI_API_KEY',
+               'CLOUDFLARE_API_TOKEN', 'CLOUDFLARE_API')
+FORBIDDEN_CLAUDE_FLAGS = ('--max-budget-usd', '--fallback-model', '--betas')
+
+
+def subscription_env(base=None):
+    env = dict(os.environ if base is None else base)
+    for key in BILLING_ENV:
+        env.pop(key, None)
+    return env
 SEED = [
     (1, 'Improve the demo request workflow for a real local service task. Preserve browser-local synthetic data and clear status controls.'),
     (2, 'Improve keyboard and screen-reader access in the site and demo. Keep changes focused and testable.'),
@@ -67,8 +93,8 @@ def now():
     return datetime.now(timezone.utc).isoformat(timespec='seconds')
 
 
-def git(*args, check=True):
-    return subprocess.run(['git', *args], cwd=ROOT, text=True, capture_output=True, check=check)
+def git(*args, check=True, cwd=None):
+    return subprocess.run(['git', *args], cwd=cwd or ROOT, text=True, capture_output=True, check=check)
 
 
 def ensure_state():
@@ -167,8 +193,7 @@ def check_tools():
     except (OSError, RuntimeError) as exc:
         return f'Agent definitions invalid: {exc}'
     try:
-        env = dict(os.environ)
-        env.pop('ANTHROPIC_API_KEY', None)
+        env = subscription_env()
         auth = subprocess.run([claude_bin(),'auth','status'], cwd=ROOT, text=True, capture_output=True, timeout=20, env=env)
         data = json.loads(auth.stdout) if auth.returncode == 0 else {}
         method = data.get('authMethod')
@@ -209,25 +234,25 @@ def hit_limit(text):
     return any(term in lower for term in LIMIT_TERMS)
 
 
-def run_command(argv, stdin, task_id, name, deadline, timeout=1800):
+def run_command(argv, stdin, task_id, name, deadline, timeout=1800, cwd=None):
     if STOP.exists():
         raise RuntimeError('Manual STOP file found')
     remaining = int(deadline - time.monotonic())
     if remaining < 30:
         raise RuntimeError('Maximum runtime reached')
-    env = dict(os.environ)
+    if Path(argv[0]).name == 'claude' and any(flag in argv for flag in FORBIDDEN_CLAUDE_FLAGS):
+        raise RuntimeError('Refusing a Claude invocation with paid-fallback or budget flags')
+    env = subscription_env()
     env['PATH'] = str(LOCAL_BIN) + os.pathsep + env.get('PATH', '')
     if argv[0] == 'sandbox-exec':
         env['TMPDIR'] = str(STATE / 'tmp')
         env['PYTHONDONTWRITEBYTECODE'] = '1'
-    for key in ('ANTHROPIC_API_KEY','OPENAI_API_KEY','CLOUDFLARE_API_TOKEN','CLOUDFLARE_API'):
-        env.pop(key, None)
     path = LOGS / f'{task_id:04d}-{name}-{int(time.time())}.log'
     with path.open('w+') as log:
         os.chmod(path, 0o600)
         log.write('command: ' + ' '.join(argv[:4]) + '\nstarted: ' + now() + '\n\n')
         log.flush()
-        proc = subprocess.Popen(argv, cwd=ROOT, stdin=subprocess.PIPE, stdout=log, stderr=subprocess.STDOUT, text=True, env=env, start_new_session=True)
+        proc = subprocess.Popen(argv, cwd=cwd or ROOT, stdin=subprocess.PIPE, stdout=log, stderr=subprocess.STDOUT, text=True, env=env, start_new_session=True)
         ACTIVE.write_text(json.dumps({'pid':proc.pid,'name':name,'task_id':task_id,'started_at':now()}))
         ACTIVE.chmod(0o600)
         started = time.monotonic()
@@ -262,7 +287,7 @@ def run_command(argv, stdin, task_id, name, deadline, timeout=1800):
     if proc.returncode:
         if hit_limit(output):
             raise RateLimited(f'{name} reached a provider limit; see {path}')
-        raise RuntimeError(f'{name} exited {proc.returncode}; see {path}')
+        raise StageFailure(f'{name} exited {proc.returncode}; see {path}', name, path)
     return output
 
 
@@ -273,7 +298,13 @@ def claude_argv(agent, writable, frontend=False):
     if writable and frontend:
         tools += ',Skill'
         allowed += f',Skill({FRONTEND_PLUGIN}:*)'
-    deny = list(DENY_TOOLS) + (list(BUILDER_DENY) if writable else ['Edit', 'Write', 'NotebookEdit'])
+    if not writable:
+        extra = ['Edit', 'Write', 'NotebookEdit']
+    elif agent == 'cendavo-maintainer':
+        extra = list(MAINTAINER_DENY)
+    else:
+        extra = list(BUILDER_DENY)
+    deny = list(DENY_TOOLS) + extra
     turns = '16' if writable else '8'
     return [claude_bin(), '-p', '--agents', str(AGENTS_FILE), '--agent', agent,
             '--permission-mode', 'dontAsk', '--tools', tools, '--allowedTools', allowed,
@@ -281,11 +312,13 @@ def claude_argv(agent, writable, frontend=False):
             '--output-format', 'json', '--max-turns', turns]
 
 
-def claude_report(task_id, name, agent, prompt, deadline, writable=False, frontend=False):
+def claude_report(task_id, name, agent, prompt, deadline, writable=False, frontend=False, cwd=None):
     if agent not in REQUIRED_AGENTS:
         raise RuntimeError(f'Unknown agent {agent}')
+    if writable and agent not in WRITABLE_AGENTS:
+        raise RuntimeError(f'{agent} is read-only')
     write_agents_file()
-    raw = run_command(claude_argv(agent, writable, frontend), prompt, task_id, name, deadline)
+    raw = run_command(claude_argv(agent, writable, frontend), prompt, task_id, name, deadline, cwd=cwd)
     try:
         payload = json.loads(raw)
         result = payload.get('result', '')
@@ -387,32 +420,42 @@ def is_frontend_task(title, names=()):
     return any(hint in lower for hint in FRONTEND_HINTS) or any(n.startswith(FRONTEND_PATHS) for n in names)
 
 
-def tests(task_id, deadline):
-    if platform.system() != 'Darwin' or not shutil.which('sandbox-exec'):
-        raise RuntimeError('Isolated test execution requires macOS sandbox-exec on this host')
-    tmp = STATE / 'tmp'
-    tmp.mkdir(exist_ok=True)
+def sandbox_profile(root, tmp):
+    """Read: system dirs, tracked/unignored source files and their dirs, dist and tmp. Write: dist and tmp only.
+
+    Forge state (queue, reports, logs, checkpoints), .git and ignored files such as .env are not readable.
+    """
     profile = '(version 1)(deny default)(allow process*)(allow sysctl-read)(allow mach-lookup)'
     system = ['/usr','/System','/Library','/opt/homebrew','/dev']
     readable = [f'(subpath {json.dumps(path)})' for path in system]
-    source_files = git('ls-files','--cached','--others','--exclude-standard').stdout.splitlines()
-    paths = {ROOT, STATE, *ROOT.parents}
+    source_files = git('ls-files','--cached','--others','--exclude-standard', cwd=root).stdout.splitlines()
+    paths = {root, STATE, *root.parents}
     for name in source_files:
-        source = ROOT / name
+        source = root / name
         paths.add(source)
-        paths.update(parent for parent in source.parents if parent == ROOT or ROOT in parent.parents)
+        paths.update(parent for parent in source.parents if parent == root or root in parent.parents)
     readable += [f'(literal {json.dumps(str(path))})' for path in sorted(paths)]
-    readable.append(f'(subpath {json.dumps(str(ROOT / "dist"))})')
+    readable.append(f'(subpath {json.dumps(str(root / "dist"))})')
     readable.append(f'(subpath {json.dumps(str(tmp))})')
     profile += '(allow file-read* ' + ' '.join(readable) + ')'
-    profile += '(allow file-write* ' + ' '.join(f'(subpath {json.dumps(str(path))})' for path in (ROOT / 'dist',tmp)) + ')'
+    profile += '(allow file-write* ' + ' '.join(f'(subpath {json.dumps(str(path))})' for path in (root / 'dist',tmp)) + ')'
+    return profile
+
+
+def tests(task_id, deadline, root=None):
+    if platform.system() != 'Darwin' or not shutil.which('sandbox-exec'):
+        raise RuntimeError('Isolated test execution requires macOS sandbox-exec on this host')
+    root = Path(root or ROOT)
+    tmp = STATE / 'tmp'
+    tmp.mkdir(exist_ok=True)
+    profile = sandbox_profile(root, tmp)
     for name, argv in [
         ('build', ['python3','scripts/build_site.py']),
         ('unit-tests', ['python3','-m','unittest','discover','-s','tests','-v']),
         ('site-js', ['node','--check','assets/site.js']),
         ('demo-js', ['node','--check','assets/demo.js']),
     ]:
-        run_command(['sandbox-exec','-p',profile,*argv], '', task_id, name, deadline, timeout=300)
+        run_command(['sandbox-exec','-p',profile,*argv], '', task_id, name, deadline, timeout=300, cwd=root)
 
 
 def allowed_changes():

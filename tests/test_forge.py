@@ -1,11 +1,34 @@
 import json
+import os
 import sqlite3
+import sys
 import subprocess
 import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import patch
 from scripts import forge
+
+
+# Every test in this module runs against a throwaway Forge state directory. The real .cendavo-run is
+# unreadable inside Forge's test sandbox, and tests must never depend on or modify live queue state.
+_REAL_STATE = forge.STATE
+_STATE_PATCH = None
+_STATE_TMP = None
+
+
+def setUpModule():
+    global _STATE_PATCH, _STATE_TMP
+    _STATE_TMP = tempfile.TemporaryDirectory()
+    state = Path(_STATE_TMP.name) / 'forge-state'
+    _STATE_PATCH = patch.multiple(forge, STATE=state, DB=state / 'queue.sqlite3', REPORTS=state / 'reports', LOGS=state / 'logs',
+                                  STOP=state / 'STOP', ACTIVE=state / 'active-child.json', AGENTS_FILE=state / 'agents.json')
+    _STATE_PATCH.start()
+
+
+def tearDownModule():
+    _STATE_PATCH.stop()
+    _STATE_TMP.cleanup()
 
 
 class ForgeQueueTests(unittest.TestCase):
@@ -300,6 +323,33 @@ class RunnerStopTests(unittest.TestCase):
         calls, states = self.run_main(ValueError('boom'))
         self.assertEqual(calls, 1)
         self.assertEqual(states[2], 'queued')
+
+
+class TestStateIsolationTests(unittest.TestCase):
+    def test_module_never_uses_real_forge_state(self):
+        self.assertNotEqual(forge.STATE, _REAL_STATE)
+        for name in ('STATE', 'DB', 'REPORTS', 'LOGS', 'STOP', 'ACTIVE', 'AGENTS_FILE'):
+            path = getattr(forge, name)
+            self.assertNotIn(str(_REAL_STATE), str(path), name)
+
+    def test_suite_passes_when_real_state_is_unreadable(self):
+        """Regression for the sandboxed unit-test stage: run this module with the real state path made inaccessible."""
+        if os.environ.get('CENDAVO_ISOLATION_CHILD'):
+            self.skipTest('inner run')
+        with tempfile.TemporaryDirectory() as tmp:
+            blocked = Path(tmp) / 'blocked'
+            blocked.mkdir(mode=0)
+            env = dict(os.environ, CENDAVO_ISOLATION_CHILD='1', PYTHONDONTWRITEBYTECODE='1')
+            code = ('import sys,unittest;from pathlib import Path;from scripts import forge;'
+                    f'forge.STATE=Path({str(blocked / ".cendavo-run")!r});'
+                    'r=unittest.main(module="tests.test_forge",argv=["x"],exit=False).result;'
+                    'sys.exit(0 if r.wasSuccessful() else 1)')
+            try:
+                run = subprocess.run([sys.executable, '-c', code], cwd=Path(forge.__file__).resolve().parents[1],
+                                     env=env, capture_output=True, text=True, timeout=120)
+            finally:
+                blocked.chmod(0o700)
+            self.assertEqual(run.returncode, 0, run.stderr[-2000:])
 
 
 if __name__ == '__main__':
