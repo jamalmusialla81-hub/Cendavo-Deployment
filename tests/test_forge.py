@@ -1,6 +1,7 @@
 import sqlite3
 import subprocess
 import tempfile
+import time
 import unittest
 from pathlib import Path
 from unittest.mock import patch
@@ -35,6 +36,18 @@ class ForgeQueueTests(unittest.TestCase):
             return subprocess.CompletedProcess(argv, 0, '{"authMethod":"claude.ai"}', '')
         with patch.object(forge.shutil, 'which', return_value='/usr/bin/tool'), patch.object(forge.subprocess, 'run', side_effect=fake_run), patch.object(forge, 'LOCAL_BIN', Path('/nonexistent-cendavo-bin')):
             self.assertIsNone(forge.check_tools())
+
+    def test_builder_command_denies_sensitive_file_tools(self):
+        with tempfile.TemporaryDirectory() as tmp, patch.object(forge, 'REPORTS', Path(tmp)), patch.object(forge, 'run_command', return_value='{"result":"ok"}') as command:
+            self.assertEqual(forge.claude_report(1, 'builder', 'Build', time.monotonic() + 60, True), 'ok')
+            argv = command.call_args.args[0]
+            self.assertIn('--restricted', argv)
+            self.assertIn('--strict-mcp-config', argv)
+            denied = argv[argv.index('--disallowedTools') + 1]
+            for rule in ('mcp__*', 'Read(.git/**)', 'Read(.cendavo-run/**)',
+                         'Read(.env.*)', 'Read(secrets/**)',
+                         'Edit(scripts/forge_sandbox.py)'):
+                self.assertIn(rule, denied)
 
     def test_resume_reconciles_stale_running_task(self):
         with tempfile.TemporaryDirectory() as tmp:

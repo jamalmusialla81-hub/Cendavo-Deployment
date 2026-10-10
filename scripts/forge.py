@@ -35,6 +35,17 @@ ACTIVE = STATE / 'active-child.json'
 MAX_RETRIES = 2
 MAX_REVIEW_CYCLES = 2
 LOCAL_BIN = ROOT / '.cendavo-tools' / 'node_modules' / '.bin'
+CLAUDE_DENIED_TOOLS = ','.join((
+    'mcp__*',
+    'Read(.git/**)', 'Read(.cendavo-run/**)', 'Read(.cendavo-tools/**)',
+    'Read(.env)', 'Read(.env.*)', 'Read(secrets/**)', 'Read(secret*)',
+    'Read(credentials/**)', 'Read(credential*)',
+    'Read(*.pem)', 'Read(*.key)', 'Read(*.p12)', 'Read(*.pfx)',
+    'Read(auth.json)', 'Read(token.json)', 'Read(service-account.json)',
+    'Edit(.github/**)', 'Edit(.claude/**)',
+    'Edit(scripts/forge.py)', 'Edit(scripts/forge_sandbox.py)',
+    'Edit(scripts/overnight.sh)', 'Edit(AGENTS.md)', 'Edit(CLAUDE.md)',
+))
 
 
 class RateLimited(RuntimeError):
@@ -206,7 +217,7 @@ def run_command(argv, stdin, task_id, name, deadline, timeout=1800, sandbox_tmp=
 def claude_report(task_id, name, prompt, deadline, writable=False):
     tools = 'Read,Glob,Grep,Edit,Write' if writable else 'Read,Glob,Grep'
     agent = 'cendavo-builder' if writable else 'cendavo-strategist'
-    argv = ['claude','-p','--restricted','--strict-mcp-config','--agent',agent,'--permission-mode','dontAsk','--tools',tools,'--allowedTools',tools,'--disallowedTools','mcp__*','--output-format','json','--max-turns','16' if writable else '6']
+    argv = ['claude','-p','--restricted','--strict-mcp-config','--agent',agent,'--permission-mode','dontAsk','--tools',tools,'--allowedTools',tools,'--disallowedTools',CLAUDE_DENIED_TOOLS,'--output-format','json','--max-turns','16' if writable else '6']
     raw = run_command(argv, prompt, task_id, name, deadline)
     try:
         payload = json.loads(raw)
