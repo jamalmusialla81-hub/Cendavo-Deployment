@@ -29,6 +29,10 @@ ACTIVE = STATE / 'active-child.json'
 MAX_RETRIES = 2
 MAX_REVIEW_CYCLES = 2
 LOCAL_BIN = ROOT / '.cendavo-tools' / 'node_modules' / '.bin'
+
+
+class RateLimited(RuntimeError):
+    pass
 SEED = [
     (1, 'Improve the demo request workflow for a real local service task. Preserve browser-local synthetic data and clear status controls.'),
     (2, 'Improve keyboard and screen-reader access in the site and demo. Keep changes focused and testable.'),
@@ -176,6 +180,9 @@ def run_command(argv, stdin, task_id, name, deadline, timeout=1800):
         log.seek(0,os.SEEK_END)
         log.write(f'\nexit: {proc.returncode}\n')
     if proc.returncode:
+        lower = output.lower()
+        if any(term in lower for term in ('rate limit', 'usage limit', 'quota exceeded', 'overloaded')):
+            raise RateLimited(f'{name} reached a provider limit; see {path}')
         raise RuntimeError(f'{name} exited {proc.returncode}; see {path}')
     return output
 
@@ -297,7 +304,15 @@ def run_task(conn, row, deadline):
 
 def summary(conn):
     tasks = conn.execute('SELECT id,state,attempts,title,error FROM tasks ORDER BY id').fetchall()
-    report = {'generated_at':now(),'branch':git('branch','--show-current').stdout.strip(),'head':git('rev-parse','HEAD',check=False).stdout.strip(),'tasks':[{'id':id,'state':state,'attempts':attempts,'title':title,'error':error} for id,state,attempts,title,error in tasks]}
+    estimates = []
+    for path in REPORTS.glob('*.json'):
+        try:
+            cost = json.loads(path.read_text()).get('usage',{}).get('total_cost_usd')
+            if isinstance(cost, (int,float)):
+                estimates.append(cost)
+        except (OSError,ValueError):
+            continue
+    report = {'generated_at':now(),'branch':git('branch','--show-current').stdout.strip(),'head':git('rev-parse','HEAD',check=False).stdout.strip(),'usage_estimate_usd':round(sum(estimates),4) if estimates else None,'tasks':[{'id':id,'state':state,'attempts':attempts,'title':title,'error':error} for id,state,attempts,title,error in tasks]}
     target = STATE / 'summary.json'
     target.write_text(json.dumps(report,indent=2))
     target.chmod(0o600)
@@ -362,6 +377,11 @@ def main():
                 run_task(conn,row,deadline)
             except KeyboardInterrupt:
                 set_state(conn,row[0],'interrupted','Interrupted by operator');break
+            except RateLimited as exc:
+                conn.execute('UPDATE tasks SET attempts=attempts-1 WHERE id=?',(row[0],));conn.commit()
+                set_state(conn,row[0],'interrupted',str(exc))
+                event(conn,row[0],'paused','Provider limit reached; resume after reset')
+                break
             except Exception as exc:
                 detail=str(exc)
                 state='failed' if row[3]+1 >= MAX_RETRIES+1 else 'interrupted'

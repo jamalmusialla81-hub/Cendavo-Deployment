@@ -42,4 +42,4 @@ jobs:
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN || secrets.CLOUDFLARE_API }}
           accountId: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
-          command: pages deploy dist --project-name=cendavo --branch=main
+          command: pages deploy dist --project-name=cendavo-deployment --branch=main

@@ -18,4 +18,6 @@ Set `CENDAVO_HOURS=2` or `CENDAVO_MAX_TASKS=3` for a shorter run. The hard maxim
 
 To stop an active command, run `python3 scripts/forge.py stop` from another terminal or press `Ctrl+C`. A child process is terminated when it exceeds the task timeout or total runtime. Inspect `.cendavo-run/summary.json`, `.cendavo-run/reports/`, logs and `git status` the next morning. Use `python3 scripts/forge.py resume` after inspecting interrupted work. If `.cendavo-run/active-child.json` remains after a hard crash, check that process manually before removing the marker. If an agent is unavailable, the runner pauses and records why. A failed task is retried at most twice only when the working tree is clean. Each review phase is limited to two audits; unresolved findings need a human decision.
 
+The summary includes a Claude CLI cost estimate when the CLI reports one. This is a usage signal, not a charge or a guarantee of remaining subscription capacity. Provider rate or quota errors pause the run instead of retrying through the limit.
+
 Do not run Forge concurrently in the same checkout. Use a dedicated branch. Local logs may contain task content and should remain private. Review every checkpoint before pushing it to GitHub. Production deployment is a separate manual action requiring approval.

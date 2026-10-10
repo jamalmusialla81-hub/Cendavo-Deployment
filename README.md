@@ -17,7 +17,7 @@ Open `http://localhost:8000`. To validate: `python3 -m unittest discover -s test
 
 ## Deployment
 
-The site builds into `dist/` with Python's standard library. For the Git-linked Cloudflare Pages project, configure the build command `python3 scripts/build_site.py` and output directory `dist`; pushes to `main` then deploy automatically. The backup GitHub Actions deployment workflow is manual and restricted to `main`. It needs a repository secret `CLOUDFLARE_API_TOKEN` (or the existing `CLOUDFLARE_API`), repository variable `CLOUDFLARE_ACCOUNT_ID`, and a Pages project named `cendavo`. GitHub's check workflow runs on pushes and pull requests. Review local Forge checkpoints before pushing because a `main` push can publish them.
+The site builds into `dist/` with Python's standard library. The Git-linked Cloudflare Pages project `cendavo-deployment` uses build command `python3 scripts/build_site.py` and output directory `dist`; pushes to `main` deploy automatically at [cendavo-deployment.pages.dev](https://cendavo-deployment.pages.dev/). The backup GitHub Actions deployment workflow is manual and restricted to `main`. It needs a repository secret `CLOUDFLARE_API_TOKEN` (or the existing `CLOUDFLARE_API`) and repository variable `CLOUDFLARE_ACCOUNT_ID`. GitHub's check workflow runs on pushes and pull requests. Review local Forge checkpoints before pushing because a `main` push can publish them.
 
 ## Current scope
 

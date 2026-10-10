@@ -33,6 +33,11 @@ class SiteBuildTests(unittest.TestCase):
         for setting in ('Content-Security-Policy:', 'X-Content-Type-Options: nosniff', "connect-src 'self'", "object-src 'none'"):
             self.assertIn(setting, headers)
 
+    def test_sitemap_points_at_real_project(self):
+        sitemap = (OUT / 'sitemap.xml').read_text()
+        self.assertIn('https://cendavo-deployment.pages.dev/demo/', sitemap)
+        self.assertNotIn('https://cendavo.pages.dev', sitemap)
+
 
 if __name__ == '__main__':
     unittest.main()

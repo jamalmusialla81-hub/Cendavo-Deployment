@@ -28,7 +28,7 @@ def build():
         dest.write_text(html)
     (OUT / '_headers').write_text('/*\n  X-Content-Type-Options: nosniff\n  Referrer-Policy: strict-origin-when-cross-origin\n  X-Frame-Options: DENY\n  Content-Security-Policy: default-src \'self\'; script-src \'self\'; style-src \'self\' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src \'self\' data:; connect-src \'self\'; object-src \'none\'; base-uri \'self\'; frame-ancestors \'none\'\n')
     (OUT / 'robots.txt').write_text('User-agent: *\nAllow: /\n')
-    (OUT / 'sitemap.xml').write_text('<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">' + ''.join(f'<url><loc>https://cendavo.pages.dev{href}</loc></url>' for _,href in NAV) + '</urlset>')
+    (OUT / 'sitemap.xml').write_text('<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">' + ''.join(f'<url><loc>https://cendavo-deployment.pages.dev{href}</loc></url>' for _,href in NAV) + '</urlset>')
     print(f'Built {len(list((ROOT / "pages").glob("*.html")))} pages in {OUT}')
 
 
