@@ -18,14 +18,14 @@ The current increment is a functional demo, not a production SaaS for real custo
 - **Proposed price:** A$49–99 per month, unvalidated. No checkout exists.
 - **Customer acquisition:** Initial target groups are laundromats, tailors, cleaners, repair shops and other local services. Demand, conversion, sales cycle and acquisition cost have not been measured.
 - **Revenue:** No verified revenue data has been supplied. The website makes no revenue or customer claims.
-- **Operating cost:** The static site has no application database or messaging provider. Cloudflare account billing and future backend costs have not been verified; calculate them before launching paid subscriptions. Claude and Codex usage depends on their subscription terms and limits; no separate API billing is configured by Forge.
+- **Operating cost:** The static site has no application database or messaging provider. Cloudflare account billing and future backend costs have not been verified; calculate them before launching paid subscriptions. Claude usage depends on its subscription terms and limits; no separate API billing is configured by Forge.
 
 ## Engineering and release
 
 - **Tests:** The site build, eight local unit tests, JavaScript syntax checks and macOS sandboxed test run pass. GitHub Checks passed for the deployed revision.
 - **Security:** The demo stores sample data in the browser, inserts text through DOM text nodes, sends no requests to Cendavo, and ships restrictive response headers. The future hosted product needs authentication, tenant isolation, data retention and abuse controls before real customer use.
 - **Deployment:** `main` is connected to Cloudflare Pages project `cendavo-deployment`. Build command and output directory are configured. The home page and demo return HTTP 200. The manual GitHub Actions deploy workflow also passed for commit `2d83b7b`.
-- **Agent workflow:** Two Claude Code role files, Codex review, persistent queue, bounded runtime, stop switch, logs and local Git checkpoints are implemented. Codex CLI is authenticated. Claude Code is installed but authentication has not completed; the runner paused without starting a task. No Claude Builder or Strategist output has been produced yet.
+- **Agent workflow:** Four Claude Code role files (Strategist, Builder, Security Reviewer, Functional Auditor; no Codex), persistent queue, bounded runtime, stop switch, logs and local Git checkpoints are implemented. Claude Code is installed but authentication has not completed; the runner paused without starting a task. No Claude Builder or Strategist output has been produced yet.
 
 ## Next queued tasks
 

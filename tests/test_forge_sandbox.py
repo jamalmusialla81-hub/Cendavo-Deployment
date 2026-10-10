@@ -89,7 +89,7 @@ class ForgeSandboxTests(unittest.TestCase):
         self.assertIn('Operation not permitted', result.stderr)
 
     def test_installed_development_tools_can_start(self):
-        for name in ('python3', 'node', 'git', 'claude', 'codex'):
+        for name in ('python3', 'node', 'git', 'claude'):
             tool = shutil.which(name, path=self.env['PATH'])
             if not tool:
                 continue

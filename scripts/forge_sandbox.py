@@ -23,7 +23,7 @@ def _ancestors(path: Path) -> set[Path]:
 def _tool_paths() -> set[Path]:
     """Allow executable files, symlink entry points and their real paths only."""
     paths: set[Path] = set()
-    for name in ('python3', 'node', 'git', 'claude', 'codex'):
+    for name in ('python3', 'node', 'git', 'claude'):
         found = shutil.which(name)
         if found:
             entry = Path(found).absolute()
@@ -47,7 +47,6 @@ def build_profile(root: Path, temporary: Path) -> str:
         '/usr', '/bin', '/sbin', '/System/Library',
         '/Library/Frameworks', '/Library/Developer/CommandLineTools',
         '/opt/homebrew', '/usr/local', '/private/var/db/dyld',
-        str(Path.home() / '.codex/packages/standalone'),
         str(Path.home() / '.local/share/claude/versions'),
     )
     readable_subpaths = {root, temporary, *(Path(p) for p in runtime)}
