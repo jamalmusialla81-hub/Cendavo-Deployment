@@ -82,5 +82,9 @@ def build_profile(root: Path, temporary: Path) -> str:
         f'(allow file-write* (subpath {_quoted(root)}) (subpath {_quoted(temporary)}))',
         '(allow file-write* (literal "/dev/null"))',
         f'(deny file-read* file-write* (regex {json.dumps(protected)}))',
+        '(deny file-write* ' + ' '.join(
+            f'(subpath {_quoted(root / name)})' for name in
+            ('.claude', '.github', 'tests', 'scripts/forge.py', 'scripts/forge_sandbox.py',
+             'scripts/overnight.sh', 'AGENTS.md', 'CLAUDE.md')) + ')',
         '(deny network*)',
     ))

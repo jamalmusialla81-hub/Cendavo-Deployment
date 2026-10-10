@@ -82,6 +82,17 @@ class ForgeSandboxTests(unittest.TestCase):
         self.assertNotEqual(self.python('from pathlib import Path; import sys; Path(sys.argv[1]).write_text("bad")', target).returncode, 0)
         self.assertNotEqual(self.python('from pathlib import Path; import sys; print(Path(sys.argv[1]).read_text())', '/etc/hosts').returncode, 0)
 
+    def test_runner_and_test_definitions_are_read_only(self):
+        for name in ('scripts/forge.py', 'scripts/forge_sandbox.py', 'tests/test_site.py',
+                     '.claude/agents/reviewer.md', 'AGENTS.md'):
+            target = self.root / name
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text('sentinel')
+            with self.subTest(name=name):
+                self.assertEqual(self.python('from pathlib import Path; import sys; print(Path(sys.argv[1]).read_text())', target).returncode, 0)
+                self.assertNotEqual(self.python('from pathlib import Path; import sys; Path(sys.argv[1]).write_text("bad")', target).returncode, 0)
+                self.assertEqual(target.read_text(), 'sentinel')
+
     def test_network_is_denied(self):
         code = 'import socket; s=socket.socket(); s.connect(("127.0.0.1", 9))'
         result = self.run_sandbox(sys.executable, '-c', code)
