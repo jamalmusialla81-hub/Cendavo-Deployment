@@ -1,8 +1,12 @@
 const STORAGE_KEY = 'cendavo-demo-v1';
 const STATUSES = ['New', 'Follow-up', 'Done'];
+// Fictional tailor-shop sample requests. Dates are fixed, so "Date passed" on
+// sample-2 is intentional: it shows the attention cue without any setup.
 const seed = [
   {id:'sample-1',name:'Alex Morgan',service:'Alteration',date:'2026-10-14',note:'Hem two pairs of trousers',status:'New',created:'2026-10-10'},
-  {id:'sample-2',name:'Sam Lee',service:'Cleaning',date:'2026-10-16',note:'One bedroom apartment',status:'Follow-up',created:'2026-10-09'}
+  {id:'sample-2',name:'Sam Lee',service:'Repair',date:'2026-10-08',note:'Replace a broken zip on a winter coat',status:'Follow-up',created:'2026-10-05'},
+  {id:'sample-3',name:'Jordan Reyes',service:'Alteration',date:'2026-10-25',note:'Fitting for a wedding guest dress',status:'New',created:'2026-10-09'},
+  {id:'sample-4',name:'Casey Nguyen',service:'Alteration',date:'2026-10-03',note:'Shorten suit jacket sleeves',status:'Done',created:'2026-09-28'}
 ];
 const EMPTY_DRAFT = 'Choose "Draft reply" on a request to prepare a draft.';
 const isIsoDate = value => {

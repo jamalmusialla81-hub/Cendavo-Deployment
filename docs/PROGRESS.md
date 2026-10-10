@@ -6,7 +6,7 @@
 | --- | --- | --- |
 | Business website | Five public pages live on Cloudflare Pages | Add a real contact channel when supplied |
 | Enquiry and booking request flow | Browser-local demo using synthetic requests | Validate flow with local service businesses before a hosted backend |
-| Request tracking | New, Follow-up and Done states in demo | Add filtering and clearer handling of completed work |
+| Request tracking | New, Follow-up and Done states in demo | Status filter and open-first ordering exist; next, show the demo to local operators before adding workflow features |
 | Follow-up preparation | Local text draft and copy action; nothing sends | Design review and consent before any real messaging |
 | Shared business accounts | Not built | Define tenant isolation, sign-in and access policy first |
 | Payments and subscriptions | Not built | Validate pricing and operating cost first |

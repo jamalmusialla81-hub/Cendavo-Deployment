@@ -40,6 +40,10 @@ console.log(JSON.stringify({
   onlyDone: visibleItems([good, {...good, id:'z', status:'New'}], 'Done').map(i => i.id),
   unknownFilter: visibleItems([good, {...good, id:'z', status:'New'}], 'Bogus').length,
   notArray: visibleItems(null, 'All').length,
+  seedRoundTrip: JSON.stringify(normaliseItems(JSON.parse(JSON.stringify(seed)))) === JSON.stringify(seed),
+  seedStatuses: seed.map(i => i.status),
+  seedPastOpen: seed.filter(i => i.status !== 'Done' && attentionLabel(i, '2026-10-11')).length,
+  seedClauses: seed.map(i => buildDraft(i).includes('Could you')),
 }));
 """
 
@@ -57,7 +61,7 @@ class DemoScriptTests(unittest.TestCase):
 
     def test_malformed_entries_and_bad_status_dropped(self):
         self.assertEqual(self.r['mixed'], ['a'])
-        self.assertEqual(self.r['allBad'], ['sample-1', 'sample-2'])
+        self.assertEqual(self.r['allBad'], ['sample-1', 'sample-2', 'sample-3', 'sample-4'])
         self.assertEqual(self.r['badDate'], '')
 
     def test_draft_is_friendly_and_marked_draft(self):
@@ -80,6 +84,17 @@ class DemoScriptTests(unittest.TestCase):
             for other, other_text in expected.items():
                 if other != service:
                     self.assertNotIn(other_text, draft)
+
+    def test_seed_is_valid_and_covers_statuses(self):
+        self.assertTrue(self.r['seedRoundTrip'])
+        self.assertEqual(set(self.r['seedStatuses']), {'New', 'Follow-up', 'Done'})
+        self.assertGreaterEqual(self.r['seedPastOpen'], 1)
+        self.assertTrue(all(self.r['seedClauses']))
+
+    def test_other_service_option_value_matches_clause_key(self):
+        html = (DEMO.parents[1] / 'pages' / 'demo.html').read_text(encoding='utf-8')
+        self.assertIn('<option value="Other">Other service</option>', html)
+        self.assertNotIn('<option>Other service</option>', html)
 
     def test_unknown_service_uses_generic_draft(self):
         for key in ('unknownService', 'protoService'):
