@@ -14,8 +14,14 @@
 
 ## 002 — Deployment control
 
-**Decision:** GitHub Actions deployment is manual and restricted to `main`. Development commits go to a feature branch for review. This respects the user's production deployment approval requirement.
+**Decision:** The backup GitHub Actions deployment is manual and restricted to `main`. The user's Git-linked Cloudflare Pages project automatically deploys `main`; after the user explicitly requested deployment, commit `e1f7ea1` was published and the build settings were corrected. Development runs remain on a feature branch and Forge never pushes checkpoints automatically.
 
 ## 003 — Agent billing
 
 **Decision:** Forge uses the authenticated Claude Code and Codex CLIs. It does not use API keys, does not start without Claude Code, and strips `ANTHROPIC_API_KEY` from agent subprocesses. Claude Max CLI usage and limits must be checked in the user's account; API billing is not assumed.
+
+## 004 — First release result
+
+**Outcome:** The production project is `cendavo-deployment`. Cloudflare builds with `python3 scripts/build_site.py` and serves `dist`. The live home and demo routes returned HTTP 200. GitHub Checks and the manual Pages workflow passed on commit `2d83b7b`.
+
+**Remaining constraint:** Claude Code is installed locally but not authenticated. Forge's first start attempt recorded a pause before any agent task began. The user must review and authorize the Claude Code account connection before the three queued tasks can run.
