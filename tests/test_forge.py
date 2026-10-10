@@ -33,7 +33,7 @@ class ForgeQueueTests(unittest.TestCase):
             if argv[0] == 'codex':
                 return subprocess.CompletedProcess(argv, 0, '', 'Logged in using ChatGPT')
             return subprocess.CompletedProcess(argv, 0, '{"authMethod":"claude.ai"}', '')
-        with patch.object(forge.shutil, 'which', return_value='/usr/bin/tool'), patch.object(forge.subprocess, 'run', side_effect=fake_run):
+        with patch.object(forge.shutil, 'which', return_value='/usr/bin/tool'), patch.object(forge.subprocess, 'run', side_effect=fake_run), patch.object(forge, 'LOCAL_BIN', Path('/nonexistent-cendavo-bin')):
             self.assertIsNone(forge.check_tools())
 
     def test_resume_reconciles_stale_running_task(self):

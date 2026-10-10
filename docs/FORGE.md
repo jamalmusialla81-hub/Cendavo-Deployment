@@ -1,6 +1,6 @@
 # Cendavo Forge local runner
 
-The runner executes this bounded sequence: queued task → Claude Strategist report → Claude Builder edit → read-only Codex security preflight → sandboxed tests → Codex functional audit → limited Claude fixes and Codex re-audits → local Git checkpoint. Reports, command logs and a persistent SQLite queue live in `.cendavo-run/` and are ignored by Git. Checkpoint commits are local; the runner never pushes, deploys, sends email or purchases anything. The host computer must remain awake and online. A laptop sleeping will pause work. This runner currently requires macOS `sandbox-exec` for executing agent-edited tests; other hosts pause rather than running them unsandboxed.
+The runner executes this bounded sequence: queued task → Claude Strategist report → Claude Builder edit → read-only Codex security preflight → sandboxed tests → Codex functional audit → limited Claude fixes and Codex re-audits → local Git checkpoint. Reports, command logs and a persistent SQLite queue live in `.cendavo-run/` and are ignored by Git. Checkpoint commits are local; the runner never pushes, deploys, sends email or purchases anything. The host computer must remain awake and online. A laptop sleeping will pause work. This runner requires macOS `sandbox-exec` for executing agent-edited tests; other hosts pause rather than running them unsandboxed.
 
 ## Requirements and setup
 
@@ -11,10 +11,20 @@ From a clean local feature branch with an initial commit:
 ```sh
 python3 scripts/forge.py init
 python3 scripts/forge.py status
-./scripts/overnight.sh
+CENDAVO_APPROVE_PROVIDER_NETWORK=yes ./scripts/overnight.sh
 ```
 
-Set `CENDAVO_HOURS=2` or `CENDAVO_MAX_TASKS=3` for a shorter run. The hard maximum is eight hours. Add a specific task with `python3 scripts/forge.py add 'Task description' --priority 4`. Lower priority numbers run first.
+Set `CENDAVO_HOURS=2` or `CENDAVO_MAX_TASKS=3` for a shorter run. The hard maximum is eight hours. A direct invocation of `forge.py run` requires `--approve-provider-network` for that run. This acknowledges the Claude and Codex model connections; it does not approve arbitrary network access from build or test code. Add a specific task with `python3 scripts/forge.py add 'Task description' --priority 4`. Lower priority numbers run first.
+
+## Sandbox boundary
+
+Before executing Claude-edited build or test code, Codex performs a read-only security preflight. The macOS Seatbelt profile in `scripts/forge_sandbox.py` then permits reading and writing **throughout the current Cendavo checkout**, including creating new directories and files. It resolves the checkout path, so a checkout at `~/Documents/Cendavo` gets that entire project tree. It also grants read/write access to one private temporary directory created for the test run and removed afterward. Homebrew Python and Node, the installed Git binary, and installed Claude and Codex launchers can start; runtime libraries are readable without allowing writes to those locations. Homebrew Python's resolved Cellar path is included. The runner sets `TMPDIR`, `HOME`, and cache paths to the private temporary directory, and uses the direct Apple Git binary to avoid `xcrun` writing outside it.
+
+The profile denies reads and writes to `.git`, `.cendavo-run`, `.cendavo-tools`, `.env` variants, paths named `secret` or `credential` (including common variants), common key files, and auth/token JSON files at any project depth. It denies network operations, unrelated home directories, SSH keys, browser profiles, and non-runtime system files. In-project symlinks cannot grant access outside the allowed paths. The narrow external runtime exceptions include macOS libraries, Command Line Tools, Homebrew, the installed model-client binaries, `/dev/null`, and a few required system metadata files. Filename rules cannot detect a credential hidden in an ordinary-looking source file; keep all secrets outside the project and review new files before running them.
+
+The **model-client processes themselves** are not placed inside this offline profile: they must reach their providers and use private local authentication. Claude runs in its restricted mode, which confines file tools to the project working directory; Builder is also limited to file tools (no shell or MCP tools). Codex audits run read-only, and the runner rejects changes to protected tracked paths before a checkpoint. Those controls are separate from the OS sandbox and do not constitute OS-level confinement of the model clients. Do not put customer data or credentials in project files that those clients can read. Package installation, other network access, Git pushes, deployments, purchases, and contacting customers each require explicit approval; the local Forge run grants none of them.
+
+Run `python3 -m unittest tests.test_forge_sandbox -v` **outside** an existing sandbox to exercise the permission-denial tests. macOS does not permit a nested `sandbox-exec`, so those behavioral tests are skipped when the full suite runs inside the sandbox. The Forge test phase still runs the site build, the remaining unit tests, and JavaScript syntax checks within the profile. The autonomous queue is not resumed by these verification commands.
 
 To stop an active command, run `python3 scripts/forge.py stop` from another terminal or press `Ctrl+C`. A child process is terminated when it exceeds the task timeout or total runtime. Inspect `.cendavo-run/summary.json`, `.cendavo-run/reports/`, logs and `git status` the next morning. Use `python3 scripts/forge.py resume` after inspecting interrupted work. If `.cendavo-run/active-child.json` remains after a hard crash, check that process manually before removing the marker. If an agent is unavailable, the runner pauses and records why. A failed task is retried at most twice only when the working tree is clean. Each review phase is limited to two audits; unresolved findings need a human decision.
 

@@ -17,7 +17,13 @@ import subprocess
 import sys
 import time
 import platform
+import tempfile
 from datetime import datetime, timezone
+
+if __package__:
+    from .forge_sandbox import build_profile
+else:
+    from forge_sandbox import build_profile
 
 ROOT = Path(__file__).resolve().parents[1]
 STATE = ROOT / '.cendavo-run'
@@ -129,7 +135,7 @@ def terminate_group(pgid):
     return False
 
 
-def run_command(argv, stdin, task_id, name, deadline, timeout=1800):
+def run_command(argv, stdin, task_id, name, deadline, timeout=1800, sandbox_tmp=None):
     if STOP.exists():
         raise RuntimeError('Manual STOP file found')
     remaining = int(deadline - time.monotonic())
@@ -138,8 +144,18 @@ def run_command(argv, stdin, task_id, name, deadline, timeout=1800):
     env = dict(os.environ)
     env['PATH'] = str(LOCAL_BIN) + os.pathsep + env.get('PATH', '')
     if argv[0] == 'sandbox-exec':
-        env['TMPDIR'] = str(STATE / 'tmp')
+        if sandbox_tmp is None:
+            raise ValueError('Sandboxed commands require a private temporary directory')
+        for key in ('TMPDIR', 'TMP', 'TEMP', 'XDG_CACHE_HOME'):
+            env[key] = str(sandbox_tmp)
+        env['HOME'] = str(sandbox_tmp)
+        env['GIT_CONFIG_NOSYSTEM'] = '1'
+        env['GIT_CONFIG_GLOBAL'] = '/dev/null'
+        env['PATH'] = '/Library/Developer/CommandLineTools/usr/bin' + os.pathsep + env['PATH']
         env['PYTHONDONTWRITEBYTECODE'] = '1'
+        env['CENDAVO_SANDBOXED'] = '1'
+        env.pop('PYTHONPATH', None)
+        env.pop('NODE_OPTIONS', None)
     for key in ('ANTHROPIC_API_KEY','OPENAI_API_KEY','CLOUDFLARE_API_TOKEN','CLOUDFLARE_API'):
         env.pop(key, None)
     path = LOGS / f'{task_id:04d}-{name}-{int(time.time())}.log'
@@ -190,7 +206,7 @@ def run_command(argv, stdin, task_id, name, deadline, timeout=1800):
 def claude_report(task_id, name, prompt, deadline, writable=False):
     tools = 'Read,Glob,Grep,Edit,Write' if writable else 'Read,Glob,Grep'
     agent = 'cendavo-builder' if writable else 'cendavo-strategist'
-    argv = ['claude','-p','--agent',agent,'--permission-mode','dontAsk','--tools',tools,'--allowedTools',tools,'--disallowedTools','mcp__*','--output-format','json','--max-turns','16' if writable else '6']
+    argv = ['claude','-p','--restricted','--strict-mcp-config','--agent',agent,'--permission-mode','dontAsk','--tools',tools,'--allowedTools',tools,'--disallowedTools','mcp__*','--output-format','json','--max-turns','16' if writable else '6']
     raw = run_command(argv, prompt, task_id, name, deadline)
     try:
         payload = json.loads(raw)
@@ -218,35 +234,25 @@ def codex_review(task_id, prompt, deadline, cycle):
 def tests(task_id, deadline):
     if platform.system() != 'Darwin' or not shutil.which('sandbox-exec'):
         raise RuntimeError('Isolated test execution requires macOS sandbox-exec on this host')
-    tmp = STATE / 'tmp'
-    tmp.mkdir(exist_ok=True)
-    profile = '(version 1)(deny default)(allow process*)(allow sysctl-read)(allow mach-lookup)'
-    system = ['/usr','/System','/Library','/opt/homebrew','/dev']
-    readable = [f'(subpath {json.dumps(path)})' for path in system]
-    source_files = git('ls-files','--cached','--others','--exclude-standard').stdout.splitlines()
-    paths = {ROOT, STATE, *ROOT.parents}
-    for name in source_files:
-        source = ROOT / name
-        paths.add(source)
-        paths.update(parent for parent in source.parents if parent == ROOT or ROOT in parent.parents)
-    readable += [f'(literal {json.dumps(str(path))})' for path in sorted(paths)]
-    readable.append(f'(subpath {json.dumps(str(ROOT / "dist"))})')
-    readable.append(f'(subpath {json.dumps(str(tmp))})')
-    profile += '(allow file-read* ' + ' '.join(readable) + ')'
-    profile += '(allow file-write* ' + ' '.join(f'(subpath {json.dumps(str(path))})' for path in (ROOT / 'dist',tmp)) + ')'
-    for name, argv in [
-        ('build', ['python3','scripts/build_site.py']),
-        ('unit-tests', ['python3','-m','unittest','discover','-s','tests','-v']),
-        ('site-js', ['node','--check','assets/site.js']),
-        ('demo-js', ['node','--check','assets/demo.js']),
-    ]:
-        run_command(['sandbox-exec','-p',profile,*argv], '', task_id, name, deadline, timeout=300)
+    with tempfile.TemporaryDirectory(prefix='cendavo-sandbox-') as temporary:
+        tmp = Path(temporary).resolve()
+        profile = build_profile(ROOT, tmp)
+        for name, argv in [
+            ('build', ['python3','scripts/build_site.py']),
+            ('unit-tests', ['python3','-m','unittest','discover','-s','tests','-v']),
+            ('site-js', ['node','--check','assets/site.js']),
+            ('demo-js', ['node','--check','assets/demo.js']),
+        ]:
+            run_command(['sandbox-exec','-p',profile,*argv], '', task_id, name, deadline, timeout=300, sandbox_tmp=tmp)
 
 
 def allowed_changes():
     names = set(git('diff','--name-only').stdout.splitlines())
     names.update(git('ls-files','--others','--exclude-standard').stdout.splitlines())
-    forbidden = [n for n in names if n.startswith(('.github/','.claude/','scripts/forge.py','AGENTS.md','CLAUDE.md')) or n.startswith('.env') or '..' in Path(n).parts]
+    protected = ('.github/','.claude/','.git/','.cendavo-run/','.cendavo-tools/',
+                 'scripts/forge.py','scripts/forge_sandbox.py','scripts/overnight.sh',
+                 'AGENTS.md','CLAUDE.md')
+    forbidden = [n for n in names if n.startswith(protected) or n.startswith('.env') or '..' in Path(n).parts]
     if forbidden:
         raise RuntimeError('Builder touched protected files: ' + ', '.join(forbidden))
     return names
@@ -329,6 +335,7 @@ def main():
     sub.add_parser('resume')
     add = sub.add_parser('add');add.add_argument('title');add.add_argument('--priority',type=int,default=5)
     run = sub.add_parser('run');run.add_argument('--hours',type=float,default=8);run.add_argument('--max-tasks',type=int,default=10)
+    run.add_argument('--approve-provider-network', action='store_true', help='explicitly approve Claude and Codex model connections for this run')
     args = parser.parse_args()
     conn = ensure_state()
     if args.command == 'init':
@@ -352,6 +359,8 @@ def main():
     elif args.command == 'run':
         if args.hours <= 0 or args.hours > 8 or args.max_tasks <= 0:
             parser.error('hours must be >0 and <=8; max-tasks must be >0')
+        if not args.approve_provider_network:
+            print('Model network access requires --approve-provider-network for this run.',file=sys.stderr);return 2
         if STOP.exists():
             print('STOP file exists. Use resume after review.',file=sys.stderr);return 2
         lock = (STATE / 'run.lock').open('w')
