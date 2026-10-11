@@ -5,6 +5,44 @@ import unittest
 from pathlib import Path
 
 DEMO = Path(__file__).resolve().parents[1] / 'assets' / 'demo.js'
+HOME = Path(__file__).resolve().parents[1] / 'assets' / 'home.js'
+
+# Runs assets/home.js against a minimal DOM stub, first without GSAP (it must still work) and then with a
+# recording GSAP stub (motion must be registered only under the reduced-motion guard).
+HOME_SCRIPT = r"""
+const vm = require('vm');
+const source = require('fs').readFileSync(process.argv[1], 'utf8');
+function element() {
+  return { attrs: {}, dataset: {}, listeners: {}, hidden: false, value: '50',
+    style: { props: {}, setProperty(name, value) { this.props[name] = value; } },
+    setAttribute(name, value) { this.attrs[name] = String(value); },
+    addEventListener(type, fn) { this.listeners[type] = fn; } };
+}
+function run(gsap, reduce) {
+  const range = element(), before = element(), after = element(), controls = element(), figure = element();
+  before.dataset.compareSet = '0'; after.dataset.compareSet = '100'; controls.hidden = true;
+  controls.querySelector = s => s === 'input[type="range"]' ? range : null;
+  controls.querySelectorAll = () => [before, after];
+  figure.querySelector = s => s === '[data-compare-controls]' ? controls : null;
+  const window = { matchMedia: () => ({ matches: reduce }) };
+  if (gsap) { window.gsap = gsap; window.ScrollTrigger = {}; }
+  vm.runInNewContext(source, { window, document: { querySelector: s => s === '[data-compare]' ? figure : null } });
+  const snap = () => ({ pos: figure.style.props['--pos'], before: before.attrs['aria-pressed'], after: after.attrs['aria-pressed'], text: range.attrs['aria-valuetext'] });
+  const out = { shown: controls.hidden === false, initial: snap() };
+  range.value = '0'; range.listeners.input(); out.input = snap();
+  after.listeners.click(); out.click = { ...snap(), value: String(range.value) };
+  return out;
+}
+const calls = { queries: [], from: [], to: 0, plugins: 0 };
+const gsap = {
+  registerPlugin() { calls.plugins++; },
+  matchMedia() { return { add(query, fn) { calls.queries.push(query); fn(); } }; },
+  from(target, vars) { calls.from.push([typeof target === 'string' ? target : 'element', Boolean(vars.scrollTrigger)]); },
+  to(state, vars) { calls.to++; state.v = vars.v; vars.onUpdate(); return { kill() {} }; },
+  utils: { toArray: () => ['h2'] },
+};
+console.log(JSON.stringify({ plain: run(null, false), motion: run(gsap, false), calls }));
+"""
 
 SCRIPT = r"""
 const {normaliseItems, buildDraft, friendlyDate, isIsoDate, attentionLabel, visibleItems, normaliseFilter, toCsv, seed} = require(process.argv[1]);
@@ -171,6 +209,22 @@ class DemoScriptTests(unittest.TestCase):
 
     def test_csv_skips_non_object_entries(self):
         self.assertEqual(len(self.r['csvSkipsJunk'].split('\r\n')), 3)
+
+    def test_home_js_compare_works_without_gsap_and_guards_motion(self):
+        out = subprocess.run(['node', '-e', HOME_SCRIPT, str(HOME)], capture_output=True, text=True, check=True)
+        r = json.loads(out.stdout)
+        plain = r['plain']
+        self.assertTrue(plain['shown'])  # controls are revealed by JS
+        self.assertEqual(plain['initial'], {'pos': '50%', 'before': 'false', 'after': 'false', 'text': '50 of 100 showing the redesign'})
+        self.assertEqual(plain['input'], {'pos': '0%', 'before': 'true', 'after': 'false', 'text': 'Before only'})
+        self.assertEqual(plain['click'], {'pos': '100%', 'before': 'false', 'after': 'true', 'text': 'After only', 'value': '100'})
+        # With GSAP the buttons glide via a tween but end in the same state.
+        self.assertEqual(r['motion']['click'], plain['click'])
+        calls = r['calls']
+        self.assertEqual(calls['to'], 1)
+        self.assertEqual(calls['plugins'], 1)
+        self.assertEqual(calls['queries'], ['(prefers-reduced-motion: no-preference)'])
+        self.assertEqual(calls['from'], [['.hero-h .ln > span', False], ['[data-hero-fade]', False], ['h2', True]])
 
     def test_demo_js_makes_no_network_requests(self):
         js = DEMO.read_text(encoding='utf-8')

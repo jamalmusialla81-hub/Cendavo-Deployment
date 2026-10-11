@@ -1,5 +1,7 @@
 import re
+import struct
 import unittest
+from html.parser import HTMLParser
 from pathlib import Path
 from scripts.build_site import build, OUT
 
@@ -49,10 +51,11 @@ class SiteBuildTests(unittest.TestCase):
         self.assertIn('scroll-padding-top:90px', css)
         self.assertIn('@media(prefers-reduced-motion:no-preference){', css)
         self.assertEqual(css.count('scroll-behavior:smooth'), 1)
-        self.assertEqual(css.count('translateY(-2px)'), 1)
+        # Night Shift hover: only the primary CTA's arrow moves 2px (art direction), never the whole button.
+        self.assertEqual(css.count('translateX(2px)'), 1)
         guarded = css.split('@media(prefers-reduced-motion:no-preference){', 1)[1]
         self.assertIn('scroll-behavior:smooth', guarded)
-        self.assertIn('translateY(-2px)', guarded)
+        self.assertIn('translateX(2px)', guarded)
 
     def test_demo_table_semantics(self):
         demo = (OUT / 'demo/index.html').read_text()
@@ -135,7 +138,7 @@ class SiteBuildTests(unittest.TestCase):
         for route in self.ROUTES:
             with self.subTest(route=route):
                 html = (OUT / route).read_text()
-                self.assertIn('<a class="button small dark" href="/contact/">Request a free consultation</a>', html)
+                self.assertIn('<a class="button small" href="/contact/">Request a free consultation</a>', html)
         contact = (OUT / 'contact/index.html').read_text()
         self.assertIn('content="Request a website design, redesign or maintenance consultation with Cendavo in Sydney."', contact)
 
@@ -174,6 +177,55 @@ def contrast(a, b):
     return (high + 0.05) / (low + 0.05)
 
 
+def jpeg_size(path):
+    """(width, height) from a JPEG's start-of-frame header, using only the standard library."""
+    data, index = path.read_bytes(), 2
+    while index < len(data):
+        if data[index] != 0xFF:
+            index += 1
+            continue
+        marker = data[index + 1]
+        if marker == 0xFF:
+            index += 1
+            continue
+        if marker in (0xD8, 0x01) or 0xD0 <= marker <= 0xD7:
+            index += 2
+            continue
+        if 0xC0 <= marker <= 0xCF and marker not in (0xC4, 0xC8, 0xCC):
+            height, width = struct.unpack('>HH', data[index + 5:index + 9])
+            return width, height
+        index += 2 + struct.unpack('>H', data[index + 2:index + 4])[0]
+    raise ValueError(f'no SOF marker in {path}')
+
+
+VOID_ELEMENTS = {'area', 'base', 'br', 'col', 'embed', 'hr', 'img', 'input', 'link', 'meta', 'source', 'track', 'wbr'}
+
+
+class ImageCollector(HTMLParser):
+    """Collect every <img> with its attributes and whether any ancestor has aria-hidden="true"."""
+
+    def __init__(self):
+        super().__init__()
+        self.hidden_stack, self.images = [], []
+
+    def handle_starttag(self, tag, attrs):
+        attrs = dict(attrs)
+        if tag == 'img':
+            self.images.append((attrs, any(self.hidden_stack)))
+        elif tag not in VOID_ELEMENTS:
+            self.hidden_stack.append(attrs.get('aria-hidden') == 'true')
+
+    def handle_endtag(self, tag):
+        if tag not in VOID_ELEMENTS and self.hidden_stack:
+            self.hidden_stack.pop()
+
+
+CONCEPT_LABEL = 'Concept project · fictional business'
+GSAP_TAGS = ['<script src="/assets/vendor/gsap/gsap.min.js" defer></script>',
+             '<script src="/assets/vendor/gsap/ScrollTrigger.min.js" defer></script>',
+             '<script src="/assets/home.js" defer></script>']
+
+
 class DesignSystemTests(unittest.TestCase):
     ROUTES = SiteBuildTests.ROUTES
 
@@ -181,15 +233,17 @@ class DesignSystemTests(unittest.TestCase):
     def setUpClass(cls):
         build()
         cls.css = (OUT / 'assets/site.css').read_text()
+        cls.home_css = (OUT / 'assets/home.css').read_text()
         cls.home = (OUT / 'index.html').read_text()
         cls.home_main = cls.home.split('<main id="main" tabindex="-1">', 1)[1].split('</main>', 1)[0]
         root = re.search(r':root\{(.*?)\}', cls.css, re.S).group(1)
         cls.tokens = dict(re.findall(r'(--[\w-]+):([^;]+)', root))
 
     def test_palette_tokens_match_art_direction(self):
-        palette = {'--harbour': '#0E2A33', '--fog': '#EEF2F1', '--paper': '#FFFFFF', '--jacaranda': '#6E4FD8',
-                   '--jacaranda-light': '#B9A6F2', '--sandstone': '#C98B3D', '--sandstone-ink': '#8C5A1C',
-                   '--slate': '#55666C', '--success': '#1F7A52', '--danger': '#B93A26'}
+        # Night Shift palette (docs/design/night-shift/NIGHT_SHIFT.md); success/danger darkened for AA on bone.
+        palette = {'--ink': '#0E0E0D', '--ink-2': '#171716', '--bone': '#EDEAE3', '--bone-2': '#E3DFD6',
+                   '--paper': '#F7F5F0', '--stone': '#A8A49B', '--ink-soft': '#4F4C46', '--amber': '#D9A441',
+                   '--amber-hover': '#E6B65A', '--success': '#1E6B47', '--danger': '#A3341F'}
         for name, value in palette.items():
             with self.subTest(token=name):
                 self.assertEqual(self.tokens.get(name, '').strip().upper(), value)
@@ -212,24 +266,45 @@ class DesignSystemTests(unittest.TestCase):
 
     def test_colour_pairs_meet_wcag(self):
         t = {k: v.strip() for k, v in self.tokens.items() if v.strip().startswith('#')}
-        text_pairs = [('harbour', 'fog'), ('slate', 'fog'), ('slate', 'paper'), ('paper', 'jacaranda'), ('jacaranda', 'fog'),
-                      ('jacaranda', 'paper'), ('sandstone-ink', 'fog'), ('sandstone-ink', 'paper'), ('jacaranda-light', 'harbour'),
-                      ('fog', 'harbour'), ('fog-muted', 'harbour'), ('sandstone', 'harbour'), ('danger', 'paper'),
-                      ('success', 'paper'), ('paper', 'jacaranda-deep'), ('fog', 'harbour-raised')]
+        text_pairs = [('bone', 'ink'), ('bone', 'ink-2'), ('stone', 'ink'), ('stone', 'ink-2'), ('ink', 'bone'),
+                      ('ink', 'bone-2'), ('ink', 'paper'), ('ink-soft', 'bone'), ('ink-soft', 'bone-2'), ('ink-soft', 'paper'),
+                      ('ink', 'amber'), ('ink', 'amber-hover'), ('danger', 'paper'), ('danger', 'bone'), ('danger', 'bone-2'),
+                      ('success', 'paper'), ('success', 'bone'), ('success', 'bone-2')]
         for fg, bg in text_pairs:
             with self.subTest(pair=f'{fg}/{bg}'):
                 self.assertGreaterEqual(contrast(t[f'--{fg}'], t[f'--{bg}']), 4.5)
-        # Focus rings: jacaranda on light surfaces, jacaranda-light inside dark sections.
-        self.assertIn(':focus-visible{outline:3px solid var(--jacaranda)', self.css)
-        self.assertRegex(self.css, r'\.footer :focus-visible[^{]*\{outline-color:var\(--jacaranda-light\)\}')
-        for ring, bg in (('jacaranda', 'fog'), ('jacaranda', 'paper'), ('jacaranda-light', 'harbour')):
+        # Focus rings: bone on dark surfaces (the default), ink inside light (bone/paper) sections.
+        self.assertIn(':focus-visible{outline:2px solid var(--bone)', self.css)
+        self.assertIn('.bone :focus-visible,.section :focus-visible{outline-color:var(--ink)}', self.css)
+        self.assertRegex(self.css, r'\.demo-side :focus-visible[^{]*\{outline-color:var\(--bone\)\}')
+        for ring, bg in (('bone', 'ink'), ('bone', 'ink-2'), ('ink', 'bone'), ('ink', 'bone-2'), ('ink', 'paper')):
             with self.subTest(ring=f'{ring}/{bg}'):
                 self.assertGreaterEqual(contrast(t[f'--{ring}'], t[f'--{bg}']), 3)
-        self.assertLess(contrast(t['--jacaranda'], t['--harbour']), 3)  # why dark sections need the light ring
+        self.assertLess(contrast(t['--amber'], t['--bone']), 3)  # why light sections use the ink ring, not amber
+
+    def test_fonts_are_self_hosted(self):
+        faces = re.findall(r'@font-face\{([^}]*)\}', self.css)
+        self.assertGreaterEqual(len(faces), 3)
+        for face in faces:
+            with self.subTest(face=face[:60]):
+                self.assertIn('font-display:swap', face)
+                urls = re.findall(r'url\("([^"]+)"\)', face)
+                self.assertTrue(urls)
+                for url in urls:
+                    self.assertTrue(url.startswith('/assets/fonts/') and url.endswith('.woff2'), url)
+                    self.assertTrue((OUT / url.lstrip('/')).is_file(), url)
+        self.assertIn('font-stretch:62% 125%', self.css)  # Archivo's width axis, used for condensed headlines
+        for licence in ('OFL-Archivo.txt', 'OFL-AtkinsonHyperlegible.txt'):
+            self.assertTrue((OUT / 'assets/fonts' / licence).is_file())
+        preload = '<link rel="preload" href="/assets/fonts/archivo-var-latin.woff2" as="font" type="font/woff2" crossorigin>'
+        for route in self.ROUTES:
+            with self.subTest(route=route):
+                self.assertEqual((OUT / route).read_text().count(preload), 1)
 
     def test_no_third_party_requests(self):
-        for banned in ('@import', 'http', 'fonts.googleapis'):
-            self.assertNotIn(banned, self.css)
+        for css in (self.css, self.home_css):
+            for banned in ('@import', 'http', 'fonts.googleapis'):
+                self.assertNotIn(banned, css)
         for route in self.ROUTES:
             with self.subTest(route=route):
                 html = (OUT / route).read_text()
@@ -250,7 +325,7 @@ class DesignSystemTests(unittest.TestCase):
             with self.subTest(route=route):
                 html = (OUT / route).read_text()
                 self.assertIn('<html lang="en-AU">', html)
-                self.assertIn('<meta name="theme-color" content="#0E2A33">', html)
+                self.assertIn('<meta name="theme-color" content="#0E0E0D">', html)
                 title = re.search(r'<title>(.*?)</title>', html).group(1)
                 self.assertNotIn('Product demo', title)
                 self.assertNotIn('Less admin', title)
@@ -277,7 +352,10 @@ class DesignSystemTests(unittest.TestCase):
         for previous, current in zip(levels, levels[1:]):
             self.assertLessEqual(current, previous + 1)
         h2s = [re.sub(r'<[^>]+>', '', h) for h in re.findall(r'<h2[^>]*>(.*?)</h2>', main)]
-        self.assertEqual(h2s, ['What we do', 'Who it’s for', 'How it works', 'Work', 'Pricing', 'Questions', 'Tell us about your business.'])
+        self.assertEqual(h2s, ['We make websites for people who do the work, so the first thing a customer sees online is as good as the job you do.',
+                               'Concept projects', 'Same business. A very different first impression.', 'What we do',
+                               'Built for the businesses that keep Sydney running', 'How it works',
+                               'Fixed quote after a free consultation', 'Questions', 'Let’s make your website as good as your work.'])
         steps = re.search(r'<ol class="steps"[^>]*>(.*?)</ol>', main).group(1)
         self.assertEqual(re.findall(r'<h3>(.*?)</h3>', steps), ['Discover', 'Design', 'Build', 'Launch', 'Look after'])
         self.assertTrue(1 <= main.count('<details>') <= 4)
@@ -290,18 +368,20 @@ class DesignSystemTests(unittest.TestCase):
         band = main.split('<section class="band"', 1)[1]
         self.assertIn(cta, hero)
         self.assertIn(cta, band)
-        self.assertIn('<a class="button light" href="/contact/">', band)
-        self.assertIn('href="/demo/">See a demonstration project</a>', hero)
+        self.assertIn('<a class="button go" href="/contact/">Request a free consultation</a>', hero)
+        self.assertIn('<a class="button large go" href="/contact/">', band)
         work = main.split('id="work-title"', 1)[1].split('</section>', 1)[0]
-        self.assertIn('<span class="badge">Demonstration project — sample data</span>', work)
-        self.assertIn('Our first client sites will appear here.', work)
+        # The work section is honest that it shows concepts, and links to the working demonstration project.
+        self.assertIn('href="/demo/">See a demonstration project</a>', work)
+        self.assertIn('The photos are real; the businesses are not.', work)
         pricing = main.split('id="pricing-title"', 1)[1].split('</section>', 1)[0]
         self.assertIn('fixed quote after a free consultation', pricing)
         self.assertIn('href="/contact/"', pricing)
         self.assertNotIn('href="/pricing/"', main)
 
     def test_homepage_makes_no_unvalidated_claims(self):
-        text = self.home_main.lower()
+        # The required concept label is the only place a middle dot may appear.
+        text = self.home_main.replace(CONCEPT_LABEL, '').lower()
         for banned in ('less admin', 'product demo', 'platform', 'subscription', 'saas', 'a$', '$', '%', 'testimonial',
                        'trusted by', 'award', '·', '↗', '→'):
             with self.subTest(banned=banned):
@@ -322,59 +402,154 @@ class DesignSystemTests(unittest.TestCase):
         for address in re.findall(r'\b[\w-]+(?:\.[\w-]+)+\b', text):
             with self.subTest(address=address):
                 self.assertTrue(address.endswith('.example'))
-        self.assertNotIn('<img', figure)
+        # Real photography is allowed in the mockups now, but only as silent decoration inside the aria-hidden mocks.
+        parser = ImageCollector()
+        parser.feed(figure)
+        self.assertTrue(parser.images)
+        for attrs, hidden in parser.images:
+            with self.subTest(img=attrs.get('src')):
+                self.assertTrue(hidden)
+                self.assertEqual(attrs.get('alt'), '')
         # Fictional phone numbers only from ACMA's reserved drama range.
         for number in re.findall(r'\(0\d\)\s*[\d ]+', text):
             self.assertTrue(number.startswith('(02) 5550'))
-        self.assertIn('.compare{--pos:50%', self.css)
-        self.assertIn('clip-path:inset(0 calc(100% - var(--pos)) 0 0)', self.css)
+        self.assertIn('.compare{--pos:50%', self.home_css)
+        self.assertIn('clip-path:inset(0 calc(100% - var(--pos)) 0 0)', self.home_css)
 
-    def test_home_script_is_small_isolated_and_safe(self):
-        tag = '<script src="/assets/home.js" defer></script>'
+    def test_concept_projects_are_labelled(self):
+        articles = re.findall(r'<article class="proj [^"]*"[^>]*>(.*?)</article>', self.home_main, re.S)
+        self.assertEqual(len(articles), 3)
+        for article, name in zip(articles, ('Harbourside Mobile Detailing', 'Greenline Landscapes', 'Fade &amp; Co')):
+            with self.subTest(project=name):
+                self.assertEqual(article.count(CONCEPT_LABEL), 1)
+                self.assertIn(f'>{name}</h3>', article)
         for route in self.ROUTES:
             with self.subTest(route=route):
-                self.assertEqual((OUT / route).read_text().count(tag), 1 if route == 'index.html' else 0)
+                footer = (OUT / route).read_text().split('<footer', 1)[1]
+                self.assertIn('Harbourside Mobile Detailing, Greenline Landscapes and Fade &amp; Co are fictional concept businesses.', footer)
+
+    def test_homepage_images_are_local_sized_and_described(self):
+        parser = ImageCollector()
+        parser.feed(self.home_main)
+        self.assertGreaterEqual(len(parser.images), 10)
+        hero = parser.images[0][0]
+        self.assertEqual(hero.get('fetchpriority'), 'high')
+        self.assertNotIn('loading', hero)
+        self.assertTrue(hero.get('alt'))
+        for index, (attrs, hidden) in enumerate(parser.images):
+            with self.subTest(index=index, src=attrs.get('src')):
+                for name in ('src', 'srcset', 'sizes', 'width', 'height', 'alt'):
+                    self.assertIn(name, attrs)
+                self.assertEqual(attrs.get('decoding'), 'async')
+                if index:
+                    self.assertEqual(attrs.get('loading'), 'lazy')
+                if not attrs['alt'].strip():
+                    self.assertTrue(hidden, 'an empty alt is only allowed inside an aria-hidden mockup')
+                candidates = dict(reversed(part.split()) for part in attrs['srcset'].split(','))
+                self.assertEqual(set(candidates), {'800w', '1600w'})
+                small, large = candidates['800w'], candidates['1600w']
+                self.assertRegex(small, r'^/assets/images/[a-z-]+-800\.jpg$')
+                self.assertEqual(large, small.replace('-800.jpg', '-1600.jpg'))
+                self.assertIn(attrs['src'], (small, large))
+                for url in (small, large):
+                    self.assertTrue((OUT / url.lstrip('/')).is_file(), url)
+                width, height = jpeg_size(OUT / large.lstrip('/'))
+                self.assertAlmostEqual(int(attrs['height']) / int(attrs['width']), height / width, delta=0.01 * height / width)
+
+    def test_home_script_is_small_isolated_and_safe(self):
+        # GSAP, then ScrollTrigger, then home.js: deferred, in that order, and only on the homepage.
+        for route in self.ROUTES:
+            with self.subTest(route=route):
+                html = (OUT / route).read_text()
+                for tag in GSAP_TAGS:
+                    self.assertEqual(html.count(tag), 1 if route == 'index.html' else 0)
+                if route == 'index.html':
+                    positions = [html.index(tag) for tag in GSAP_TAGS]
+                    self.assertEqual(positions, sorted(positions))
+                else:
+                    self.assertNotIn('gsap', html.lower())
+        for name in ('gsap.min.js', 'ScrollTrigger.min.js', 'LICENSE.txt'):
+            self.assertTrue((OUT / 'assets/vendor/gsap' / name).is_file())
         path = OUT / 'assets/home.js'
-        self.assertLessEqual(path.stat().st_size, 2048)
+        self.assertLessEqual(path.stat().st_size, 6 * 1024)
         js = path.read_text()
-        for banned in ('fetch(', 'XMLHttpRequest', 'innerHTML', 'http', 'localStorage'):
+        for banned in ('fetch(', 'XMLHttpRequest', 'innerHTML', 'http', 'localStorage', 'sessionStorage', 'pin:', 'snap'):
             with self.subTest(banned=banned):
                 self.assertNotIn(banned, js)
         self.assertIn("addEventListener('input'", js)
         self.assertIn("setProperty('--pos'", js)
         self.assertIn('controls.hidden = false', js)
         self.assertIn("setAttribute('aria-pressed'", js)
+        # Motion is optional and only runs for people who have not asked for reduced motion.
+        self.assertIn('if (!gsap) return;', js)
+        self.assertIn('gsap.matchMedia()', js)
+        self.assertIn("mm.add('(prefers-reduced-motion: no-preference)'", js)
+
+    def test_first_party_javascript_budget_per_page(self):
+        for route in self.ROUTES:
+            with self.subTest(route=route):
+                sources = re.findall(r'<script src="(/assets/[^"]+)"', (OUT / route).read_text())
+                own = [src for src in sources if not src.startswith('/assets/vendor/')]
+                self.assertLessEqual(sum((OUT / src.lstrip('/')).stat().st_size for src in own), 15 * 1024)
+
+    def test_home_stylesheet_loads_only_on_homepage(self):
+        tag = '<link rel="stylesheet" href="/assets/home.css">'
+        for route in self.ROUTES:
+            with self.subTest(route=route):
+                html = (OUT / route).read_text()
+                self.assertEqual(html.count(tag), 1 if route == 'index.html' else 0)
+                self.assertEqual(html.count('<link rel="stylesheet" href="/assets/site.css">'), 1)
 
     def test_motion_is_guarded_and_compositor_only(self):
-        unguarded, guarded = without_blocks(self.css, MOTION_GUARD)
-        self.assertTrue(guarded)
-        for word in ('transition', 'animation', '@keyframes'):
-            with self.subTest(word=word):
-                self.assertNotIn(word, unguarded)
-        for block in guarded:
-            for value in re.findall(r'transition:([^;}]+)', block):
-                properties = [part.split()[0] for part in value.split(',')]
-                self.assertTrue(set(properties) <= {'transform', 'opacity'}, value)
-            self.assertNotIn('animation', block)
+        for name, css in (('site.css', self.css), ('home.css', self.home_css)):
+            unguarded, guarded = without_blocks(css, MOTION_GUARD)
+            if name == 'site.css':
+                self.assertTrue(guarded)
+            for word in ('transition', 'animation', '@keyframes'):
+                with self.subTest(css=name, word=word):
+                    self.assertNotIn(word, unguarded)
+            for block in guarded:
+                for value in re.findall(r'transition:([^;}]+)', block):
+                    properties = [part.split()[0] for part in value.split(',')]
+                    self.assertTrue(set(properties) <= {'transform', 'opacity'}, value)
+                self.assertNotIn('animation', block)
+
+    def test_reveal_states_come_from_javascript_only(self):
+        # Content stays visible without JS, if GSAP fails, and with reduced motion: CSS never hides it.
+        for name, css in (('site.css', self.css), ('home.css', self.home_css)):
+            with self.subTest(css=name):
+                unguarded, _ = without_blocks(css, MOTION_GUARD)
+                for hook in ('data-rise', 'data-hero-fade'):
+                    self.assertNotIn(hook, css)
+                self.assertNotRegex(unguarded, r'opacity:0(?![.\d])')
+                self.assertNotIn('visibility:hidden', unguarded)
 
     def test_layout_basics(self):
-        for selector in ('.button{', '.menu{', '.compare-button{'):
+        for selector, css in (('.button{', self.css), ('.menu{', self.css), ('.compare-button{', self.home_css)):
             with self.subTest(selector=selector):
-                rule = self.css.split(selector, 1)[1].split('}', 1)[0]
-                self.assertIn('min-height:44px', rule)
+                rule = css.split(selector, 1)[1].split('}', 1)[0]
+                height = re.search(r'min-height:(\d+)px', rule)
+                self.assertIsNotNone(height)
+                self.assertGreaterEqual(int(height.group(1)), 44)  # tap targets of at least 44px
         self.assertIn(':focus-visible{', self.css)
         self.assertIn('@media(max-width:640px){', self.css)
         self.assertLessEqual((OUT / 'assets/site.css').stat().st_size, 30 * 1024)
+        self.assertLessEqual((OUT / 'assets/home.css').stat().st_size, 30 * 1024)
 
     def test_every_page_class_has_a_css_rule(self):
-        classes = set()
-        for page in (Path(__file__).resolve().parents[1] / 'pages').glob('*.html'):
+        # Inner pages only load site.css; the homepage also loads home.css.
+        pages = Path(__file__).resolve().parents[1] / 'pages'
+        checked = 0
+        for page in pages.glob('*.html'):
+            css = self.css + self.home_css if page.stem == 'index' else self.css
+            classes = set()
             for attribute in re.findall(r'class="([^"]*)"', page.read_text()):
                 classes.update(attribute.split())
-        self.assertTrue(classes)
-        for name in sorted(classes):
-            with self.subTest(css_class=name):
-                self.assertRegex(self.css, rf'\.{re.escape(name)}(?![\w-])')
+            for name in sorted(classes):
+                checked += 1
+                with self.subTest(page=page.name, css_class=name):
+                    self.assertRegex(css, rf'\.{re.escape(name)}(?![\w-])')
+        self.assertTrue(checked)
 
 
 if __name__ == '__main__':
