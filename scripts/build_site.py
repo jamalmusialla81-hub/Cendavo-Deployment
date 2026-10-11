@@ -10,11 +10,24 @@ MARK = '<svg class="mark" viewBox="0 0 200 200" aria-hidden="true" focusable="fa
 NAV = [('Home', '/'), ('Work', '/work/'), ('Services', '/services/'), ('Pricing', '/pricing/'), ('Demo project', '/demo/'), ('Contact', '/contact/')]
 # Page-specific scripts: each is loaded only on the page that uses it.
 # Page-specific stylesheets: the homepage's sections and device mockups (home.css) load only on /;
-# every inner page loads the shared inner-page stylesheet (pages.css) instead. Neither uses script-driven motion.
+# every inner page loads the shared inner-page stylesheet (pages.css) instead.
 PAGE_STYLES = {'index': '<link rel="stylesheet" href="/assets/home.css">'}
 INNER_STYLE = '<link rel="stylesheet" href="/assets/pages.css">'
-# GSAP 3.13 (vendored in /assets/vendor/gsap/, GSAP Standard "No Charge" License; see LICENSE.txt there) loads only on the homepage, before home.js.
-PAGE_SCRIPTS = {'index': '<script src="/assets/vendor/gsap/gsap.min.js" defer></script><script src="/assets/vendor/gsap/ScrollTrigger.min.js" defer></script><script src="/assets/home.js" defer></script>', 'demo': '<script src="/assets/demo.js" defer></script>', 'contact': '<script src="/assets/enquiry.js" defer></script>'}
+# Motion (Night Shift Task 10). GSAP 3.13 (vendored in /assets/vendor/gsap/, GSAP Standard "No Charge" License; see
+# LICENSE.txt there) loads, deferred, only on the pages that animate: GSAP, then ScrollTrigger, then motion.js (shared
+# reveals), then home.js on /. Those pages also load motion-boot.js in <head> (external, not deferred) to set the
+# .js/.motion classes before first paint; only the homepage's tag carries data-intro, which allows the first-visit intro.
+# Contact (the enquiry form) and Demo (the browser app) load no GSAP and no motion scripts.
+MOTION_PAGES = ('index', 'work', 'services', 'pricing')
+GSAP = '<script src="/assets/vendor/gsap/gsap.min.js" defer></script><script src="/assets/vendor/gsap/ScrollTrigger.min.js" defer></script><script src="/assets/motion.js" defer></script>'
+PAGE_SCRIPTS = {'index': GSAP + '<script src="/assets/home.js" defer></script>', 'work': GSAP, 'services': GSAP, 'pricing': GSAP, 'demo': '<script src="/assets/demo.js" defer></script>', 'contact': '<script src="/assets/enquiry.js" defer></script>'}
+
+
+def boot_script(key):
+    if key not in MOTION_PAGES:
+        return ''
+    return '<script src="/assets/motion-boot.js"' + (' data-intro' if key == 'index' else '') + '></script>'
+
 
 
 def build():
@@ -31,7 +44,7 @@ def build():
         for label, href in NAV:
             current = ' aria-current="page"' if (key == 'index' and href == '/') or href == f'/{key}/' else ''
             links += f'<a href="{href}"{current}>{label}</a>'
-        html = f'''<!doctype html><html lang="en-AU"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#0E0E0D"><meta name="description" content="{desc}"><title>{title}</title><link rel="icon" href="/assets/favicon.svg" type="image/svg+xml"><link rel="preload" href="/assets/fonts/archivo-var-latin.woff2" as="font" type="font/woff2" crossorigin><link rel="stylesheet" href="/assets/site.css">{PAGE_STYLES.get(key, INNER_STYLE)}</head><body><a class="skip-link" href="#main">Skip to main content</a><header class="site-header"><div class="wrap nav"><a class="brand" href="/" aria-label="Cendavo home">{MARK}CENDAVO</a><button class="menu" type="button" data-menu aria-label="Toggle menu" aria-controls="site-nav" aria-expanded="false"><span aria-hidden="true">☰</span></button><nav class="nav-links" id="site-nav" data-nav aria-label="Main navigation">{links}</nav><a class="button small" href="/contact/">Request a free consultation</a></div></header><main id="main" tabindex="-1">{page}</main><footer class="footer"><div class="wrap"><div class="footer-row"><div><a class="brand" href="/">{MARK}CENDAVO</a><p>Website design, redesign and care for local service businesses.<br>Sydney, Australia.</p></div><nav class="footer-links" aria-label="Footer navigation">{links}</nav><a class="button outline" href="/contact/">Request a free consultation</a></div><div class="footer-bottom"><p>© 2026 Cendavo. The demonstration project uses sample data only.</p><p>Harbourside Mobile Detailing, Greenline Landscapes and Fade &amp; Co are fictional concept businesses.</p></div></div></footer><script src="/assets/site.js" defer></script>{PAGE_SCRIPTS.get(key, '')}</body></html>'''
+        html = f'''<!doctype html><html lang="en-AU"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#0E0E0D"><meta name="description" content="{desc}"><title>{title}</title><link rel="icon" href="/assets/favicon.svg" type="image/svg+xml"><link rel="preload" href="/assets/fonts/archivo-var-latin.woff2" as="font" type="font/woff2" crossorigin><link rel="stylesheet" href="/assets/site.css">{PAGE_STYLES.get(key, INNER_STYLE)}{boot_script(key)}</head><body><a class="skip-link" href="#main">Skip to main content</a><header class="site-header"><div class="wrap nav"><a class="brand" href="/" aria-label="Cendavo home">{MARK}CENDAVO</a><button class="menu" type="button" data-menu aria-label="Toggle menu" aria-controls="site-nav" aria-expanded="false"><span aria-hidden="true">☰</span></button><nav class="nav-links" id="site-nav" data-nav aria-label="Main navigation">{links}</nav><a class="button small" href="/contact/">Request a free consultation</a></div></header><main id="main" tabindex="-1">{page}</main><footer class="footer"><div class="wrap"><div class="footer-row"><div><a class="brand" href="/">{MARK}CENDAVO</a><p>Website design, redesign and care for local service businesses.<br>Sydney, Australia.</p></div><nav class="footer-links" aria-label="Footer navigation">{links}</nav><a class="button outline" href="/contact/">Request a free consultation</a></div><div class="footer-bottom"><p>© 2026 Cendavo. The demonstration project uses sample data only.</p><p>Harbourside Mobile Detailing, Greenline Landscapes and Fade &amp; Co are fictional concept businesses.</p></div></div></footer><script src="/assets/site.js" defer></script>{PAGE_SCRIPTS.get(key, '')}</body></html>'''
         dest = OUT / ('index.html' if key == 'index' else f'{key}/index.html')
         dest.parent.mkdir(parents=True, exist_ok=True)
         dest.write_text(html)

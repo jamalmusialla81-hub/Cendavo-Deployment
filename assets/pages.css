@@ -1,6 +1,7 @@
 /* Cendavo inner pages (work, services, pricing, contact, demo). Loaded after site.css on every page except the homepage.
-   Static by design: no script-driven motion, nothing hidden until a script runs. The only movement is the hover/focus
-   feedback in the guarded block at the end. Tokens, buttons, form fields, FAQ and focus rings come from site.css. */
+   Nothing is hidden by CSS. On Work, Services and Pricing, motion.js adds GSAP reveals through data attributes in the
+   page markup, setting initial states from JS only; Contact and Demo stay static. The only CSS movement
+   is the hover/focus feedback in the guarded block at the end. Tokens, buttons, form fields, FAQ and focus rings come from site.css. */
 
 /* Shared */
 .pg-h{font-size:clamp(2.75rem,7vw,7rem);font-weight:800;font-stretch:84%;line-height:.93;letter-spacing:-.025em;max-width:16ch}

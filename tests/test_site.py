@@ -247,7 +247,16 @@ class ImageCollector(HTMLParser):
 CONCEPT_LABEL = 'Concept project · fictional business'
 GSAP_TAGS = ['<script src="/assets/vendor/gsap/gsap.min.js" defer></script>',
              '<script src="/assets/vendor/gsap/ScrollTrigger.min.js" defer></script>',
-             '<script src="/assets/home.js" defer></script>']
+             '<script src="/assets/motion.js" defer></script>']
+HOME_TAG = '<script src="/assets/home.js" defer></script>'
+# Pages with GSAP motion (Night Shift Task 10). Contact (the enquiry form) and Demo (the browser app) stay static.
+MOTION_ROUTES = ['index.html', 'work/index.html', 'services/index.html', 'pricing/index.html']
+STATIC_ROUTES = ['contact/index.html', 'demo/index.html']
+MOTION_HOOKS = ('data-ph', 'data-reveal', 'data-parallax', 'data-devices', 'data-rise', 'data-work', 'data-intro')
+# Network, storage and markup-injection APIs no motion script may use; autoAlpha (visibility:hidden), snap (scroll
+# hijacking) and preventDefault (swallowing a visitor's key or click) are banned too.
+MOTION_SCRIPT_BANS = ('fetch(', 'XMLHttpRequest', 'innerHTML', 'http', 'localStorage', 'autoAlpha', 'snap', 'preventDefault',
+                      'sendBeacon', 'WebSocket', 'eval(')
 
 
 class DesignSystemTests(unittest.TestCase):
@@ -482,40 +491,154 @@ class DesignSystemTests(unittest.TestCase):
                 self.assertAlmostEqual(int(attrs['height']) / int(attrs['width']), height / width, delta=0.01 * height / width)
 
     def test_home_script_is_small_isolated_and_safe(self):
-        # GSAP, then ScrollTrigger, then home.js: deferred, in that order, and only on the homepage.
+        # GSAP, then ScrollTrigger, then motion.js (then home.js on /): deferred, in that order, only on the motion pages.
         for route in self.ROUTES:
             with self.subTest(route=route):
                 html = (OUT / route).read_text()
                 for tag in GSAP_TAGS:
-                    self.assertEqual(html.count(tag), 1 if route == 'index.html' else 0)
-                if route == 'index.html':
-                    positions = [html.index(tag) for tag in GSAP_TAGS]
+                    self.assertEqual(html.count(tag), 1 if route in MOTION_ROUTES else 0)
+                self.assertEqual(html.count(HOME_TAG), 1 if route == 'index.html' else 0)
+                if route in MOTION_ROUTES:
+                    tags = GSAP_TAGS + ([HOME_TAG] if route == 'index.html' else [])
+                    positions = [html.index(tag) for tag in tags]
                     self.assertEqual(positions, sorted(positions))
+                    self.assertGreater(positions[0], html.index('</footer>'))
                 else:
                     self.assertNotIn('gsap', html.lower())
+                    self.assertNotIn('scrolltrigger', html.lower())
+                    self.assertNotIn('motion', html.lower())
         for name in ('gsap.min.js', 'ScrollTrigger.min.js', 'LICENSE.txt'):
             self.assertTrue((OUT / 'assets/vendor/gsap' / name).is_file())
-        path = OUT / 'assets/home.js'
-        self.assertLessEqual(path.stat().st_size, 6 * 1024)
-        js = path.read_text()
-        for banned in ('fetch(', 'XMLHttpRequest', 'innerHTML', 'http', 'localStorage', 'sessionStorage', 'pin:', 'snap'):
-            with self.subTest(banned=banned):
-                self.assertNotIn(banned, js)
+        budgets = {'home.js': 12 * 1024, 'motion.js': 8 * 1024, 'motion-boot.js': 1024}
+        scripts = {}
+        for name, budget in budgets.items():
+            path = OUT / 'assets' / name
+            with self.subTest(script=name):
+                self.assertLessEqual(path.stat().st_size, budget)
+            scripts[name] = path.read_text()
+            for banned in MOTION_SCRIPT_BANS:
+                with self.subTest(script=name, banned=banned):
+                    self.assertNotIn(banned, scripts[name])
+            # Session storage is only ever touched inside try/catch (it throws when storage is blocked).
+            for line in scripts[name].splitlines():
+                if 'sessionStorage' in line:
+                    with self.subTest(script=name, line=line.strip()[:60]):
+                        self.assertIn('try {', line)
+                        self.assertIn('catch (', line)
+        js = scripts['home.js']
         self.assertIn("addEventListener('input'", js)
         self.assertIn("setProperty('--pos'", js)
         self.assertIn('controls.hidden = false', js)
         self.assertIn("setAttribute('aria-pressed'", js)
         # Motion is optional and only runs for people who have not asked for reduced motion.
-        self.assertIn('if (!gsap) return;', js)
-        self.assertIn('gsap.matchMedia()', js)
-        self.assertIn("mm.add('(prefers-reduced-motion: no-preference)'", js)
+        for name in ('home.js', 'motion.js'):
+            with self.subTest(script=name):
+                self.assertIn('if (!gsap || !ScrollTrigger)', scripts[name])
+                self.assertIn('gsap.matchMedia()', scripts[name])
+                self.assertIn("'(prefers-reduced-motion: no-preference)'", scripts[name])
+        # Without GSAP the intro ends at once: the class is removed before returning.
+        self.assertIn('if (!gsap || !ScrollTrigger) { endIntro(); return; }', js)
+        self.assertIn("root.classList.remove('ns-intro')", js)
+        # The intro skip listens to every kind of input, passively, and removes its listeners when the intro ends.
+        self.assertIn("const SKIP_EVENTS = ['keydown', 'pointerdown', 'wheel', 'touchstart'];", js)
+        self.assertIn('window.addEventListener(type, onSkip, { passive: true })', js)
+        self.assertIn('window.removeEventListener(type, onSkip)', js)
+        # One capped pin, on large screens only, with a focus handler; stacked reveals elsewhere.
+        self.assertEqual(js.count('pin: true'), 1)
+        self.assertEqual(js.count('pin:'), 1)
+        viewports = re.search(r'const PIN_VIEWPORTS = (\d+(?:\.\d+)?);', js)
+        self.assertIsNotNone(viewports)
+        self.assertLessEqual(float(viewports.group(1)), 2)
+        self.assertIn('window.innerHeight * PIN_VIEWPORTS', js)
+        self.assertIn("const PIN_QUERY = MOTION + ' and (min-width: 1081px) and (min-height: 620px)';", js)
+        self.assertIn('mm.add(PIN_QUERY,', js)
+        self.assertIn("stage.addEventListener('focusin'", js)
+        # Magnetic buttons: fine pointers only, clamped to 6px or less.
+        motion = scripts['motion.js']
+        self.assertIn("(hover: hover) and (pointer: fine)", motion)
+        pull = re.search(r'const MAX_PULL = (\d+(?:\.\d+)?);', motion)
+        self.assertIsNotNone(pull)
+        self.assertLessEqual(float(pull.group(1)), 6)
+        self.assertIn('Math.max(-MAX_PULL, Math.min(MAX_PULL, value))', motion)
+        # Parallax only on large screens; FAQ answers fade with opacity/transform after the native toggle.
+        self.assertIn("mm.add(MOTION + ' and (min-width: 1081px)'", motion)
+        self.assertIn("addEventListener('toggle', onToggle)", motion)
+        # Layout properties are never tweened (media-query features such as min-width are not tween properties).
+        for name in ('home.js', 'motion.js'):
+            with self.subTest(script=name):
+                self.assertNotRegex(scripts[name], r'(?<![-\w])(height|width|top|left|right|bottom|margin|padding)\s*:\s*[-\d\'"]')
+
+    def test_motion_boot_script_runs_first_and_opts_in_to_the_intro_only_on_home(self):
+        boot = '<script src="/assets/motion-boot.js"'
+        for route in self.ROUTES:
+            with self.subTest(route=route):
+                html = (OUT / route).read_text()
+                head = html.split('</head>', 1)[0]
+                if route in MOTION_ROUTES:
+                    self.assertEqual(html.count(boot), 1)
+                    tag = re.search(r'<script src="/assets/motion-boot\.js"[^>]*></script>', head).group(0)
+                    self.assertNotIn('defer', tag)
+                    self.assertNotIn('async', tag)
+                    self.assertEqual('data-intro' in tag, route == 'index.html')
+                else:
+                    self.assertNotIn(boot, html)
+                self.assertNotIn('data-intro', html.split('<script src="/assets/motion-boot.js"', 1)[-1] if route != 'index.html' else '')
+        js = (OUT / 'assets/motion-boot.js').read_text()
+        self.assertIn("c.add('js')", js)
+        self.assertIn("c.add('motion')", js)
+        self.assertIn("matchMedia('(prefers-reduced-motion: reduce)').matches) return;", js)
+        self.assertIn("hasAttribute('data-intro')", js)
+        self.assertIn('w.location.hash) return;', js)
+        delay = re.search(r"setTimeout\(function \(\) \{ c\.remove\('ns-intro'\); \}, (\d+)\)", js)
+        self.assertIsNotNone(delay)
+        self.assertLessEqual(int(delay.group(1)), 2500)
+
+    def test_intro_panel_is_hidden_from_assistive_tech_and_never_blocks(self):
+        main = self.home_main
+        intro = re.search(r'<div class="intro" aria-hidden="true">.*?<span class="intro-hint">[^<]*</span></div>', main, re.S)
+        self.assertIsNotNone(intro)
+        for focusable in ('<button', '<a ', '<input', 'tabindex'):
+            with self.subTest(focusable=focusable):
+                self.assertNotIn(focusable, intro.group(0))
+        hero = re.search(r'<section class="hero"[^>]*>', main).group(0)
+        self.assertNotIn('aria-hidden', hero)
+        self.assertNotIn('inert', hero)
+        self.assertNotIn('inert', main)
+        unguarded, guarded = without_blocks(self.home_css, MOTION_GUARD)
+        self.assertIn('.intro{display:none;pointer-events:none}', unguarded)
+        self.assertNotIn('.ns-intro', unguarded)
+        shown = [block for block in guarded if '.ns-intro .intro{' in block]
+        self.assertEqual(len(shown), 1)
+        rule = shown[0].split('.ns-intro .intro{', 1)[1].split('}', 1)[0]
+        self.assertIn('position:fixed', rule)
+        self.assertNotIn('pointer-events:auto', rule)
+        self.assertNotIn('overflow:hidden', self.home_css.split('.ns-intro', 1)[0][-40:])
+        self.assertNotRegex(self.home_css, r'\.ns-intro[^{]*body')
+
+    def test_pinned_projects_have_a_skip_link_and_a_target(self):
+        main = self.home_main
+        link = '<a class="ulink skip-proj" href="#after-work">Skip projects</a>'
+        self.assertEqual(main.count(link), 1)
+        first_project = main.index('<article class="proj ')
+        self.assertLess(main.index(link), first_project)
+        stage = main.index('<div class="work-stage" data-work>')
+        self.assertLess(main.index(link), stage)
+        self.assertLess(stage, first_project)
+        work_end = main.index('</section>', first_project)
+        self.assertEqual(main.count('id="after-work"'), 1)
+        self.assertGreater(main.index('id="after-work"'), work_end)
+        self.assertIn('<div class="work-count" aria-hidden="true">', main)
+        self.assertIn('.work-stage.is-pinned{', self.home_css)
+        self.assertIn('.work-count{display:none}', self.home_css)
 
     def test_first_party_javascript_budget_per_page(self):
+        # Motion pages may spend up to 20 KB of first-party script (GSAP excluded); Contact and Demo keep the 15 KB cap.
         for route in self.ROUTES:
             with self.subTest(route=route):
                 sources = re.findall(r'<script src="(/assets/[^"]+)"', (OUT / route).read_text())
                 own = [src for src in sources if not src.startswith('/assets/vendor/')]
-                self.assertLessEqual(sum((OUT / src.lstrip('/')).stat().st_size for src in own), 15 * 1024)
+                budget = 20 * 1024 if route in MOTION_ROUTES else 15 * 1024
+                self.assertLessEqual(sum((OUT / src.lstrip('/')).stat().st_size for src in own), budget)
 
     def test_home_stylesheet_loads_only_on_homepage(self):
         tag = '<link rel="stylesheet" href="/assets/home.css">'
@@ -546,7 +669,7 @@ class DesignSystemTests(unittest.TestCase):
         for name, css in (('site.css', self.css), ('home.css', self.home_css), ('pages.css', self.pages_css)):
             with self.subTest(css=name):
                 unguarded, _ = without_blocks(css, MOTION_GUARD)
-                for hook in ('data-rise', 'data-hero-fade'):
+                for hook in ('data-rise', 'data-hero-fade') + MOTION_HOOKS:
                     self.assertNotIn(hook, css)
                 self.assertNotRegex(unguarded, r'opacity:0(?![.\d])')
                 self.assertNotIn('visibility:hidden', unguarded)
@@ -611,17 +734,45 @@ class InnerPageTests(unittest.TestCase):
         self.assertRegex(html, r'<meta name="description" content="[^"]*fictional[^"]*">')
 
     def test_inner_pages_have_no_script_motion(self):
-        for route in self.INNER:
+        # Contact and Demo stay fully static: no GSAP, no motion scripts and no motion hooks.
+        for route in STATIC_ROUTES:
             with self.subTest(route=route):
                 html = self.html[route].lower()
-                for banned in ('gsap', 'ns-boot', 'ns-pages', 'ns.js', 'home.js', 'scrolltrigger'):
+                for banned in ('gsap', 'ns-boot', 'ns-pages', 'ns.js', 'home.js', 'scrolltrigger', 'motion.js', 'motion-boot'):
                     self.assertNotIn(banned, html)
+                for hook in MOTION_HOOKS:
+                    self.assertNotIn(hook, self.html[route])
+        # Every route: no prototype scripts, no home.js off the homepage, and no prototype notes in the content.
         for route in self.ROUTES:
             with self.subTest(route=route):
-                for hook in ('data-ph', 'data-reveal', 'data-parallax', 'data-devices', 'data-quote'):
-                    self.assertNotIn(hook, self.html[route])
+                html = self.html[route].lower()
+                for banned in ('ns-boot', 'ns-pages', 'ns.js', 'data-quote', 'data-hero-device'):
+                    self.assertNotIn(banned, html)
+                if route != 'index.html':
+                    self.assertNotIn('home.js', html)
+                    self.assertNotIn('data-intro', html)
                 self.assertNotIn('Prototype', self.main[route])
                 self.assertNotIn('proto-note', self.html[route])
+
+    def test_motion_hooks_only_mark_existing_content(self):
+        # Work, Services and Pricing: the page head opens with motion, headings rise, frames reveal, photos drift.
+        for route in ('work/index.html', 'services/index.html', 'pricing/index.html'):
+            with self.subTest(route=route):
+                main = self.main[route]
+                self.assertEqual(main.count(' data-ph '), 1)
+                head = re.search(r'<section [^>]*data-ph [^>]*>.*?</section>', main, re.S).group(0)
+                self.assertEqual(head.count('<h1'), 1)
+                self.assertIn('data-ph-fade', head)
+                self.assertIn('data-rise', main)
+                self.assertIn('data-parallax', main)
+                # Hooks are bare attributes: no inline values, styles or scripts ride along with them.
+                for hook in re.findall(r'data-(?:ph|ph-fade|ph-media|rise|reveal|parallax|devices)(=?)', main):
+                    self.assertEqual(hook, '')
+        # Parallax and reveals only wrap images; parallax frames clip their overflow in CSS.
+        for route in MOTION_ROUTES:
+            for frame in re.findall(r'<(?:div|figure|span)[^>]*data-parallax[^>]*>(.*?)</(?:div|figure|span)>', self.main[route], re.S):
+                with self.subTest(route=route, frame=frame[:50]):
+                    self.assertTrue(frame.lstrip().startswith('<img '))
 
     def test_images_on_every_route_are_local_sized_and_described(self):
         for route in self.ROUTES:

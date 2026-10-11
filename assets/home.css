@@ -260,6 +260,35 @@
 .hb-pk{grid-template-columns:1fr 1fr;gap:1em;padding:1em 1.4em}
 }
 
+/* First-visit intro (homepage). Never shown by default and never catches clicks; it only appears while motion-boot.js has set
+   the intro class on <html>, inside the reduced-motion guard at the end of this file. Decorative and aria-hidden. */
+.intro{display:none;pointer-events:none}
+.intro-lockup{display:flex;flex-direction:column;align-items:center;gap:26px}
+.intro-mark{width:clamp(72px,9vw,112px);height:auto;fill:var(--bone);overflow:visible}
+.intro-mark path:first-child{fill:var(--amber)}
+.intro-word{display:block;overflow:hidden;padding-left:.32em;font:650 clamp(18px,2vw,24px)/1.2 var(--font-display);font-stretch:118%;letter-spacing:.32em}
+.intro-word>span{display:block}
+.intro-hint{position:absolute;right:var(--gut);bottom:28px;color:var(--stone);font-size:.9rem}
+
+/* Concept projects: skip link and the pinned sequence. .is-pinned is added by home.js only on large screens with motion. */
+.work-head .skip-proj{margin-left:24px}
+.work-stage{position:relative}
+.work-count{display:none}
+.work-stage.is-pinned{height:100svh;overflow:hidden}
+.work-stage.is-pinned .proj{position:absolute;inset:0;min-height:0;padding-block:100px 56px;border:0}
+.work-stage.is-pinned .proj:nth-of-type(2){z-index:2}
+.work-stage.is-pinned .proj:nth-of-type(3){z-index:3}
+.work-stage.is-pinned .work-count{position:absolute;z-index:4;left:var(--gut);bottom:32px;display:flex;align-items:center;gap:14px;color:var(--stone);font:600 .9rem/1 var(--font-display);font-variant-numeric:tabular-nums}
+.work-count-n{color:var(--bone)}
+.work-count-bar{position:relative;width:96px;height:1px;background:var(--line)}
+.work-count-bar i{position:absolute;inset:0;background:var(--bone);transform-origin:0 50%}
+@media(min-width:1441px){.work-stage.is-pinned .work-count{left:calc((100vw - var(--max)) / 2 + var(--gut))}}
+
+/* Services rows: each heading links to its section on the Services page. */
+.svc h3 a{text-decoration:none}
+.svc h3 a:hover{text-decoration:underline;text-decoration-thickness:2px;text-underline-offset:.12em}
+.svc-list .svc img{transform-origin:100% 50%}
+
 /* Responsive */
 @media(max-width:1080px){
 .proj-copy{grid-column:1/span 5}
@@ -310,4 +339,14 @@
 @media(max-width:640px){
 .actions .button,.band .button{width:100%}
 .compare-stage{aspect-ratio:4/5}
+}
+
+/* Motion: only for people who have not asked for reduced motion. Transform and opacity only.
+   The intro panel shows only on a first visit per session; clicks pass through it. */
+@media(prefers-reduced-motion:no-preference){
+.ns-intro .intro{position:fixed;inset:0;z-index:120;display:grid;place-items:center;background:var(--ink);color:var(--bone)}
+.svc-list.is-live .svc img{transition:transform 600ms var(--ease),opacity 600ms var(--ease)}
+.svc-list.is-live .svc:not(.is-active) img{opacity:.55;transform:scale(.94)}
+.svc-list.is-live .svc h3{transition:transform 450ms var(--ease)}
+.svc-list.is-live .svc.is-active h3{transform:translateX(6px)}
 }

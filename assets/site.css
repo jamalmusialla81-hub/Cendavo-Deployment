@@ -190,5 +190,5 @@ main:focus{outline:none;box-shadow:none}
 .demo-main,.demo-side,.price{padding:var(--space-5)}
 }
 
-/* Motion: only for people who have not asked for reduced motion; transform only. GSAP (homepage) uses its own matchMedia guard. */
-@media(prefers-reduced-motion:no-preference){html{scroll-behavior:smooth}.nav-links a::after,.footer-links a::after,.ulink::after,.button.go::after{transition:transform 450ms var(--ease)}.button.go:hover::after{transform:translateX(2px) rotate(45deg)}}
+/* Motion: only for people who have not asked for reduced motion; transform only. GSAP (home, work, services, pricing) uses its own matchMedia guard. */
+@media(prefers-reduced-motion:no-preference){html{scroll-behavior:smooth}.nav-links a::after,.footer-links a::after,.ulink::after,.button.go::after{transition:transform 450ms var(--ease)}.button.go:hover::after,.button.go:focus-visible::after{transform:translateX(2px) rotate(45deg)}}
