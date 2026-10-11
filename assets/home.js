@@ -115,8 +115,8 @@
     return endIntro;
   });
 
-  // Concept projects, large screens: one capped pinned sequence. Each photo wipes up, the caption swaps and the devices
-  // rise into place; a 1-3 counter tracks the project. The visitor's scroll is never moved for them.
+  // Concept projects, large screens: one capped pinned sequence. Each photo wipes up, the caption swaps quickly mid-wipe
+  // and the devices hand over and rise into place; a 1-3 counter tracks the project. The visitor's scroll is never moved for them.
   mm.add(PIN_QUERY, () => {
     const stage = doc.querySelector('[data-work]');
     const projects = stage ? $$('.proj', stage) : [];
@@ -149,14 +149,16 @@
       const copy = $$('.proj-copy > *', current);
       const devices = $$('.proj-devices', current);
       gsap.set($$('.proj-media', current), { clipPath: 'inset(100% 0 0 0)' });
-      gsap.set(copy, { opacity: 0, y: 40 });
+      gsap.set(copy, { opacity: 0, y: 16 });
       gsap.set(devices, { opacity: 0, y: 140, rotation: 2.5, transformOrigin: '50% 100%' });
-      tl.to($$('.proj-copy > *', previous), { opacity: 0, y: -30, stagger: 0.04, duration: 0.4 }, at)
-        .to($$('.proj-devices', previous), { opacity: 0, y: -110, duration: 0.5 }, at)
+      // One quick text swap mid-wipe (each side 0.18 units, a 0.02 overlap) so one project's text is always on screen,
+      // and the devices hand over back to back, so two laptops never share the frame.
+      tl.to($$('.proj-copy > *', previous), { opacity: 0, y: -16, stagger: 0.02, duration: 0.12, ease: 'power2.in' }, at + 0.3)
+        .to($$('.proj-devices', previous), { opacity: 0, y: -110, duration: 0.35, ease: 'power2.in' }, at + 0.05)
         .to($$('.proj-media', current), { clipPath: 'inset(0% 0 0 0)', duration: 0.8 }, at + 0.1)
         .fromTo($$('.proj-media img', current), { scale: 1.1 }, { scale: 1, duration: 0.9, ease: 'power2.out' }, at + 0.1)
-        .to(copy, { opacity: 1, y: 0, stagger: 0.05, duration: 0.45, ease: 'power3.out' }, at + 0.45)
-        .to(devices, { opacity: 1, y: 0, rotation: 0, duration: 0.6, ease: 'power3.out' }, at + 0.4)
+        .to(copy, { opacity: 1, y: 0, stagger: 0.02, duration: 0.12, ease: 'power2.out' }, at + 0.46)
+        .to(devices, { opacity: 1, y: 0, rotation: 0, duration: 0.55, ease: 'power3.out' }, at + 0.4)
         .addLabel('p' + index, at + 1);
     }
     tl.to({}, { duration: 0.3 });

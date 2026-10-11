@@ -59,7 +59,8 @@ function makeGsap(env) {
     log.varsSeen.push(vars);
     const at = position === undefined ? owner.cursor : position;
     const end = at + (vars.duration === undefined ? 0.5 : vars.duration) + (vars.stagger || 0) * (count(targets) - 1);
-    const tween = { kind, at, end, n: count(targets), vars };
+    const names = (Array.isArray(targets) ? targets : [targets]).map(t => (t && t.name) || null);
+    const tween = { kind, at, end, n: count(targets), names, vars };
     owner.tweens.push(tween);
     owner.cursor = end;
     return tween;
@@ -163,6 +164,8 @@ function run(env) {
       out.focusScroll = win.scrolled.slice();
       pin.vars.scrollTrigger.onUpdate({ progress: 1 });
       out.counter = counter.textContent;
+      out.pinTweens = pin.tweens.map(t => ({ at: t.at, end: t.end, n: t.n, names: t.names, opacity: t.vars.opacity }));
+      out.pinLabels = pin.labels;
     }
     if (env.skipWith) {
       let prevented = false;
@@ -553,6 +556,32 @@ class DemoScriptTests(unittest.TestCase):
         self.assertFalse(phone['pinned'])
         self.assertIsNone(phone.get('pinEnd'))
         self.assertEqual(phone['stackTimelines'], 3)
+
+    def test_home_projects_swap_text_quickly_and_never_show_two_device_sets(self):
+        # Night Shift Task 17 (design critique): one project's text is always readable and the devices hand over back to back.
+        r = self.node_json(HOME_SCRIPT, HOME)
+        tweens = r['first']['pinTweens']
+        text = [t for t in tweens if t['n'] == 4]  # each project's four copy elements
+        devices = [t for t in tweens if (t['names'][0] or '').startswith('devices')]
+        self.assertEqual(len(text), 4)
+        self.assertEqual(len(devices), 4)
+        for name, group in (('text', text), ('devices', devices)):
+            with self.subTest(group=name):
+                self.assertEqual([t['opacity'] for t in group], [0, 1, 0, 1])  # outgoing, then incoming, per transition
+        labels = r['first']['pinLabels']
+        for index in (1, 2):
+            text_out, text_in = text[2 * index - 2:2 * index]
+            dev_out, dev_in = devices[2 * index - 2:2 * index]
+            with self.subTest(transition=index):
+                self.assertLessEqual(text_out['end'] - text_out['at'], 0.25 + 1e-9)
+                self.assertLessEqual(text_in['end'] - text_in['at'], 0.25 + 1e-9)
+                # No gap longer than 0.1 and no overlap longer than 0.1 between outgoing and incoming text.
+                self.assertLessEqual(abs(text_in['at'] - text_out['end']), 0.1 + 1e-9)
+                # Incoming devices start at most 0.1 before the outgoing ones are gone.
+                self.assertGreaterEqual(dev_in['at'], dev_out['end'] - 0.1 - 1e-9)
+                # Everything has settled by the project's focus-scroll label.
+                self.assertLessEqual(max(t['end'] for t in (text_in, dev_in)), labels['p%d' % index] + 1e-9)
+                self.assertGreaterEqual(text_out['at'], labels['p%d' % (index - 1)])
 
     def test_motion_boot_only_starts_the_intro_on_a_first_plain_visit(self):
         r = self.node_json(BOOT_SCRIPT, BOOT)

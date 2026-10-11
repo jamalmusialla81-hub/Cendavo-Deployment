@@ -15,7 +15,7 @@
 .pg-label{margin:0 0 var(--space-6);padding-bottom:14px;border-bottom:1px solid var(--bone);color:var(--stone);font:600 1rem/1.3 var(--font-display);font-stretch:104%;letter-spacing:0}
 .bone .pg-label{color:var(--ink-soft);border-bottom-color:var(--ink)}
 .btn-row{display:flex;flex-wrap:wrap;gap:var(--space-3);margin-top:var(--space-8)}
-.sv-chapters ul,.tick,.care-cycle,.pr-steps,.inc-grid,.aff,.ct-steps,.exp,.wk-index,.cs-list,.wk-demo-list{list-style:none;margin:0;padding:0}
+.sv-chapters ul,.tick,.care-cycle,.pr-steps,.inc-grid,.aff,.ct-steps,.exp,.cs-list,.wk-demo-list{list-style:none;margin:0;padding:0}
 .spec{margin:clamp(40px,5vw,64px) 0 0;border-top:1px solid var(--bone)}
 .spec-row{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,2fr);gap:var(--space-2) var(--space-6);padding:22px 0;border-bottom:1px solid var(--line)}
 .spec dt{font:650 1rem/1.4 var(--font-display);font-stretch:104%}
@@ -145,7 +145,8 @@
 .wk-hero{padding-block:clamp(64px,9vw,136px) var(--section)}
 .wk-h{max-width:20ch;font-size:clamp(2.6rem,6.6vw,6.6rem)}
 .wk-hero-sub{grid-column:8/-1;margin-top:clamp(20px,2vw,32px)}
-.wk-index{display:grid;grid-template-columns:repeat(3,minmax(0,1fr)) minmax(0,.6fr);gap:clamp(8px,1vw,14px);margin-top:clamp(40px,4vw,64px)}
+/* The index row is a .wrap, so it keeps the standard side gutter: only list styling and vertical spacing are set here. */
+.wk-index{list-style:none;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:24px;margin-block:clamp(40px,4vw,64px) 0;padding-block:0}
 .wk-tile a{display:grid;grid-template-rows:minmax(0,1fr) auto auto;height:100%;text-decoration:none}
 .wk-tile-img{display:block;aspect-ratio:3/4;overflow:hidden;background:var(--ink-2)}
 .wk-tile-img img{transform:scale(1.04)}
@@ -159,9 +160,9 @@
 .wk-demo-mini b{flex:1 1 auto;max-width:70px;height:6px;border-radius:3px;background:rgba(237,234,227,.22)}
 .wk-demo-mini em{padding:2px 8px;border:1px solid var(--line);border-radius:var(--radius-pill);color:var(--stone);font:600 .72rem/1.3 var(--font-display);font-style:normal;white-space:nowrap}
 .wk-demo-mini i:first-child em{border-color:var(--amber);color:var(--amber)}
-.cs-label{margin:0;color:var(--stone);font-size:.92rem}
+.cs-label{margin:14px 0 0;color:var(--stone);font-size:.92rem}
 .bone .cs-label{color:var(--ink-soft)}
-.cs-title{margin:14px 0 0;max-width:12ch;font-size:clamp(3rem,8.2vw,8.4rem);font-weight:800;font-stretch:82%;line-height:.9;letter-spacing:-.028em}
+.cs-title{margin:0;max-width:12ch;font-size:clamp(3rem,8.2vw,8.4rem);font-weight:800;font-stretch:82%;line-height:.9;letter-spacing:-.028em}
 .cs-facts{display:flex;flex-wrap:wrap;gap:14px clamp(28px,4vw,64px);margin:clamp(28px,3vw,44px) 0 0;padding-top:18px;border-top:1px solid var(--line)}
 .bone .cs-facts{border-top-color:var(--line-dark)}
 .cs-facts dt{color:var(--stone);font-size:.82rem}
@@ -172,6 +173,12 @@
 .cs-cover-media::after{content:"";position:absolute;inset:0;background:linear-gradient(0deg,var(--ink) 0%,rgba(14,14,13,.55) 32%,rgba(14,14,13,0) 62%)}
 .cs-fc .cs-cover-media::after{background:linear-gradient(90deg,rgba(14,14,13,.9) 0%,rgba(14,14,13,.6) 40%,rgba(14,14,13,.2) 75%),linear-gradient(0deg,var(--ink) 0%,rgba(14,14,13,0) 30%)}
 .cs-cover-in{padding-block:180px clamp(40px,5vw,72px)}
+/* Harbourside: the cover photo (detail-mono) is mostly blown-out white spray, so the car is moved right and a dark scrim holds
+   behind the left half, where the copy sits. The label and facts are kept to 44% of the row so they stay on the scrim; the
+   scrim alpha is checked against a pure white backdrop in tests/test_site.py. */
+#harbourside .cs-cover-media img{object-position:70% 50%}
+#harbourside .cs-cover-media::after{background:linear-gradient(90deg,rgba(14,14,13,.9) 0%,rgba(14,14,13,.9) 50%,rgba(14,14,13,0) 80%),linear-gradient(0deg,var(--ink) 0%,rgba(14,14,13,0) 30%)}
+#harbourside .cs-label,#harbourside .cs-facts{max-width:44%}
 .cs-body{padding-block:var(--section)}
 .cs-brief{grid-column:1/span 5}
 .cs-does{grid-column:7/-1}
@@ -264,12 +271,15 @@
 .pr-care-card{position:relative;margin-top:-64px}
 }
 @media(max-width:860px){
-.wk-index{grid-template-columns:1fr 1fr;row-gap:28px}
+.wk-index{grid-template-columns:repeat(2,minmax(0,1fr));gap:28px 12px}
 .wk-tile-img{aspect-ratio:4/5}
 .cs-cover{display:block;min-height:0}
 .cs-cover-media{position:relative;height:72vw;max-height:560px;z-index:0}
 .cs-cover-in{position:relative;margin-top:-18vw;padding-top:0}
 .cs-fc .cs-cover-media::after{background:linear-gradient(0deg,var(--ink) 0%,rgba(14,14,13,0) 50%)}
+/* The copy overlaps the bottom 18vw (at most about 28%) of the photo: keep that band near-opaque ink. */
+#harbourside .cs-cover-media::after{background:linear-gradient(0deg,var(--ink) 0%,rgba(14,14,13,.88) 32%,rgba(14,14,13,0) 64%)}
+#harbourside .cs-label,#harbourside .cs-facts{max-width:none}
 .gl-cover-media{margin:36px calc(-1 * var(--gut)) 0}
 /* Key screens: the laptop takes the full row, the two phones share the next one; nothing is positioned absolutely. */
 .stage-hb,.stage-fc{grid-template-columns:repeat(2,minmax(0,1fr));row-gap:40px;align-items:start}
@@ -283,6 +293,7 @@
 .stage-gl .phone{--pw:min(240px,52vw)}
 }
 @media(max-width:640px){
+.wk-index{padding-inline:16px}
 .spec-row,.care-cycle,.inc-grid,.exp,.field-row{grid-template-columns:1fr}
 .form-foot .button{justify-self:stretch}
 .scale{grid-template-columns:1fr 1fr;row-gap:8px}

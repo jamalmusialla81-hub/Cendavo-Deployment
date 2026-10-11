@@ -519,10 +519,20 @@ class DesignSystemTests(unittest.TestCase):
         self.assertIn('2009', before)
         self.assertRegex(self.home_css, r'\.old-cols\{[^}]*grid-template-columns:auto minmax\(0,1fr\)')
 
-    def test_statement_text_is_centred_against_its_photo(self):
+    def test_statement_text_tops_align_with_a_portrait_photo(self):
+        # Night Shift Task 17 (design critique): photo and text tops align, a 4:5 crop, tighter section padding.
         rule = re.search(r'\.statement-body\{([^}]*)\}', self.home_css).group(1)
-        self.assertIn('align-self:center', rule)
+        self.assertIn('align-self:start', rule)
+        self.assertNotIn('align-self:center', rule)
         self.assertNotIn('align-self:end', rule)
+        base = base_rules(self.home_css)
+        self.assertIn('.statement{padding-block:clamp(96px,10vw,160px)}', base)
+        photo = re.search(r'(?:^|[}\n])\.statement-photo\{([^}]*)\}', base).group(1)
+        self.assertIn('aspect-ratio:4/5', photo)
+        self.assertIn('.statement-photo img{object-position:40% 60%}', base)
+        # The panorama (about 2.3:1) is cropped to cover a taller box, so sizes asks for a wider image than the box.
+        img = re.search(r'<figure class="statement-photo"[^>]*><picture><source [^>]*><img ([^>]*)>', self.home_main).group(1)
+        self.assertIn('sizes="(max-width: 900px) 172vw, 106vw"', img)
 
     def test_harbourside_shows_its_homepage_phone_on_small_screens(self):
         # At 768px and below the laptop and booking phone give way to one homepage phone, kept in normal flow.
@@ -804,7 +814,7 @@ class DesignSystemTests(unittest.TestCase):
                 self.assertEqual(sum(counts.values()), 1, counts)
                 self.assertEqual(counts['kit.css'], 1, counts)
 
-    def test_how_it_works_has_large_numerals_a_photo_and_readable_steps(self):
+    def test_how_it_works_has_quiet_numerals_a_photo_and_readable_steps(self):
         section = re.search(r'<section class="process"[^>]*>(.*?)</section>', self.home_main, re.S).group(1)
         steps = re.findall(r'<li class="step">(.*?)</li>', section, re.S)
         self.assertEqual(len(steps), 5)
@@ -823,7 +833,17 @@ class DesignSystemTests(unittest.TestCase):
         numeral = re.search(r'(?:^|[}\n])\.step-n\{([^}]*)\}', self.home_css).group(1)
         self.assertIn('var(--font-display)', numeral)
         self.assertGreaterEqual(int(re.search(r'font-stretch:(\d+)%', numeral).group(1)), 105)
-        self.assertGreaterEqual(minimum_px(re.search(r'font:\d+ ([^/]+)/', numeral).group(1)), 48)
+        # Night Shift Task 17: numerals (20-24px, stone, amber for the first) no longer compete with the ~28px step headings.
+        size = re.search(r'font:\d+ ([^/]+)/', numeral).group(1)
+        self.assertEqual(size, 'clamp(1.25rem,1.6vw,1.5rem)')
+        self.assertIn('color:var(--stone)', numeral)
+        self.assertIn('.step:first-child .step-n{color:var(--amber)}', self.home_css)
+        for value in re.findall(r'\.step-n\{[^}]*?font(?:-size)?:(?:\d+ )?([^;/}]+)', self.home_css):
+            with self.subTest(numeral_size=value):
+                sizes = [float(n) * (16 if unit == 'rem' else 1) for n, unit in re.findall(r'([\d.]+)(px|rem)', value)]
+                self.assertTrue(sizes)
+                self.assertTrue(all(20 <= px <= 24 for px in sizes), value)
+        self.assertRegex(self.home_css, r'(?:^|[}\n])\.step h3\{[^}]*font-size:1\.75rem')
         rules = re.findall(r'(?:^|[}\n])\.step p\{([^}]*)\}', self.home_css)
         self.assertTrue(rules)
         for rule in rules:
@@ -1392,6 +1412,156 @@ class AboutPageTests(unittest.TestCase):
         for hook in re.findall(r'data-(?:rise|reveal|parallax)(=?)', self.main):
             self.assertEqual(hook, '')
         self.assertNotIn('http', self.source)
+
+
+def media_blocks(css, query):
+    """Concatenated bodies of every `@media(query){...}` block in css."""
+    return ''.join(without_blocks(css, f'@media({query}){{')[1])
+
+
+def rules_for(css, selector):
+    """Bodies of every rule whose comma-separated selector list contains `selector` exactly."""
+    css = re.sub(r'/\*.*?\*/', '', css, flags=re.S)
+    return [body for selectors, body in re.findall(r'([^{}]+)\{([^{}]*)\}', css)
+            if selector in [part.strip() for part in selectors.split(',')]]
+
+
+def gradient_stops(gradient):
+    """[(alpha, position %)] for a linear-gradient's ink stops (`rgba(14,14,13,a) p%` or `var(--ink) p%`)."""
+    stops = []
+    for colour, position in re.findall(r'(rgba\(14,14,13,[\d.]+\)|var\(--ink\)) ([\d.]+)%', gradient):
+        alpha = 1.0 if colour == 'var(--ink)' else float(re.search(r',([\d.]+)\)$', colour).group(1))
+        stops.append((alpha, float(position)))
+    return stops
+
+
+def ink_over_white(alpha, ink='#0E0E0D'):
+    """Hex colour of ink at `alpha` composited over pure white (the worst case for light text)."""
+    channels = [int(ink.lstrip('#')[i:i + 2], 16) for i in (0, 2, 4)]
+    return '#' + ''.join(f'{round(alpha * c + (1 - alpha) * 255):02X}' for c in channels)
+
+
+class DesignCritiqueFixTests(unittest.TestCase):
+    """Night Shift Task 17: fixes from the independent design critique (docs/design/night-shift/critique/CRITIQUE.md)."""
+
+    @classmethod
+    def setUpClass(cls):
+        build()
+        cls.css = (OUT / 'assets/site.css').read_text()
+        cls.home_css = (OUT / 'assets/home.css').read_text()
+        cls.pages_css = (OUT / 'assets/pages.css').read_text()
+        cls.home = main_of((OUT / 'index.html').read_text())
+        cls.work = main_of((OUT / 'work/index.html').read_text())
+        root = re.search(r':root\{(.*?)\}', cls.css, re.S).group(1)
+        cls.tokens = {k: v.strip() for k, v in re.findall(r'(--[\w-]+):([^;]+)', root)}
+
+    def test_work_index_sits_inside_the_page_gutter(self):
+        self.assertIn('<ul class="wrap wk-index">', self.work)
+        self.assertIn('.wrap{width:100%;max-width:var(--max);margin-inline:auto;padding-inline:var(--gut)}', self.css)
+        base = base_rules(self.pages_css)
+        rules = rules_for(base, '.wk-index')
+        self.assertEqual(len(rules), 1)  # no shared list reset overrides .wrap's gutter any more
+        rule = rules[0]
+        self.assertNotRegex(rule, r'(?<![-\w])(?:margin|padding)(?:-inline|-left|-right)?:')
+        self.assertIn('grid-template-columns:repeat(4,minmax(0,1fr))', rule)
+        self.assertIn('gap:24px', rule)
+        self.assertNotIn('.6fr', self.pages_css)
+        tablet = rules_for(media_blocks(self.pages_css, 'max-width:860px'), '.wk-index')
+        self.assertEqual(tablet, ['grid-template-columns:repeat(2,minmax(0,1fr));gap:28px 12px'])
+        self.assertEqual(rules_for(media_blocks(self.pages_css, 'max-width:640px'), '.wk-index'), ['padding-inline:16px'])
+
+    def test_harbourside_cover_text_meets_contrast_over_white(self):
+        base = base_rules(self.pages_css)
+        self.assertIn('#harbourside .cs-cover-media img{object-position:70% 50%}', base)
+        self.assertIn('#harbourside .cs-label,#harbourside .cs-facts{max-width:44%}', base)
+        stone, bone = self.tokens['--stone'], self.tokens['--bone']
+        # Text colours: the label and fact terms are stone; fact values and the title inherit the body's bone.
+        self.assertIn('color:var(--stone)', rules_for(base, '.cs-label')[0])
+        self.assertIn('color:var(--stone)', rules_for(base, '.cs-facts dt')[0])
+        for selector in ('.cs-facts dd', '.cs-title'):
+            for rule in rules_for(base, selector):
+                self.assertNotRegex(rule, r'(?<![-\w])color:')
+        self.assertRegex(self.css, r'(?:^|[}\n])body\{[^}]*;color:var\(--bone\)')
+        # Wide screens: the left scrim holds its darkest value across the left half, where the 44%-wide copy sits.
+        # Phones/tablets (<=860px): the copy overlaps the bottom 18vw (at most about 28%) of the photo.
+        for name, css, hold in (('wide', base, 50), ('narrow', media_blocks(self.pages_css, 'max-width:860px'), 28)):
+            with self.subTest(layout=name):
+                rules = rules_for(css, '#harbourside .cs-cover-media::after')
+                self.assertEqual(len(rules), 1)
+                first = re.search(r'background:linear-gradient\(([^()]*(?:\([^()]*\)[^()]*)*)\)', rules[0]).group(1)
+                stops = gradient_stops(first)
+                held = [alpha for alpha, position in stops if position <= hold]
+                self.assertTrue(held)
+                self.assertTrue(any(position >= hold and alpha >= 0.85 for alpha, position in stops), stops)
+                alpha = min(held + [a for a, p in stops if p >= hold][:1])
+                self.assertGreaterEqual(alpha, 0.85)
+                backdrop = ink_over_white(alpha)
+                for text, colour, minimum in (('label', stone, 4.5), ('dt', stone, 4.5), ('dd', bone, 4.5), ('title', bone, 3)):
+                    with self.subTest(layout=name, text=text):
+                        self.assertGreaterEqual(contrast(colour, backdrop), minimum)
+
+    def test_concept_label_sits_under_each_title(self):
+        home = re.findall(r'<article class="proj [^"]*"[^>]*>(.*?)</article>', self.home, re.S)
+        work = re.findall(r'<article\b[^>]*>(.*?)</article>', self.work, re.S)
+        self.assertEqual((len(home), len(work)), (3, 3))
+        for page, articles, closing in (('home', home, '</h3>'), ('work', work, '</h2>')):
+            for article in articles:
+                with self.subTest(page=page, article=article[:60]):
+                    self.assertEqual(article.count(CONCEPT_LABEL), 1)
+                    label = article.index(CONCEPT_LABEL)
+                    title = article.index(closing)
+                    self.assertGreater(label, title)
+                    # Directly under the title: nothing but whitespace and the label's own opening tag between them.
+                    self.assertRegex(article[title + len(closing):label], r'^\s*<p class="(?:proj|cs)-label">$')
+        self.assertIn('<p class="hero-cap">Harbourside Mobile Detailing<span>Concept project · fictional business</span></p>', self.home)
+        self.assertIn('.proj h3{margin:0;', self.home_css)
+        self.assertIn('.proj-label{margin:12px 0 0;', self.home_css)
+
+    def test_pinned_devices_stay_inside_the_viewport(self):
+        base = base_rules(self.home_css)
+        rule = rules_for(base, '.proj-devices')[0]
+        self.assertIn('max-width:min(58vw,820px)', rule)
+        self.assertIn('justify-self:end', rule)
+        # The laptop base overhangs 7.5% of the laptop width on each side (kit.css); Greenline's right margin covers it.
+        self.assertIn('.laptop-base{height:0;padding-bottom:2.4%;margin:0 -7.5%;', (OUT / 'assets/kit.css').read_text())
+        gl = rules_for(base, '.devices-gl .laptop')[0]
+        width = float(re.search(r'width:([\d.]+)%', gl).group(1))
+        right = float(re.search(r'margin-right:([\d.]+)%', gl).group(1))
+        self.assertGreaterEqual(right, width * 0.075)
+        self.assertLessEqual(width + right, 100)
+        self.assertIn('max-width:none', rules_for(media_blocks(self.home_css, 'max-width:860px'), '.proj-devices')[0])
+
+    def test_mobile_hero_overlays_the_copy_on_a_darkened_photo(self):
+        phone = media_blocks(self.home_css, 'max-width:640px')
+        hero = rules_for(phone, '.hero')[0]
+        self.assertIn('min-height:calc(100svh - 77px)', hero)
+        self.assertIn('justify-content:flex-end', hero)
+        photo = rules_for(phone, '.hero-photo')[0]
+        self.assertIn('position:absolute', photo)
+        self.assertIn('inset:0', photo)
+        self.assertIn('z-index:-1', photo)
+        scrim = rules_for(phone, '.hero-photo::after')[0]
+        alpha = float(re.search(r'linear-gradient\(0deg,rgba\(14,14,13,([\d.]+)\) 0%', scrim).group(1))
+        self.assertGreaterEqual(alpha, 0.85)
+        self.assertEqual(rules_for(phone, '.hero-device'), ['display:none'])
+        source = (Path(__file__).resolve().parents[1] / 'pages/index.html').read_text()
+        self.assertIn('<img src="/assets/images/detail-darkroom-1600.jpg" srcset="/assets/images/detail-darkroom-800.jpg 800w, '
+                      '/assets/images/detail-darkroom-1600.jpg 1600w" sizes="(max-width: 900px) 100vw, 64vw" width="1600" '
+                      'height="1067" alt="The front of a black classic sedan in a dark garage, its round headlights glowing warm '
+                      'amber" fetchpriority="high" decoding="async">', source)
+
+    def test_services_rows_do_not_slide(self):
+        self.assertNotIn('translateX(', self.home_css)
+        self.assertNotRegex(self.home_css, r'\.svc[^{]*h3\{[^}]*transition')
+        _, guarded = without_blocks(self.home_css, MOTION_GUARD)
+        self.assertIn('.svc-list.is-live .svc:not(.is-active) img{opacity:.55;transform:scale(.94)}', ''.join(guarded))
+
+    def test_contact_photo_is_hidden_on_phones(self):
+        hidden = [query for query in re.findall(r'@media\(max-width:(\d+)px\)\{', self.pages_css)
+                  if '.ct-photo{display:none}' in media_blocks(self.pages_css, f'max-width:{query}px')]
+        self.assertTrue(hidden)
+        self.assertTrue(all(int(query) >= 640 for query in hidden))
+        self.assertNotIn('.ct-photo{display:none}', base_rules(self.pages_css))
 
 
 if __name__ == '__main__':
