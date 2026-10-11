@@ -85,6 +85,7 @@ def build_profile(root: Path, temporary: Path) -> str:
         '(deny file-write* ' + ' '.join(
             f'(subpath {_quoted(root / name)})' for name in
             ('.claude', '.github', 'tests', 'scripts/forge.py', 'scripts/forge_sandbox.py',
-             'scripts/overnight.sh', 'scripts/supervisor.py', 'scripts/supervise.sh', 'AGENTS.md', 'CLAUDE.md')) + ')',
+             'scripts/overnight.sh', 'scripts/supervisor.py', 'scripts/supervise.sh', 'forge.config.json', '.gitignore',
+             'AGENTS.md', 'CLAUDE.md')) + ')',
         '(deny network*)',
     ))

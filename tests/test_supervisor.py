@@ -130,9 +130,16 @@ class PatchPolicyTests(unittest.TestCase):
         self.assertTrue(any('security boundary' in r for r in a.approvals))
 
     def test_control_files_need_approval(self):
-        for name in ('scripts/supervisor.py', '.claude/agents/cendavo-builder.md', 'CLAUDE.md', '.gitignore'):
+        for name in ('scripts/supervisor.py', '.claude/agents/cendavo-builder.md', 'CLAUDE.md', '.gitignore', 'forge.config.json',
+                     'scripts/forge_sandbox.py', '.mcp.json'):
             diff = SAFE_PATCH + f'diff --git a/{name} b/{name}\n--- a/{name}\n+++ b/{name}\n@@ -1 +1 @@\n+harmless\n'
             self.assertTrue(any(name in r for r in supervisor.assess_patch(diff).approvals), name)
+
+    def test_permission_and_workspace_logic_changes_need_approval(self):
+        for line in ("+CONSEQUENTIAL_BASH = ()", "+    if not writable(name, profile):", "+        'network': {'allowedDomains': ['*']}",
+                     "+    git('merge', '--ff-only', branch)", "+    'max_turns': {}"):
+            diff = SAFE_PATCH + f'diff --git a/scripts/forge.py b/scripts/forge.py\n--- a/scripts/forge.py\n+++ b/scripts/forge.py\n@@ -1 +1 @@\n{line}\n'
+            self.assertTrue(any('security boundary' in r for r in supervisor.assess_patch(diff).approvals), line)
 
     def test_test_code_gaining_process_access_needs_approval(self):
         diff = SAFE_PATCH.replace("+def setUpModule():", "+import subprocess\n+def setUpModule():")
@@ -170,7 +177,11 @@ class SubscriptionOnlyTests(unittest.TestCase):
             self.assertFalse(set(argv) & set(forge.FORBIDDEN_CLAUDE_FLAGS))
         m = forge.claude_argv('cendavo-maintainer', True)
         deny = m[m.index('--disallowedTools') + 1]
-        for rule in ('Bash', 'Read(.env*)', 'Edit(.env*)', 'Write(.git/**)', 'Edit(.cendavo-run/**)',
+        self.assertIn('Bash', m[m.index('--tools') + 1].split(','))  # sandboxed shell inside its worktree
+        sandbox = json.loads(m[m.index('--settings') + 1])['sandbox']
+        self.assertEqual(sandbox['network']['allowedDomains'], [])
+        self.assertFalse(sandbox['allowUnsandboxedCommands'])
+        for rule in ('Bash(git push:*)', 'Read(.env*)', 'Edit(.env*)', 'Write(.git/**)', 'Edit(.cendavo-run/**)',
                      f'Read(/{forge.ROOT}/**)', f'Edit(/{forge.ROOT}/**)', f'Write(/{forge.ROOT}/**)'):
             self.assertIn(rule, deny)
         self.assertIn('--restricted', m)
@@ -206,7 +217,7 @@ class SandboxProfileTests(unittest.TestCase):
             for name in ('.cendavo-run/queue.sqlite3', '.cendavo-tools/node_modules/.bin/claude', '.git/config', '.env'):
                 self.assertTrue(pattern.match(str(root / name)), name)
             write_denied = profile.split('(deny file-write* ')[-1]
-            for name in ('scripts/supervisor.py', 'scripts/supervise.sh', 'scripts/forge.py', 'tests'):
+            for name in ('scripts/supervisor.py', 'scripts/supervise.sh', 'scripts/forge.py', 'forge.config.json', 'tests'):
                 self.assertIn(f'"{root / name}"', write_denied, name)
             self.assertIn('(deny network*)', profile)
 
@@ -254,13 +265,15 @@ class SupervisorFlowTests(unittest.TestCase):
         self.tmp.cleanup()
 
     # --- simulated agents and sandbox -------------------------------------------------
-    def fake_report(self, task_id, name, agent, prompt, deadline, writable=False, frontend=False, design_plugin=None, cwd=None):
+    def fake_report(self, task_id, name, agent, prompt, deadline, writable=False, frontend=False, design_plugin=None, cwd=None, session=None):
         self.calls.append((name, agent))
         if agent == 'cendavo-strategist':
             return 'DECISION: APPROVE\nBUILDER BRIEF: label the form'
         if agent == 'cendavo-builder':
-            (self.root / 'pages').mkdir(exist_ok=True)
-            (self.root / 'pages' / 'a11y.html').write_text(f'<label>v{len(self.calls)}</label>\n')
+            with forge.agent_guard():  # the real permission guard around a simulated Builder
+                ws = forge.tree()
+                (ws / 'pages').mkdir(exist_ok=True)
+                (ws / 'pages' / 'a11y.html').write_text(f'<label>v{len(self.calls)}</label>\n')
             return 'done'
         if agent == 'cendavo-debugger':
             return self.debugger_verdict + '\nEvidence: simulated'
@@ -275,7 +288,7 @@ class SupervisorFlowTests(unittest.TestCase):
         (wt / 'tests' / 'test_isolation.py').write_text('def test_state_isolated():\n    assert True\n')
 
     def fake_tests(self, task_id, deadline, root=None):
-        if root is not None:
+        if root is not None and forge.maintenance_root().resolve() in Path(root).resolve().parents:
             self.calls.append(('worktree-tests', str(root)))
             if self.worktree_tests_fail:
                 raise self.failure('unit-tests', 'FAIL: test_state_isolated (test_isolation.T.test_state_isolated)')
@@ -306,6 +319,13 @@ class SupervisorFlowTests(unittest.TestCase):
             self.reexecs += 1
         with patch.object(forge, 'claude_report', side_effect=self.fake_report), patch.object(forge, 'tests', side_effect=self.fake_tests):
             return supervisor.supervise(self.conn, 1, 5, reexec=reexec)
+
+    def maintenance_worktrees(self):
+        root = str(forge.maintenance_root().resolve())
+        return [l for l in git(self.root, 'worktree', 'list', '--porcelain').splitlines() if l.startswith('worktree ') and root in l]
+
+    def work_exists(self):
+        return any((base / 'pages' / 'a11y.html').exists() for base in (self.root, forge.task_workspace(1)))
 
     def agents(self):
         return [a for _, a in self.calls]
@@ -346,6 +366,8 @@ class SupervisorFlowTests(unittest.TestCase):
         self.assertEqual([n for n in after if n.startswith(('security-', 'tests', 'audit-'))][:3], ['security-1', 'tests', 'audit-1'])
 
     def test_debugger_non_product_diagnosis_stops_for_owner(self):
+        # A wrong project test is fixable under 'app'; under 'site' tests are out of scope, so the owner decides.
+        self.conn.execute('UPDATE tasks SET profile="site" WHERE id=1'); self.conn.commit()
         self.main_test_failures = [self.product]
         self.debugger_verdict = 'CLASSIFICATION: TEST'
         head = git(self.root, 'rev-parse', 'HEAD')
@@ -369,18 +391,19 @@ class SupervisorFlowTests(unittest.TestCase):
         self.assertEqual(sum(n.startswith('repair-') for n, _ in self.calls), supervisor.MAX_PRODUCT_REPAIRS)
         reports = list((self.state / 'supervisor' / 'reports').glob('*-product.json'))
         self.assertTrue(any('limit' in json.loads(p.read_text())['detail'] for p in reports))
-        self.assertTrue((self.root / 'pages' / 'a11y.html').exists())  # work preserved for inspection
+        self.assertTrue(self.work_exists())  # work preserved for inspection
 
     def test_repair_that_weakens_tests_is_blocked(self):
         self.main_test_failures = [self.build_failure]
         original = self.fake_report
 
-        def cheat(task_id, name, agent, prompt, deadline, writable=False, frontend=False, design_plugin=None, cwd=None):
+        def cheat(task_id, name, agent, prompt, deadline, writable=False, frontend=False, design_plugin=None, cwd=None, session=None):
             if name.startswith('repair-'):
-                (self.root / 'tests' / 'test_existing.py').write_text('import unittest\n@unittest.skip("x")\ndef test_a():\n    pass\n')
                 self.calls.append((name, agent))
+                with forge.agent_guard():
+                    (forge.tree() / 'tests' / 'test_existing.py').write_text('import unittest\n@unittest.skip("x")\ndef test_a():\n    pass\n')
                 return 'done'
-            return original(task_id, name, agent, prompt, deadline, writable, frontend, design_plugin, cwd)
+            return original(task_id, name, agent, prompt, deadline, writable, frontend, design_plugin, cwd, session)
         with patch.object(forge, 'claude_report', side_effect=cheat), patch.object(forge, 'tests', side_effect=self.fake_tests):
             supervisor.supervise(self.conn, 1, 5, reexec=lambda: None)
         self.assertEqual(self.task_state(), 'blocked')
@@ -390,12 +413,13 @@ class SupervisorFlowTests(unittest.TestCase):
         self.main_test_failures = [self.build_failure]
         original = self.fake_report
 
-        def escape(task_id, name, agent, prompt, deadline, writable=False, frontend=False, design_plugin=None, cwd=None):
+        def escape(task_id, name, agent, prompt, deadline, writable=False, frontend=False, design_plugin=None, cwd=None, session=None):
             if name.startswith('repair-'):
-                (self.root / 'README.md').write_text('changed by repair\n')
                 self.calls.append((name, agent))
+                with forge.agent_guard():
+                    (forge.tree() / 'CLAUDE.md').write_text('changed by repair\n')
                 return 'done'
-            return original(task_id, name, agent, prompt, deadline, writable, frontend, design_plugin, cwd)
+            return original(task_id, name, agent, prompt, deadline, writable, frontend, design_plugin, cwd, session)
         with patch.object(forge, 'claude_report', side_effect=escape), patch.object(forge, 'tests', side_effect=self.fake_tests):
             supervisor.supervise(self.conn, 1, 5, reexec=lambda: None)
         self.assertEqual(self.task_state(), 'blocked')
@@ -403,9 +427,9 @@ class SupervisorFlowTests(unittest.TestCase):
     def test_maintainer_touching_live_checkout_is_a_security_stop(self):
         self.main_test_failures = [self.infra]
 
-        def guarded(task_id, name, agent, prompt, deadline, writable=False, frontend=False, design_plugin=None, cwd=None):
+        def guarded(task_id, name, agent, prompt, deadline, writable=False, frontend=False, design_plugin=None, cwd=None, session=None):
             if agent != 'cendavo-maintainer':
-                return self.fake_report(task_id, name, agent, prompt, deadline, writable, frontend, design_plugin, cwd)
+                return self.fake_report(task_id, name, agent, prompt, deadline, writable, frontend, design_plugin, cwd, session)
             self.calls.append((name, agent))
             # Exercise the real containment wrapper around a maintainer that escapes its worktree.
             with forge.maintenance_isolation(cwd):
@@ -418,7 +442,7 @@ class SupervisorFlowTests(unittest.TestCase):
         self.assertEqual(git(self.root, 'rev-parse', 'HEAD'), head)
         rec = json.loads(next((self.state / 'supervisor' / 'maintenance').glob('*.json')).read_text())
         self.assertEqual(rec['status'], 'rejected')
-        self.assertEqual(git(self.root, 'worktree', 'list').count('\n'), 1)
+        self.assertEqual(self.maintenance_worktrees(), [])
 
     def test_infrastructure_failure_safe_patch_integrates_and_resumes_from_checkpoint(self):
         self.main_test_failures = [self.infra]
@@ -437,7 +461,7 @@ class SupervisorFlowTests(unittest.TestCase):
         self.assertEqual([n for n, _ in self.calls[i:] if n.startswith('security-')], [])
         self.assertEqual(agents.count('cendavo-security-reviewer'), 2)  # task review + independent patch review
         self.assertIn('worktree-tests', [n for n, _ in self.calls])
-        self.assertEqual(git(self.root, 'worktree', 'list').count('\n'), 1)  # maintenance worktree cleaned up
+        self.assertEqual(self.maintenance_worktrees(), [])  # maintenance worktree cleaned up
         self.assertEqual(git(self.root, 'status', '--porcelain'), '')
 
     def test_security_boundary_patch_waits_for_owner_then_integrates_on_approval(self):
@@ -452,7 +476,7 @@ class SupervisorFlowTests(unittest.TestCase):
         self.supervise()
         self.assertEqual(self.task_state(), 'interrupted')
         self.assertEqual(git(self.root, 'rev-parse', 'HEAD'), head)
-        self.assertTrue((self.root / 'pages' / 'a11y.html').exists())
+        self.assertTrue(self.work_exists())
         pending = list((self.state / 'supervisor' / 'maintenance').glob('*.json'))
         rec = json.loads(pending[0].read_text())
         self.assertEqual(rec['status'], 'pending')
@@ -481,7 +505,7 @@ class SupervisorFlowTests(unittest.TestCase):
         self.assertEqual(self.agents().count('cendavo-maintainer'), supervisor.MAX_MAINTENANCE)
         self.assertEqual(git(self.root, 'rev-parse', 'HEAD'), head)
         self.assertEqual(self.task_state(), 'interrupted')
-        self.assertEqual(git(self.root, 'worktree', 'list').count('\n'), 1)
+        self.assertEqual(self.maintenance_worktrees(), [])
 
     def test_maintenance_security_block_and_failing_validation_are_rejected(self):
         for setup in ('block', 'tests'):
@@ -503,7 +527,7 @@ class SupervisorFlowTests(unittest.TestCase):
         self.supervise()
         log = self.log()
         self.assertIn('Revert "Forge maintenance:', log)
-        self.assertTrue((self.root / 'pages' / 'a11y.html').exists())
+        self.assertTrue(self.work_exists())
 
     def test_provider_limit_stops_without_recovery(self):
         def limited(task_id, name, agent, *a, **k):
@@ -567,6 +591,40 @@ class SupervisorFlowTests(unittest.TestCase):
         self.assertEqual(seen['baseline'], git(self.root, 'rev-parse', 'HEAD~1').strip())  # the integrated maintenance commit
         self.assertEqual(seen['previous_checkpoint'], {'baseline': 'older', 'stages': {}})
         self.assertEqual(set(seen['stages']), {'strategy', 'build', 'security', 'manual_resume'})
+
+
+class SupervisorLimitsAndProgressTests(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        root = Path(self.tmp.name)
+        p = patch.multiple(forge, ROOT=root, STATE=root / 'state')
+        p.start()
+        self.addCleanup(p.stop)
+        (root / 'state').mkdir()
+
+    def test_repair_budgets_come_from_config_and_cli_with_caps(self):
+        (forge.ROOT / forge.CONFIG_NAME).write_text(json.dumps({'limits': {'product_repairs': 5, 'maintenance_attempts': 4}}))
+        state = {}
+        supervisor.configure_limits(state)
+        self.assertEqual((supervisor.MAX_PRODUCT_REPAIRS, supervisor.MAX_MAINTENANCE), (5, 4))
+        state = {}
+        supervisor.configure_limits(state, repairs=7, maintenance=99)
+        self.assertEqual((supervisor.MAX_PRODUCT_REPAIRS, supervisor.MAX_MAINTENANCE), (7, forge.CAPS['limits']))
+        supervisor.configure_limits(state, repairs=1)  # a continued run keeps its recorded budget
+        self.assertEqual(supervisor.MAX_PRODUCT_REPAIRS, 7)
+        with patch('sys.stderr'), self.assertRaises(SystemExit):
+            supervisor.main(['run', '--approve-provider-network', '--max-repairs', '50'])
+
+    def test_watch_prints_streamed_progress(self):
+        with patch('builtins.print'):
+            forge.progress(3, 'builder', 'Bash npm test')
+            forge.progress(3, 'security', 'cycle 1: PASS')
+        with patch('builtins.print') as out:
+            self.assertEqual(supervisor.main(['watch', '--no-follow']), 0)
+        lines = [c.args[0] for c in out.call_args_list]
+        self.assertTrue(any('task=3 builder: Bash npm test' in l for l in lines), lines)
+        self.assertTrue(any('security: cycle 1: PASS' in l for l in lines), lines)
 
 if __name__ == '__main__':
     unittest.main()

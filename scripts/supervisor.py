@@ -30,8 +30,9 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from scripts import forge  # noqa: E402
 
-MAX_PRODUCT_REPAIRS = 2      # per task, per supervisor run
-MAX_MAINTENANCE = 2          # maintenance attempts per task, per supervisor run
+# Per task, per supervisor run. Set from forge.config.json `limits` (or --max-repairs/--max-maintenance) by supervise().
+MAX_PRODUCT_REPAIRS = forge.DEFAULT_CONFIG['limits']['product_repairs']
+MAX_MAINTENANCE = forge.DEFAULT_CONFIG['limits']['maintenance_attempts']
 MAX_EVIDENCE_CHARS = 12_000
 FORGE_TEST_MODULES = {'test_forge', 'test_supervisor'}
 
@@ -48,13 +49,15 @@ IMPORT_FAIL = re.compile(r'Failed to import test module: ([\w.]+)')
 SAFE_PREFIXES = ('scripts/', 'tests/', 'docs/')
 # Always need approval: the supervisor itself, agent definitions, CI, project instructions, ignore rules, dependencies.
 APPROVAL_PATHS = ('scripts/supervisor.py', 'scripts/overnight.sh', 'scripts/supervise.sh', 'scripts/forge_sandbox.py',
-                  '.claude/', '.github/', 'AGENTS.md', 'CLAUDE.md', '.gitignore', 'requirements.txt')
+                  'forge.config.json', '.mcp.json', '.claude/', '.github/', 'AGENTS.md', 'CLAUDE.md', '.gitignore', 'requirements.txt')
 # Changed lines in non-test code that touch security boundaries, credentials, sandbox or permission policy,
 # product-repair containment, or the checkpoint proof that lets validated stages be reused.
 BOUNDARY = re.compile(
     r'sandbox|profile|file-read|file-write|allow |deny|DENY|BILLING_ENV|subscription_env|subscription_flags|FORBIDDEN_CLAUDE_FLAGS|'
     r'restricted|forceLoginMethod|plugin|SKILL_AGENTS|REPAIR_MODE|repair_guard|product_repair_only|maintenance_isolation|'
     r'maintenance_root|SecurityFailure|MaintenanceRequired|fingerprint|stage_done|mark_stage|checkpoint|verdict|'
+    r'CONTROL_|SECRET_|CONSEQUENTIAL_BASH|PROFILES|Profile\(|writable|agent_guard|guard_snapshot|write_denials|workspace|'
+    r'mcp|allowedDomains|registr|max_turns|limits|deliver|ff-only|'
     r'allowed_changes|protected|PROTECTED|APPROVAL_PATHS|SAFE_PREFIXES|BOUNDARY|'
     r'api[_-]?key|token|secret|credential|password|\bauth|oauth|'
     r'permission|allowedTools|disallowedTools|--tools|dontAsk|bypass|WRITABLE_AGENTS|REQUIRED_AGENTS|'
@@ -165,7 +168,7 @@ def classify(exc, task_id):
         stage = exc.stage
         mods = failing_modules(log)
         base = Failure(PRODUCT, task_id, stage, msg, log, str(exc.log), mods)
-        if stage not in forge.TEST_STAGES:
+        if stage not in forge.test_stages():
             base.kind = INFRA  # an agent CLI call itself exited non-zero
         elif SANDBOX_DENIAL.search(log) and PROTECTED_STATE.search(log):
             base.kind = INFRA
@@ -214,60 +217,35 @@ def report_failure(conn, failure, action, detail=''):
 
 
 # Product repair -------------------------------------------------------------------------
-def test_integrity_violations(diff):
-    """Reject changes that disable, delete or weaken tests to force success."""
-    problems = []
-    current = None
-    removed_tests = added_tests = removed_asserts = added_asserts = 0
-    for line in diff.splitlines():
-        if line.startswith('+++ '):
-            current = line[6:] if line.startswith('+++ b/') else line[4:]
-            continue
-        if line.startswith('--- ') or not current or not current.startswith('tests/'):
-            continue
-        if line.startswith('+'):
-            added_tests += bool(re.match(r'\+\s*def test_', line))
-            added_asserts += len(re.findall(r'\bassert', line))
-            if TEST_DISABLE.search(line):
-                problems.append(f'{current}: adds a test skip/disable: {line[1:].strip()[:80]}')
-        elif line.startswith('-'):
-            removed_tests += bool(re.match(r'-\s*def test_', line))
-            removed_asserts += len(re.findall(r'\bassert', line))
-    if removed_tests > added_tests:
-        problems.append(f'removes {removed_tests - added_tests} test(s)')
-    if removed_asserts > added_asserts:
-        problems.append(f'removes {removed_asserts - added_asserts} assertion(s)')
-    return problems
+# Shared with Forge, which enforces it after every writable agent call.
+test_integrity_violations = forge.test_integrity_violations
 
 
 def repair_product(conn, row, failure, deadline):
     task_id, _, title, _ = row
-    baseline = forge.git('rev-parse', 'HEAD').stdout.strip()
-    cp = forge.load_checkpoint(task_id, baseline)
-    if not forge.stage_done(cp, 'strategy'):
-        raise RuntimeError('No validated strategy to repair against')
-    names = forge.allowed_changes()
-    frontend = forge.is_frontend_task(title, names)
-    existing = set(test_integrity_violations(forge.git('diff', baseline, '--').stdout))
-    prompt = forge.builder_prompt(title, cp['stages']['strategy']['text'], frontend,
-                                  'Automated checks failed after your implementation. Diagnose the root cause from the evidence and repair the '
-                                  'affected website files in assets/ or pages/. Never skip, delete or weaken tests to make them pass.\n\n'
-                                  f'Failed stage: {failure.stage}\nSummary: {failure.summary}\n\n'
-                                  f'{forge.fenced("Failure evidence", failure.evidence[-MAX_EVIDENCE_CHARS:])}\n\n')
-    # forge.claude_report confines a writable Builder to assets/ and pages/ (product_repair_only).
-    forge.claude_report(task_id, f'repair-{failure.stage}', 'cendavo-builder', prompt, deadline, True, frontend)
-    problems = [p for p in test_integrity_violations(forge.git('diff', baseline, '--').stdout) if p not in existing]
-    if problems:
-        raise forge.SecurityFailure('Repair weakened tests: ' + '; '.join(problems))
-    try:
-        forge.allowed_changes()
-    except forge.MaintenanceRequired as exc:
-        raise forge.SecurityFailure(f'Repair changed files outside the product scope: {exc}') from exc
-    diff, fp = forge.change_snapshot(baseline)
-    if not diff.strip():
-        raise RuntimeError('Repair left no changes')
-    # The repaired change is a new Builder output: security review, tests and audit all run again on it.
-    forge.mark_stage(task_id, cp, 'build', fp)
+    with forge.task_context(conn, task_id) as profile:
+        baseline = forge.git('rev-parse', 'HEAD').stdout.strip()
+        cp = forge.load_checkpoint(task_id, baseline)
+        if not forge.stage_done(cp, 'strategy'):
+            raise RuntimeError('No validated strategy to repair against')
+        names = forge.allowed_changes()
+        frontend = forge.is_frontend_task(title, names)
+        existing = set(test_integrity_violations(forge.git('diff', baseline, '--').stdout))
+        prompt = forge.builder_prompt(title, cp['stages']['strategy']['text'], frontend,
+                                      'Automated checks failed after your implementation. Diagnose the root cause from the evidence '
+                                      'and repair it within your permission profile. Never skip, delete or weaken tests to make them pass.\n\n'
+                                      f'Failed stage: {failure.stage}\nSummary: {failure.summary}\n\n'
+                                      f'{forge.fenced("Failure evidence", failure.evidence[-MAX_EVIDENCE_CHARS:])}\n\n', profile)
+        # builder_call runs under forge.agent_guard: profile scope, control plane, live checkout and test integrity.
+        forge.builder_call(task_id, cp, f'repair-{failure.stage}', prompt, deadline, frontend)
+        problems = [p for p in test_integrity_violations(forge.git('diff', baseline, '--').stdout) if p not in existing]
+        if problems:
+            raise forge.SecurityFailure('Repair weakened tests: ' + '; '.join(problems))
+        diff, fp = forge.change_snapshot(baseline)
+        if not diff.strip():
+            raise RuntimeError('Repair left no changes')
+        # The repaired change is a new Builder output: security review, tests and audit all run again on it.
+        forge.mark_stage(task_id, cp, 'build', fp)
 
 
 # Maintenance ----------------------------------------------------------------------------
@@ -319,12 +297,12 @@ def create_worktree(task_id):
     name = f'{task_id:04d}-{time.strftime("%Y%m%dT%H%M%S")}-{secrets.token_hex(3)}'
     path = maint_root() / name
     branch = f'forge-maint/{name}'
-    forge.git('worktree', 'add', '-q', '-b', branch, str(path), 'HEAD')
+    forge.git('worktree', 'add', '-q', '-b', branch, str(path), 'HEAD', cwd=forge.ROOT)
     return name, path, branch
 
 
 def remove_worktree(path):
-    forge.git('worktree', 'remove', '--force', str(path), check=False)
+    forge.git('worktree', 'remove', '--force', str(path), check=False, cwd=forge.ROOT)
 
 
 def maintenance(conn, row, failure, deadline, previous=''):
@@ -391,7 +369,7 @@ def finish(conn, record, outcome, reason, path=None):
     if path is not None:
         remove_worktree(path)
         # The temporary branch is Forge's own; drop it so rejected proposals cannot be integrated later.
-        forge.git('branch', '-D', record['branch'], check=False)
+        forge.git('branch', '-D', record['branch'], check=False, cwd=forge.ROOT)
     forge.event(conn, record['task_id'], f'maintenance_{outcome}', f'{record["id"]}: {reason}'[:500])
     return outcome, record
 
@@ -407,43 +385,68 @@ def load_maintenance(name):
 
 
 def integrate(conn, record):
-    """Cherry-pick a validated maintenance commit onto the current branch, keep the task checkpoint valid, re-test."""
+    """Cherry-pick a validated maintenance commit onto the live branch, re-test it, then fast-forward the task's
+    workspace and keep its checkpoint valid when the task change is byte-identical."""
+    live = forge.ROOT
     commit = record['commit']
-    expected = forge.git('diff', f'{commit}^', commit).stdout
+    expected = forge.git('diff', f'{commit}^', commit, cwd=live).stdout
     if hashlib.sha256(expected.encode()).hexdigest() != record['patch_sha256']:
         return finish(conn, record, 'rejected', 'commit does not match the validated patch', Path(record['worktree']))
-    files = forge.git('diff', '--name-only', f'{commit}^', commit).stdout.split()
-    if forge.git('status', '--porcelain', '--', *files).stdout.strip():
+    files = forge.git('diff', '--name-only', f'{commit}^', commit, cwd=live).stdout.split()
+    if forge.git('status', '--porcelain', '--', *files, cwd=live).stdout.strip():
         return finish(conn, record, 'rejected', 'files touched by the patch have uncommitted changes in the live checkout', Path(record['worktree']))
-    task_changes = set(forge.git('diff', '--name-only').stdout.split()) | set(forge.git('ls-files', '--others', '--exclude-standard').stdout.split())
+    task_id = record['task_id']
+    ws = forge.task_workspace(task_id)
+    task_changes = forge.changed_names(cwd=ws) if ws.exists() else set()
     if task_changes & set(files):
         return finish(conn, record, 'rejected', 'patch overlaps the task change', Path(record['worktree']))
-    old = forge.git('rev-parse', 'HEAD').stdout.strip()
-    before = forge.change_snapshot(old)[0]
-    picked = forge.git('cherry-pick', commit, check=False)
+    old = forge.git('rev-parse', 'HEAD', cwd=live).stdout.strip()
+    before = task_change(conn, task_id, old)
+    picked = forge.git('cherry-pick', commit, check=False, cwd=live)
     if picked.returncode:
-        forge.git('cherry-pick', '--abort', check=False)
+        forge.git('cherry-pick', '--abort', check=False, cwd=live)
         return finish(conn, record, 'rejected', 'cherry-pick failed: ' + picked.stderr[:200], Path(record['worktree']))
-    new = forge.git('rev-parse', 'HEAD').stdout.strip()
+    new = forge.git('rev-parse', 'HEAD', cwd=live).stdout.strip()
     record['integrated_commit'] = new
-    rebase_checkpoints(old, new, before)
     try:
-        forge.tests(record['task_id'], time.monotonic() + 1800)
+        forge.tests(task_id, time.monotonic() + 1800, root=live)
     except Exception as exc:  # revert keeps history intact and only touches the patch's own files
-        before = forge.change_snapshot(new)[0]
-        forge.git('-c', 'user.name=Cendavo Forge', '-c', 'user.email=forge@localhost', 'revert', '--no-edit', new, check=False)
-        rebase_checkpoints(new, forge.git('rev-parse', 'HEAD').stdout.strip(), before)
+        forge.git('-c', 'user.name=Cendavo Forge', '-c', 'user.email=forge@localhost', 'revert', '--no-edit', new, check=False, cwd=live)
+        sync_workspace(conn, task_id, old, before)
         return finish(conn, record, 'rejected', f'post-integration tests failed and the patch was reverted: {exc}', Path(record['worktree']))
+    sync_workspace(conn, task_id, old, before)
     return finish(conn, record, 'integrated', f'{commit[:12]} -> {new[:12]}', Path(record['worktree']))
 
 
-def rebase_checkpoints(old, new, before):
+def task_change(conn, task_id, baseline):
+    """The task's change text in its workspace (None when it has no workspace)."""
+    if not forge.task_workspace(task_id).exists():
+        return None
+    with forge.task_context(conn, task_id):
+        return forge.change_snapshot(baseline)[0]
+
+
+def sync_workspace(conn, task_id, old, before):
+    """Fast-forward the task workspace to the live HEAD (its uncommitted task files are disjoint from the patch)."""
+    ws = forge.task_workspace(task_id)
+    new = forge.git('rev-parse', 'HEAD', cwd=forge.ROOT).stdout.strip()
+    if ws.exists() and new != old:
+        merged = forge.git('merge', '--ff-only', '-q', new, cwd=ws, check=False)
+        if merged.returncode:
+            raise forge.MaintenanceRequired(f'Task workspace could not follow the live branch to {new[:12]}: {merged.stderr[:200]}')
+    rebase_checkpoints(old, new, before, conn, task_id)
+
+
+def rebase_checkpoints(old, new, before, conn=None, task_id=None):
     """Move checkpoints from `old` to `new` HEAD only if the task's change is byte-identical relative to `new`.
 
     Fingerprints hash that change, so identical text keeps every validated stage valid; otherwise only the
     Strategist report survives and the task is fully revalidated.
     """
-    after = forge.change_snapshot(new)[0]
+    if conn is not None and task_id is not None:
+        after = task_change(conn, task_id, new)
+    else:
+        after = forge.change_snapshot(new)[0]
     for path in (forge.STATE / 'checkpoints').glob('*.json'):
         try:
             data = json.loads(path.read_text())
@@ -451,7 +454,7 @@ def rebase_checkpoints(old, new, before):
             continue
         if data.get('baseline') != old:
             continue
-        if before != after:
+        if before is None or before != after:
             data['stages'] = {k: v for k, v in data['stages'].items() if k == 'strategy'}
         data['baseline'] = new
         write_private(path, json.dumps(data))
@@ -544,14 +547,25 @@ def attempt(conn, row, deadline, state, reexec):
         previous_rejection = record.get('reason', '')
 
 
-def supervise(conn, hours, max_tasks, cont=False, reexec=default_reexec):
+def configure_limits(state, repairs=None, maintenance=None):
+    """Recovery budgets from forge.config.json `limits`, optionally overridden for this run (capped)."""
+    global MAX_PRODUCT_REPAIRS, MAX_MAINTENANCE
+    limits = forge.load_config()['limits']
+    cap = forge.CAPS['limits']
+    MAX_PRODUCT_REPAIRS = state.setdefault('max_repairs', min(cap, repairs or limits['product_repairs']))
+    MAX_MAINTENANCE = state.setdefault('max_maintenance', min(cap, maintenance or limits['maintenance_attempts']))
+
+
+def supervise(conn, hours, max_tasks, cont=False, reexec=default_reexec, repairs=None, maintenance=None):
     state = load_state()
     if cont and state.get('deadline_epoch'):
         remaining = state['deadline_epoch'] - time.time()
     else:
         remaining = hours * 3600
         state = {'repairs': {}, 'maintenance': {}, 'deadline_epoch': time.time() + remaining, 'max_tasks': max_tasks, 'done': 0}
-        save_state(state)
+    configure_limits(state, repairs, maintenance)
+    save_state(state)
+    forge.progress(None, 'supervisor', f'limits: {MAX_PRODUCT_REPAIRS} product repair(s), {MAX_MAINTENANCE} maintenance attempt(s) per task')
     deadline = time.monotonic() + max(0, remaining)
     max_tasks = state.get('max_tasks', max_tasks)
     while time.monotonic() < deadline and state.get('done', 0) < max_tasks and not forge.STOP.exists():
@@ -609,6 +623,31 @@ def diagnose(conn, task_id=None):
             'evidence_tail': failure.evidence[-2500:]}
 
 
+def watch(follow=True, lines=40):
+    """Print progress lines as Forge and the Supervisor emit them (agent tool calls, stages, heartbeats)."""
+    path = forge.STATE / 'progress.jsonl'
+    def show(raw):
+        try:
+            item = json.loads(raw)
+        except ValueError:
+            return
+        print(f"{item['at'][11:19]} task={item.get('task') or '-'} {item['kind']}: {item['detail']}", flush=True)
+    while not path.exists():
+        if not follow:
+            return 0
+        time.sleep(1)
+    with path.open() as f:
+        for raw in f.readlines()[-lines:]:
+            show(raw)
+        while follow:
+            raw = f.readline()
+            if raw:
+                show(raw)
+            else:
+                time.sleep(0.5)
+    return 0
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description='Forge Supervisor: bounded autonomous recovery')
     sub = parser.add_subparsers(dest='command', required=True)
@@ -617,6 +656,11 @@ def main(argv=None):
     run.add_argument('--max-tasks', type=int, default=10)
     run.add_argument('--continue', dest='cont', action='store_true', help='internal: resume after integration re-exec')
     run.add_argument('--approve-provider-network', action='store_true', help='explicitly approve Claude model connections for this run')
+    run.add_argument('--max-repairs', type=int, help='product repairs per task (default from forge.config.json, capped)')
+    run.add_argument('--max-maintenance', type=int, help='maintenance attempts per task (default from forge.config.json, capped)')
+    w = sub.add_parser('watch', help='stream Forge progress (.cendavo-run/progress.jsonl)')
+    w.add_argument('--no-follow', action='store_true')
+    w.add_argument('--lines', type=int, default=40)
     d = sub.add_parser('diagnose')
     d.add_argument('--task', type=int)
     sub.add_parser('approvals')
@@ -624,6 +668,14 @@ def main(argv=None):
         p = sub.add_parser(name)
         p.add_argument('id')
     args = parser.parse_args(argv)
+    if args.command == 'watch':
+        return watch(not args.no_follow, args.lines)
+    if args.command == 'run':  # validate before touching any state
+        if not math.isfinite(args.hours) or args.hours <= 0 or args.hours > 8 or args.max_tasks <= 0:
+            parser.error('hours must be >0 and <=8; max-tasks must be >0')
+        for value in (args.max_repairs, args.max_maintenance):
+            if value is not None and not 1 <= value <= forge.CAPS['limits']:
+                parser.error(f"repair limits must be 1..{forge.CAPS['limits']}")
     conn = forge.ensure_state()
     if args.command == 'diagnose':
         print(json.dumps(diagnose(conn, args.task), indent=2))
@@ -655,8 +707,6 @@ def main(argv=None):
             forge.set_state(conn, rec['task_id'], 'queued', 'Resuming after approved maintenance')
             print('Run `./scripts/supervise.sh` to resume.')
         return 0 if outcome == 'integrated' else 2
-    if not math.isfinite(args.hours) or args.hours <= 0 or args.hours > 8 or args.max_tasks <= 0:
-        parser.error('hours must be >0 and <=8; max-tasks must be >0')
     if not args.approve_provider_network:
         print('Model network access requires --approve-provider-network for this run.', file=sys.stderr)
         return 2
@@ -674,7 +724,8 @@ def main(argv=None):
     # Like `forge.py run`: never auto-requeue stopped work; the owner uses `forge.py resume` after review.
     conn.execute('UPDATE tasks SET state="interrupted",updated_at=?,error="Runner exited during task; inspect working tree before resume" WHERE state="running"', (forge.now(),))
     conn.commit()
-    print(json.dumps(supervise(conn, args.hours, args.max_tasks, args.cont), indent=2))
+    print(json.dumps(supervise(conn, args.hours, args.max_tasks, args.cont, repairs=args.max_repairs,
+                               maintenance=args.max_maintenance), indent=2))
     return 0
 
 

@@ -1,0 +1,23 @@
+{
+  "$comment": "Owner-controlled Forge settings. Agents can never edit this file. Limits are capped in scripts/forge.py (turns <= 200, repair limits <= 10). MCP servers: local stdio only, explicit tool lists, no env/credentials; they run outside the Bash sandbox, so add only servers you trust. Never list tools that spend money, publish, deploy or contact people.",
+  "default_profile": "app",
+  "max_turns": {
+    "cendavo-strategist": 30,
+    "cendavo-builder": 80,
+    "cendavo-security-reviewer": 30,
+    "cendavo-auditor": 30,
+    "cendavo-debugger": 20,
+    "cendavo-maintainer": 60
+  },
+  "limits": {"review_cycles": 3, "test_fixes": 3, "product_repairs": 3, "maintenance_attempts": 2},
+  "max_diff_chars": 250000,
+  "package_registries": ["registry.npmjs.org", "pypi.org", "files.pythonhosted.org"],
+  "extra_read_paths": [],
+  "checks": [
+    ["build", ["python3", "scripts/build_site.py"]],
+    ["unit-tests", ["python3", "-m", "unittest", "discover", "-s", "tests", "-v"]],
+    ["site-js", ["node", "--check", "assets/site.js"]],
+    ["demo-js", ["node", "--check", "assets/demo.js"]]
+  ],
+  "mcp_servers": {}
+}
