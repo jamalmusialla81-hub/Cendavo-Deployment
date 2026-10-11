@@ -56,3 +56,12 @@ Found by the supervisor's rendered review of the delivered homepage (Task 8, com
 
 ## Builder note for all remaining tasks
 - Never use `cd` in Bash. Run every command from the workspace root and use paths relative to it (e.g. `sed -n 1,40p docs/design/night-shift/prototype/ns.js`). Forge's write permissions are resolved relative to the current directory, so a `cd` makes legitimate edits to `assets/` or `pages/` fail.
+
+## Task 12 — portfolio device screens and homepage lower-half art direction (OWNER-MANDATED; profile `site`)
+Owner direction (2026-10-11): "Replace the weak portfolio presentation with visually impressive, clearly labelled concept projects" and "way too much empty space… the layout feels repetitive". Supervisor full-length review of commit 87fe24b found:
+1. **Work page (`pages/work.html`) is missing the device-screen mockups.** Task 9 deliberately left them out to save markup ("add them later"). Add them now from the prototype `docs/design/night-shift/prototype/work.html` (Harbourside: dark band with laptop + two phones; Greenline: laptop + site-visit-form phone; Fade & Co: two phones over the barbershop photo + desktop screen), reusing the homepage mockup kit already in `assets/` (do not duplicate its CSS; extend it). Real photos inside the mock screens, illustrative text inside mockups marked `aria-hidden` with a descriptive `role="img"`/label on each device group. Lazy-load images. Wire the existing motion (`assets/motion.js`) device reveals if present; otherwise static is fine.
+2. **Homepage lower half is sparse.** Re-art-direct, keeping all copy and links:
+   - "How it works": make it a substantial section — large Archivo numerals (wdth ~110, very large), each step with a short line, plus one supporting photograph (e.g. `detail-dash` or `garden-deck`) or a larger rail; no tiny text floating in a big empty field. Desktop min. type 17 px for step descriptions.
+   - Pricing teaser ("Fixed quote after a free consultation"): add a strong visual (the quote-sheet illustration from `pricing.html`, reused, or a photo) so the bone section isn't half empty.
+   - "Questions": widen to a two-column layout (heading + intro + CTA on the left, accordion on the right) instead of a narrow centred column.
+3. Constraints: no new dependencies; keep accessibility (headings order, landmarks, focus, reduced motion), CSP, enquiry wiring and all tests; same test rules as earlier notes; **never `cd` in Bash**. Page weight: keep homepage initial load under 1 MB (lazy-load new images).
