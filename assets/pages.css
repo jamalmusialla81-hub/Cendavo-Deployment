@@ -35,7 +35,7 @@
 /* Photo-backed closing call to action */
 .cta-band{position:relative;isolation:isolate;overflow:hidden;padding-block:clamp(120px,18vw,240px)}
 .cta-band-media{position:absolute;inset:0;z-index:-1}
-.cta-band-media img,.sv-band img,.sv-hero-media img,.chap-photo img,.care-photo img,.pr-inc-photo img,.pr-care-media img,.wk-tile-img img,.cs-cover-media img,.gl-cover-media img,.fc-band img,.aff-img img{width:100%;height:100%;object-fit:cover}
+.cta-band-media img,.sv-band img,.sv-hero-media img,.chap-photo img,.pr-inc-photo img,.pr-care-media img,.wk-tile-img img,.cs-cover-media img,.gl-cover-media img,.fc-band img,.aff-img img{width:100%;height:100%;object-fit:cover}
 .cta-band-media::after{content:"";position:absolute;inset:0;background:linear-gradient(90deg,rgba(14,14,13,.86) 0%,rgba(14,14,13,.6) 55%,rgba(14,14,13,.35) 100%)}
 .cta-band h2{max-width:12ch;margin:0;font-size:clamp(3rem,7.4vw,7.4rem);font-weight:800;font-stretch:84%;line-height:.93;letter-spacing:-.025em}
 .cta-band p{margin:28px 0 36px;max-width:40ch;color:#D6D2CA;font-size:clamp(1.0625rem,.5vw + .95rem,1.25rem)}
@@ -66,13 +66,19 @@
 .chap-head{grid-column:1/span 5}
 .chap-body{grid-column:7/-1;margin-top:0}
 .sv-band{height:clamp(240px,36vw,520px);overflow:hidden;background:var(--ink-2)}
-.care-head,.care-month{grid-column:1/span 7}
-.care-photo{grid-column:9/-1;grid-row:1/span 2;position:sticky;top:108px;aspect-ratio:3/4;overflow:hidden;background:var(--ink-2)}
-.care-photo img{object-position:30% 50%}
-.care-month{margin-top:clamp(48px,6vw,80px)}
-.care-cycle{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));column-gap:clamp(20px,3vw,48px)}
-.care-cycle li{padding:24px 0;border-bottom:1px solid var(--line)}
-.care-cycle b,.inc-grid b,.wk-demo-list b{display:block;font:720 clamp(1.3rem,1.8vw,1.75rem)/1.05 var(--font-display);font-stretch:92%;letter-spacing:-.01em}
+/* Care plan: a full-bleed dark band set in type alone, a change of pace after the two photo chapters above it. */
+.care-band{padding-block:var(--section-lg);background:var(--ink-2);border-bottom:1px solid var(--line)}
+.care-head{max-width:58rem}
+.care-label{margin-top:clamp(56px,7vw,104px)}
+.care-cycle{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));column-gap:clamp(20px,4vw,64px)}
+.care-cycle li{min-width:0;padding:clamp(28px,3vw,44px) 0;border-bottom:1px solid var(--line)}
+.care-cycle b{display:block;font:760 clamp(2rem,3.6vw,3.25rem)/.98 var(--font-display);font-stretch:86%;letter-spacing:-.02em;overflow-wrap:break-word}
+.care-cycle span{max-width:36ch}
+.care-facts{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:var(--space-6) var(--col-gap);margin:clamp(48px,6vw,80px) 0 0}
+.care-facts div{min-width:0;padding-top:18px;border-top:1px solid var(--bone)}
+.care-facts dt{font:650 1rem/1.4 var(--font-display);font-stretch:104%}
+.care-facts dd{margin:8px 0 0;color:var(--stone);font-size:1rem}
+.inc-grid b,.wk-demo-list b{display:block;font:720 clamp(1.3rem,1.8vw,1.75rem)/1.05 var(--font-display);font-stretch:92%;letter-spacing:-.01em}
 .care-cycle span,.inc-grid span,.wk-demo-list span{display:block;margin-top:10px;color:var(--stone);font-size:1rem}
 .faq-head{grid-column:1/span 4;position:sticky;top:108px}
 .faq-list{grid-column:6/-1;max-width:none}
@@ -309,9 +315,8 @@
 .sv-chapters li{border-bottom:1px solid var(--line)}
 .sv-chapters a{padding:16px 0}
 .g12>*{grid-column:1/-1!important;grid-row:auto!important}
-.chap-photo,.care-photo,.faq-head{position:static}
+.chap-photo,.faq-head{position:static}
 .chap-photo{aspect-ratio:4/3;margin-bottom:48px}
-.care-photo{aspect-ratio:4/3;margin-top:40px}
 .chap-body,.faq-list,.inc-grid,.wk-demo-list,.cs-does{margin-top:48px}
 .quote{margin-top:64px}
 .pr-steps{grid-template-columns:1fr;row-gap:40px}
@@ -357,7 +362,7 @@
 }
 @media(max-width:640px){
 .wk-index{padding-inline:16px}
-.spec-row,.care-cycle,.inc-grid,.field-row,.ab-build-list li{grid-template-columns:1fr}
+.spec-row,.care-cycle,.care-facts,.inc-grid,.field-row,.ab-build-list li{grid-template-columns:1fr}
 .ab-build-list span{margin-top:12px}
 .form-foot .button{justify-self:stretch}
 .scale{grid-template-columns:1fr 1fr;row-gap:8px}

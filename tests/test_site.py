@@ -1144,9 +1144,13 @@ class InnerPageTests(unittest.TestCase):
                         self.assertTrue(attrs.get('width') and attrs.get('height'))
                         self.assertRegex(attrs['src'], r'^/assets/images/[a-z-]+-800\.jpg$')
                         stems.add(attrs['src'].rsplit('-', 1)[0])
-        # Page weight: at most eight photos that the rest of the Work page does not already load.
+        # Page weight: the screens load only these photos that the rest of the Work page does not already load. Until Task 24
+        # this was a cap of eight; Task 24's brief moves Work's closing photo off garden-lawn while the Greenline mockup keeps
+        # its garden-lawn screenshot, so that one becomes screen-only. The exact set is pinned so any further addition fails.
         elsewhere = {url.rsplit('-', 1)[0] for url in re.findall(r'/assets/images/[a-z-]+-(?:800|1600)\.jpg', rest)}
-        self.assertLessEqual(len(stems - elsewhere), 8)
+        self.assertEqual({stem.rsplit('/', 1)[1] for stem in stems - elsewhere},
+                         {'barber-cut', 'barber-shave', 'detail-buffer', 'detail-dash', 'detail-splash', 'detail-wax',
+                          'garden-deck', 'garden-lawn', 'garden-wall'})
 
     def test_inner_pages_make_no_unconfirmed_operational_promises(self):
         # The owner has not confirmed call length, timelines or staffing; say "a short free consultation" instead.
@@ -1742,9 +1746,10 @@ class RepetitionTests(unittest.TestCase):
         self.assertLess(contrast(colour, '#0E0E0D'), 1.5)
 
     def test_closing_photo_differs_per_page(self):
-        # Night Shift Task 21: Services no longer opens and closes on barbershop photos; About's closing photo is garden-lawn.
-        expected = {'index.html': 'detail-rear', 'work/index.html': 'garden-lawn', 'services/index.html': 'trade-panel',
-                    'pricing/index.html': 'garden-deck', 'about/index.html': 'garden-lawn'}
+        # Night Shift Task 21: Services no longer opens and closes on barbershop photos.
+        # Night Shift Task 24: Services no longer closes on its own New website photo, and garden-lawn closes no page.
+        expected = {'index.html': 'detail-rear', 'work/index.html': 'detail-rear', 'services/index.html': 'garden-path',
+                    'pricing/index.html': 'garden-deck', 'about/index.html': 'garden-deck'}
         for route, photo in expected.items():
             with self.subTest(route=route):
                 main = main_of(self.html[route])
@@ -1799,8 +1804,10 @@ class RepetitionTests(unittest.TestCase):
 # Night Shift Task 20: the Work page's Harbourside case study is left exactly as it was (sha256 of its source <article>).
 HARBOURSIDE_SHA256 = '55eee74d6abbd44b17cffe7bd56b4704abae5169c6eaedd2c2d38b558a4a1301'
 # The photos /work/ referenced before Task 20; the new art direction reuses them and adds no new downloads.
+# Task 24 adds detail-rear (the closing photo, already used on Home); garden-lawn stays inside the Greenline mockup.
 WORK_PHOTOS = {'barber-chair', 'barber-cut', 'barber-interior', 'barber-shave', 'detail-buffer', 'detail-dash', 'detail-headlight',
-               'detail-mono', 'detail-splash', 'detail-wax', 'garden-deck', 'garden-lawn', 'garden-path', 'garden-walk', 'garden-wall'}
+               'detail-mono', 'detail-rear', 'detail-splash', 'detail-wax', 'garden-deck', 'garden-lawn', 'garden-path', 'garden-walk',
+               'garden-wall'}
 
 
 class WorkArtDirectionTests(unittest.TestCase):
@@ -2074,7 +2081,7 @@ class SecondCritiqueFixTests(unittest.TestCase):
         self.assertNotIn('demo-hero', (OUT / '404.html').read_text())
 
     def test_closing_photos_and_removed_photos(self):
-        for route, photo in (('about/index.html', 'garden-lawn'), ('services/index.html', 'trade-panel')):
+        for route, photo in (('about/index.html', 'garden-deck'), ('services/index.html', 'garden-path')):
             with self.subTest(route=route):
                 band = re.search(r'<div class="cta-band-media"[^>]*>(.*?)</div>', main_of((OUT / route).read_text()), re.S).group(1)
                 self.assertIn(f'/assets/images/{photo}-1600.jpg', band)
@@ -2082,6 +2089,91 @@ class SecondCritiqueFixTests(unittest.TestCase):
         self.assertNotIn('barber-interior', services)
         self.assertIn('.ab-closing .cta-band-media img{object-position:50% 70%}', self.pages_css)
         self.assertNotIn('detail-headlight', (OUT / 'about/index.html').read_text())
+
+
+class ServicesCareBandTests(unittest.TestCase):
+    """Night Shift Task 24: the Care plan is a full-bleed dark band set in type, with no photo; garden-lawn closes no page."""
+
+    @classmethod
+    def setUpClass(cls):
+        build()
+        cls.html = {route: (OUT / route).read_text() for route in SiteBuildTests.ROUTES + ['404.html']}
+        cls.services = main_of(cls.html['services/index.html'])
+        cls.care = re.search(r'<section class="care-band" id="care" aria-labelledby="care-title">(.*?)</section>', cls.services, re.S)
+        cls.pages_css = (OUT / 'assets/pages.css').read_text()
+        cls.site_css = (OUT / 'assets/site.css').read_text()
+
+    def test_care_band_keeps_its_content_and_has_no_photo(self):
+        self.assertIsNotNone(self.care)
+        care = self.care.group(1)
+        self.assertIn('<h2 data-rise id="care-title" class="chap-name">Care plan</h2>', care)
+        self.assertIn('A website isn’t finished at launch.', care)
+        self.assertRegex(care, r'<h3 [^>]*>Every month</h3>')
+        self.assertLess(care.index('care-title'), care.index('Every month'))
+        items = re.findall(r'<li><b>([^<]+)</b><span>([^<]+)</span></li>', re.search(r'<ul class="care-cycle">(.*?)</ul>', care, re.S).group(1))
+        self.assertEqual([name for name, _ in items], ['Updates', 'Backups', 'Form check', 'Small changes'])
+        facts = re.search(r'<dl class="care-facts">(.*?)</dl>', care, re.S).group(1)
+        self.assertEqual(re.findall(r'<div><dt>([^<]+)</dt><dd>[^<]+</dd></div>', facts),
+                         ['Who it’s for', 'When it starts', 'What we need from you'])
+        for banned in ('<img', '<picture', '<figure', 'data-reveal', 'garden-wall'):
+            with self.subTest(banned=banned):
+                self.assertNotIn(banned, care)
+        self.assertNotIn('garden-wall', self.services)
+        self.assertNotIn('.care-photo', self.pages_css)
+        # No price for the care plan: it is still unconfirmed.
+        self.assertNotRegex(visible_text(care), r'A?\$\s*\d')
+        # The chapter link still lands on the band.
+        self.assertIn('<a href="#care">', self.services)
+
+    def test_care_band_type_and_columns(self):
+        base = base_rules(self.pages_css)
+        band = rules_for(base, '.care-band')
+        self.assertEqual(len(band), 1)
+        self.assertIn('background:var(--ink-2)', band[0])
+        # Full bleed: the band is the section itself, outside .wrap; its content sits inside .wrap.
+        self.assertRegex(self.care.group(1), r'^\s*<div class="wrap">')
+        name = rules_for(base, '.care-cycle b')
+        self.assertEqual(len(name), 1)
+        self.assertIn('var(--font-display)', name[0])
+        sizes = re.search(r'clamp\(([\d.]+)rem,[^,]+,([\d.]+)rem\)', name[0])
+        self.assertGreaterEqual(float(sizes.group(1)), 2)
+        self.assertGreaterEqual(float(sizes.group(2)), float(sizes.group(1)))
+        self.assertIn('grid-template-columns:repeat(2,minmax(0,1fr))', ''.join(rules_for(base, '.care-cycle')))
+        self.assertIn('grid-template-columns:repeat(3,minmax(0,1fr))', ''.join(rules_for(base, '.care-facts')))
+        phone = media_blocks(self.pages_css, 'max-width:640px')
+        for selector in ('.care-cycle', '.care-facts'):
+            with self.subTest(selector=selector):
+                self.assertIn('grid-template-columns:1fr', rules_for(phone, selector)[0])
+
+    def test_care_band_text_contrast(self):
+        tokens = dict(re.findall(r'--([a-z0-9-]+):(#[0-9A-Fa-f]{6})', self.site_css))
+        background = tokens['ink-2']
+        for name, colour in (('headings and item names', tokens['bone']), ('lede', '#D6D2CA'),
+                             ('item descriptions and facts', tokens['stone'])):
+            with self.subTest(text=name):
+                self.assertGreaterEqual(contrast(colour, background), 4.5)
+        self.assertIn('color:var(--stone)', rules_for(base_rules(self.pages_css), '.care-facts dd')[0])
+
+    def test_garden_lawn_only_on_home_and_in_the_greenline_mockup(self):
+        for route, html in self.html.items():
+            main = main_of(html)
+            with self.subTest(route=route):
+                # It closes no page.
+                for band in re.findall(r'<div class="(?:cta-)?band-media"[^>]*>(.*?)</div>', main, re.S):
+                    self.assertNotIn('garden-lawn', band)
+                if route == 'work/index.html':
+                    # The made-up client's own screenshot keeps it; nothing else on Work uses it.
+                    mockup = re.search(r'<div class="gls-photos">.*?</div>', main, re.S).group(0)
+                    self.assertIn('/assets/images/garden-lawn-800.jpg', mockup)
+                    main = main.replace(mockup, '')
+                if route == 'index.html':
+                    self.assertIn('garden-lawn', main)
+                else:
+                    self.assertNotIn('garden-lawn', main)
+        self.assertEqual(self.services.count('/assets/images/trade-panel-1600.jpg"'), 1)
+        about = self.html['about/index.html']
+        self.assertNotIn('detail-headlight', about)
+        self.assertNotIn('barber-tools', about)
 
 
 class MotionQualityTests(unittest.TestCase):
