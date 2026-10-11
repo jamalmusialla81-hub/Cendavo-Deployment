@@ -102,3 +102,14 @@ Source: `docs/design/night-shift/critique/CRITIQUE.md` (independent creative-dir
 8. **Contact on mobile**: hide the awkward headlight crop photo at ≤ 640 px.
 9. **Concept label**: show "Concept project · fictional business" once per project, directly under each project title (not repeated above and below); it must remain on every concept project.
 Do not use `barber-tools`. Keep accessibility, CSP, enquiry wiring, tests; same test rules; **never `cd` in Bash**.
+
+## Task 18 — reduce repetition across pages (profile `site`)
+Source: `docs/design/night-shift/critique/CRITIQUE.md` items 3, 4, 7, 8 and "still reads templated". Supervisor-approved scope:
+1. **About page**: keep "How we think" (photo + principles). Turn "How we build" into one full-width typographic band (four short statements set large in a single row/stack on dark, no 2×2 card grid). Remove "What you can expect" from About (it repeats Services/Pricing); keep one line linking to Pricing ("What every project includes →" as a text link, no arrow glyph appended if the site style avoids it).
+2. **Home pricing teaser**: the rotated Quote card also appears as the Pricing hero, and Home's "Always included" list repeats Pricing. On Home, replace the quote card with a full-bleed photo band (`garden-walk`, AVIF via <picture>) carrying the "Fixed quote after a free consultation" statement and the "Ask for a fixed quote" link; drop Home's "Always included" list. Keep the card only on Pricing.
+3. **Footer signature**: remove the footer's outlined "Request a free consultation" button (the CTA band directly above already has it). Add an oversized "CENDAVO" wordmark set in Archivo (very wide, very large, cropped by the bottom of the page, `aria-hidden="true"`, decorative, low contrast against ink) as the footer's signature. Keep the footer nav, address line, legal line.
+4. **Vary the closing CTA photos** per page so not every page ends on the same image: Home `detail-rear`, Work `garden-lawn`, Services `barber-interior`, Pricing `garden-deck`, About `detail-headlight`, Contact none. Never use `barber-tools`.
+5. **Pricing "How the price is set"**: replace the 1/2/3 card row with a single horizontal rule timeline (three points on one line, labels under the points; vertical on mobile).
+6. **Demo hero**: fill the empty right half with a small static illustration of the queue (reuse the existing demo-card illustration from the Work page) — decorative, `aria-hidden`.
+7. **Dash lists**: on Services and Work, replace the "— item" dash prefix with a simple 6 px amber square marker or plain list spacing, so the same device isn't repeated everywhere.
+Keep accessibility, CSP, enquiry wiring, tests; same test rules; **never `cd` in Bash**.
