@@ -1,5 +1,6 @@
-// Homepage: before/after comparison, first-visit intro, hero and concept-project sequence. Without this script (or GSAP)
-// everything is visible, the intro never shows and the comparison sits at 50%. Shared reveals live in motion.js.
+// Homepage: showreel playback, before/after comparison, first-visit intro and hero. Without this script (or GSAP)
+// everything is visible, the intro never shows, the comparison sits at 50% and the showreel keeps its native controls.
+// Shared reveals live in motion.js.
 (() => {
   const doc = document;
   const root = doc.documentElement;
@@ -9,11 +10,52 @@
   // Start the 1.35 s intro only if it can finish before motion-boot.js's 2.5 s failsafe removes the panel.
   const INTRO_LATEST_START_MS = 700;
   const SKIP_EVENTS = ['keydown', 'pointerdown', 'wheel', 'touchstart'];
-  // The pinned project sequence: large screens only, at most 2.5 viewport heights of scrolling.
-  const PIN_VIEWPORTS = 2.5;
   const MOTION = '(prefers-reduced-motion: no-preference)';
-  const PIN_QUERY = MOTION + ' and (min-width: 1081px) and (min-height: 620px)';
-  const STACK_QUERY = MOTION + ' and (max-width: 1080px), ' + MOTION + ' and (max-height: 619px)';
+  // Phones get the vertical cut; home.css switches the frame to 9:16 at the same width.
+  const NARROW = '(max-width: 640px)';
+
+  // Showreel (no GSAP needed): a silent video that plays only while in view, and never on its own with reduced motion or
+  // Save-Data. The native controls give way to one Pause/Play button (WCAG 2.2.2); a press of Pause is remembered.
+  const reel = doc.querySelector('[data-reel]');
+  const video = reel?.querySelector('video');
+  const toggle = reel?.querySelector('[data-reel-toggle]');
+  if (video && toggle) {
+    if (window.matchMedia?.(NARROW).matches && video.dataset.narrowSrc) {
+      const source = video.querySelector('source');
+      if (source) source.setAttribute('src', video.dataset.narrowSrc);
+      if (video.dataset.narrowPoster) video.setAttribute('poster', video.dataset.narrowPoster);
+      video.load(); // preload="none": this picks up the new source without downloading it yet
+    }
+    const saveData = Boolean(window.navigator?.connection?.saveData);
+    let wanted = !still() && !saveData; // the visitor's choice once they press the button
+    let inView = false;
+    const label = () => { toggle.textContent = video.paused ? 'Play showreel' : 'Pause showreel'; };
+    const play = () => {
+      let attempt;
+      try { attempt = video.play(); } catch (error) { attempt = null; }
+      if (attempt && typeof attempt.then === 'function') attempt.then(label, label); // refused (e.g. Low Power Mode): shows Play
+      label();
+    };
+    video.muted = true;
+    video.removeAttribute('controls');
+    video.addEventListener('play', label);
+    video.addEventListener('pause', label);
+    toggle.addEventListener('click', () => {
+      wanted = video.paused;
+      if (wanted) play();
+      else video.pause();
+      label();
+    });
+    if (window.IntersectionObserver) {
+      new window.IntersectionObserver(entries => {
+        inView = entries[entries.length - 1].isIntersecting;
+        if (inView && wanted && video.paused) play();
+        else if (!inView && !video.paused) video.pause();
+      }, { threshold: 0.25 }).observe(video);
+    }
+    toggle.hidden = false;
+    label();
+  }
 
   // Before/after comparison: a labelled range input plus Before/After buttons.
   const figure = doc.querySelector('[data-compare]');
@@ -116,84 +158,5 @@
     } else endIntro();
     root.classList.remove('ph-wait');
     return endIntro;
-  });
-
-  // Concept projects, large screens: one capped pin. Photos wipe up; copy swaps through masks and devices travel a viewport,
-  // back to back, so nothing ghosts (no opacity). A 1-3 counter follows; a bone layer rises at the end. Scroll is never moved.
-  mm.add(PIN_QUERY, () => {
-    const stage = doc.querySelector('[data-work]');
-    const projects = stage ? $$('.proj', stage) : [];
-    const count = projects.length;
-    if (count < 2) return undefined;
-    const counter = stage.querySelector('.work-count-n');
-    const bar = stage.querySelector('.work-count-bar i');
-    const exit = stage.querySelector('.work-exit');
-    const away = () => window.innerHeight; // the stage is one viewport tall, so this is always off-frame
-    let shown = 0;
-    const show = index => {
-      if (index === shown) return;
-      shown = index;
-      if (counter) counter.textContent = String(index + 1);
-      if (bar) gsap.set(bar, { scaleX: (index + 1) / count });
-    };
-    stage.classList.add('is-pinned');
-    if (bar) gsap.set(bar, { scaleX: 1 / count, transformOrigin: '0 50%' });
-    // Times at which each project's text takes over; the counter follows the timeline's playhead (what is on screen).
-    const swaps = [];
-    const tl = gsap.timeline({
-      defaults: { ease: 'power3.inOut' },
-      onUpdate: () => show(Math.min(count - 1, swaps.filter(swap => tl.time() >= swap).length)),
-      scrollTrigger: {
-        trigger: stage, pin: true, start: 'top top', scrub: 0.6, invalidateOnRefresh: true,
-        end: () => '+=' + Math.round(window.innerHeight * PIN_VIEWPORTS),
-      },
-    });
-    tl.addLabel('p0', 0);
-    for (let index = 1; index < count; index++) {
-      const previous = projects[index - 1];
-      const current = projects[index];
-      const at = (index - 1) * 1.2;
-      const copy = $$('.proj-mask > *', current);
-      const outgoing = $$('.proj-mask > *', previous);
-      const devices = $$('.proj-devices', current);
-      gsap.set($$('.proj-media', current), { clipPath: 'inset(100% 0 0 0)' });
-      gsap.set(devices, { transformOrigin: '50% 100%' });
-      tl.to(outgoing, { yPercent: -110, stagger: 0.03, duration: 0.18, ease: 'power2.in' }, at + 0.25)
-        .to($$('.proj-devices', previous), { y: () => -away(), duration: 0.35, ease: 'power2.in' }, at + 0.05)
-        .to($$('.proj-media', current), { clipPath: 'inset(0% 0 0 0)', duration: 0.8 }, at + 0.1)
-        .fromTo($$('.proj-media img', current), { scale: 1.1 }, { scale: 1, duration: 0.9, ease: 'power2.out' }, at + 0.1)
-        .fromTo(copy, { yPercent: 110 }, { yPercent: 0, stagger: 0.03, duration: 0.18, ease: 'power2.out' }, at + 0.47)
-        .fromTo(devices, { y: away, rotation: 2.5 }, { y: 0, rotation: 0, duration: 0.5, ease: 'power3.out' }, at + 0.4)
-        .addLabel('p' + index, at + 1);
-      const outEnd = at + 0.25 + 0.18 + 0.03 * Math.max(0, outgoing.length - 1);
-      swaps.push((outEnd + at + 0.47) / 2);
-    }
-    // Hold, then the bone layer rises over the lower stage so the release meets the bone section (after the last label).
-    tl.to({}, { duration: 0.3 });
-    if (exit) tl.fromTo(exit, { clipPath: 'inset(100% 0 0 0)' }, { clipPath: 'inset(60% 0 0 0)', duration: 0.3, ease: 'none' });
-    // Keyboard focus entering a project scrolls to where it is fully shown.
-    const onFocus = event => {
-      const index = projects.findIndex(project => project.contains(event.target));
-      const trigger = tl.scrollTrigger;
-      if (index < 0 || !trigger) return;
-      const at = tl.labels['p' + index] / tl.duration();
-      window.scrollTo(0, Math.round(trigger.start + (trigger.end - trigger.start) * at));
-    };
-    stage.addEventListener('focusin', onFocus);
-    return () => {
-      stage.removeEventListener('focusin', onFocus);
-      stage.classList.remove('is-pinned');
-    };
-  });
-
-  // Concept projects, smaller screens: stacked, each photo un-masks and its devices rise once as it scrolls in.
-  mm.add(STACK_QUERY, () => {
-    $$('.proj').forEach(project => {
-      const tl = gsap.timeline({ scrollTrigger: { trigger: project, start: 'top 80%', once: true } });
-      const media = $$('.proj-media', project);
-      const devices = $$('.proj-devices', project);
-      if (media.length) tl.fromTo(media, { clipPath: 'inset(0 0 100% 0)' }, { clipPath: 'inset(0 0 0% 0)', duration: 1, ease: 'expo.inOut', clearProps: 'clipPath' }, 0);
-      if (devices.length) tl.from(devices, { y: 60, opacity: 0, duration: 0.8, ease: 'power3.out' }, 0.4);
-    });
   });
 })();

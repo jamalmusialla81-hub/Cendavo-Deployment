@@ -1,11 +1,11 @@
-/* Cendavo homepage: hero, concept projects, before/after comparison and sections.
-   Loaded only on / (like home.js), so inner pages do not download it. Tokens come from site.css; the device
-   mockups come from kit.css (the quote sheet there is used only on /pricing/). */
+/* Cendavo homepage: hero, showreel, concept-project cards, before/after comparison and sections.
+   Loaded only on / (like home.js), so inner pages do not download it. Tokens come from site.css; the hero phone mockup
+   comes from kit.css. "How it works" and the trades row live on /services/ and /about/ (styled in pages.css). */
 .actions{display:flex;flex-wrap:wrap;gap:12px;margin-top:32px}
 /* Homepage: hero */
 .hero{position:relative;isolation:isolate;min-height:max(calc(100svh - 77px),640px);display:flex;align-items:flex-end}
 .hero-photo{position:absolute;inset:0 0 0 36%;z-index:-1;overflow:hidden}
-.hero-photo img,.proj-media img,.band-media img,.statement-photo img,.who-img img{width:100%;height:100%;object-fit:cover}
+.hero-photo img,.band-media img{width:100%;height:100%;object-fit:cover}
 .hero-photo img{object-position:22% 50%}
 .hero-photo::after{content:"";position:absolute;inset:0;background:linear-gradient(90deg,var(--ink) 0%,rgba(14,14,13,.72) 14%,rgba(14,14,13,0) 42%),linear-gradient(0deg,rgba(14,14,13,.55) 0%,rgba(14,14,13,0) 30%)}
 .hero-in{padding-block:clamp(48px,8vh,96px) clamp(56px,10vh,120px)}
@@ -20,46 +20,44 @@
 .hero-cap span{display:block;color:var(--stone);font:400 .82rem/1.4 var(--font-text)}
 
 /* Homepage: sections */
-.statement{padding-block:clamp(96px,10vw,160px)}
-.statement-grid,.ba-grid,.who-head,.process-grid,.questions-grid,.proj-in{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));column-gap:var(--col-gap)}
-.statement h2{grid-column:1/span 11;margin:0;font-size:clamp(2.1rem,4.6vw,4.6rem);text-wrap:pretty}
-.statement-body{grid-column:7/span 5;grid-row:2;align-self:start;margin-top:clamp(40px,5vw,72px)}
-.statement-photo{grid-column:1/span 5;grid-row:2;margin-top:clamp(40px,5vw,72px);aspect-ratio:4/5;overflow:hidden;background:var(--bone-2)}
-.statement-photo img{object-position:40% 60%}
-.work-head{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));align-items:end;gap:32px;padding-block:var(--section-lg) clamp(48px,6vw,88px)}
+.ba-grid{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));column-gap:var(--col-gap)}
+/* Showreel: one self-hosted, silent video. The frame's shape is set here per screen size (16:9 above 640px, 9:16 at and below,
+   matching home.js's query), so swapping to the vertical cut never shifts the layout, and its height is capped by the
+   viewport. Without JS the video keeps its native controls; with JS a Pause/Play button replaces them (WCAG 2.2.2). */
+.reel{padding-block:var(--section) 0}
+.reel-head{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));column-gap:var(--col-gap);align-items:end;margin-bottom:clamp(32px,4vw,56px)}
+.reel-head h2{grid-column:1/span 7;margin:0;font-size:clamp(2.25rem,4.4vw,4.25rem)}
+.reel-head p{grid-column:9/-1;margin:0;color:var(--stone)}
+.reel-fig{margin:0}
+.reel-frame{position:relative;width:min(100%,calc(62svh * 16 / 9));aspect-ratio:16/9;margin-inline:auto;overflow:hidden;background:var(--ink-2)}
+.reel-video{display:block;width:100%;height:100%;object-fit:cover}
+.reel-toggle{position:absolute;left:16px;bottom:16px;min-height:44px;padding:0 18px;border:1px solid var(--line);border-radius:var(--radius-sm);background:var(--ink);color:var(--bone);font:600 1rem/1 var(--font-display);cursor:pointer}
+.reel-toggle:hover{background:var(--ink-2)}
+.reel-toggle:focus-visible{outline:2px solid var(--bone);outline-offset:3px;box-shadow:0 0 0 6px var(--ink)}
+.reel-cap{width:min(100%,calc(62svh * 16 / 9));margin:14px auto 0;color:var(--stone);font-size:.92rem}
+/* Concept projects: three compact cards, each linking to its section on /work/. The title link covers the whole card. */
+.work-head{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));align-items:end;gap:32px;padding-bottom:clamp(40px,4vw,64px)}
 .work-head h2{margin:0;font-size:clamp(2.75rem,6.2vw,6rem)}
 .work-head div{justify-self:end;max-width:42ch}
 .work-head p{margin:0 0 8px;color:var(--stone)}
-.proj{position:relative;overflow:hidden;min-height:min(100svh,960px);display:flex;align-items:center;padding-block:clamp(88px,10vw,144px);border-top:1px solid var(--line)}
-.proj-media{position:absolute;inset:0}
-.proj-media::after{content:"";position:absolute;inset:0;background:linear-gradient(90deg,rgba(14,14,13,.9) 0%,rgba(14,14,13,.74) 34%,rgba(14,14,13,.35) 70%,rgba(14,14,13,.45) 100%)}
-.proj-hb .proj-media img{object-position:30% 50%}
-.proj-gl .proj-media img{object-position:60% 50%}
-.proj-fc .proj-media img{object-position:50% 40%}
-.work{background:var(--ink)}
-.proj-in{position:relative;align-items:center}
-.proj-copy{grid-column:1/span 4}
-.proj-label{margin:12px 0 0;font-size:.9rem;color:var(--stone)}
-.proj h3{margin:0;font-weight:780;font-stretch:86%;font-size:clamp(2.25rem,3.6vw,3.5rem);line-height:.96;letter-spacing:-.02em}
-.proj-desc{margin:20px 0 0;color:#D6D2CA}
-.proj-points{list-style:none;margin:28px 0 0;padding:0;border-top:1px solid var(--line)}
-/* Plain ruled rows: no bullet device. */
-.proj-points li{padding:13px 0;border-bottom:1px solid var(--line);font:600 1rem/1.3 var(--font-display);font-stretch:104%}
-.proj-devices{grid-column:6/-1;justify-self:end;position:relative;width:100%;max-width:min(58vw,820px)}
-.devices-hb .laptop{width:88%}
-.devices-hb .phone-sm{--pw:clamp(130px,12.5vw,190px);position:absolute;right:0;bottom:-8%}
-/* Homepage phone: replaces the laptop and booking phone at 768px and below (one device, one accessible label). */
-.phone-home{display:none}
-.devices-gl .laptop{width:86%;margin-left:auto;margin-right:7%}
-.devices-fc{display:flex;justify-content:center;align-items:flex-start;gap:clamp(20px,3vw,48px)}
-.devices-fc .phone{--pw:clamp(200px,17vw,270px)}
-.devices-fc .phone-b{margin-top:12%}
-.ba{padding-block:var(--section-lg)}
+.work{padding-block:var(--section);background:var(--ink)}
+.teaser{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:clamp(16px,2vw,28px)}
+.teaser-card{position:relative}
+.teaser-img{margin:0;aspect-ratio:3/2;overflow:hidden;background:var(--ink-2)}
+.teaser-img img{width:100%;height:100%;object-fit:cover}
+.teaser-card h3{margin:20px 0 0;font-weight:760;font-stretch:88%;font-size:clamp(1.5rem,2vw,2rem);line-height:1;letter-spacing:-.015em}
+.teaser-card h3 a{text-decoration:none}
+.teaser-card h3 a::after{content:"";position:absolute;inset:0}
+.teaser-card h3 a:hover{text-decoration:underline;text-decoration-thickness:2px;text-underline-offset:.12em}
+.teaser-label{margin:10px 0 0;color:var(--stone);font-size:.9rem}
+.teaser-line{margin:12px 0 0;max-width:42ch;color:#D6D2CA}
+.work-head .ulink+.ulink{margin-left:28px}
+.ba{padding-block:var(--section)}
 .ba-grid{align-items:center}
 .ba-copy{grid-column:1/span 4}
-.services,.process{padding-block:var(--section-lg)}
+.services{padding-block:var(--section)}
 .services-head{display:flex;justify-content:space-between;align-items:flex-end;gap:24px;margin-bottom:clamp(40px,5vw,72px)}
-.services-head h2,.who-head h2,.process-head h2,.pricing-copy h2,.questions-head h2{margin:0}
+.services-head h2{margin:0}
 .svc-grid{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));column-gap:var(--col-gap);align-items:start}
 .svc-list{grid-column:1/span 7;grid-row:1;list-style:none;margin:0;padding:0;border-top:1px solid var(--line)}
 .svc{padding:clamp(24px,3vw,40px) 0;border-bottom:1px solid var(--line)}
@@ -72,49 +70,7 @@
 .svc-photo{position:absolute;inset:0}
 .svc-photo img{width:100%;height:100%;object-fit:cover}
 .svc-panel:not(.is-live) .svc-photo:first-child,.svc-photo.is-active{z-index:1}
-.who{padding-block:var(--section-lg) calc(var(--section-lg) - 24px);overflow:hidden}
-.who-head{align-items:end;margin-bottom:clamp(48px,6vw,88px)}
-.who-head h2{grid-column:1/span 7}
-.who-head p{grid-column:9/-1;margin:0}
-.who-row{list-style:none;margin:0;display:grid;grid-template-columns:1.05fr .9fr 1.2fr .9fr 1fr;gap:clamp(10px,1.2vw,18px);padding:0 clamp(10px,1.2vw,18px);align-items:start}
-.who-img{overflow:hidden;aspect-ratio:4/5;background:var(--bone-2)}
-.who-row li:nth-child(2){margin-top:clamp(40px,8vw,128px)}
-.who-row li:nth-child(3){margin-top:clamp(16px,3vw,48px)}
-.who-row li:nth-child(4){margin-top:clamp(64px,11vw,176px)}
-.who-row li:nth-child(even) .who-img{aspect-ratio:3/4}
-.who-row figcaption{margin-top:14px;font:620 clamp(1rem,1.2vw,1.2rem)/1.2 var(--font-display);font-stretch:104%}
-/* How it works: heading, intro and photo on the left; five large numbered steps on the right. */
-.process-grid{align-items:start}
-.process-head{grid-column:1/span 5}
-.process-head p{margin:24px 0 0;max-width:36ch;color:var(--stone);font-size:clamp(1.0625rem,.5vw + .95rem,1.25rem)}
-.process-photo{margin:clamp(40px,5vw,64px) 0 0;aspect-ratio:4/5;overflow:hidden;background:var(--ink-2)}
-.process-photo img{width:100%;height:100%;object-fit:cover;object-position:52% 70%}
-.steps{grid-column:7/-1;list-style:none;margin:0;padding:0;border-top:1px solid var(--line)}
-.step{display:grid;grid-template-columns:clamp(48px,5vw,72px) minmax(0,1fr);column-gap:clamp(16px,2vw,32px);align-items:baseline;padding:clamp(28px,3vw,44px) 0;border-bottom:1px solid var(--line)}
-.step-n{font:700 clamp(1.25rem,1.6vw,1.5rem)/1 var(--font-display);font-stretch:110%;letter-spacing:0;font-variant-numeric:tabular-nums;color:var(--stone)}
-.step:first-child .step-n{color:var(--amber)}
-.step-body{min-width:0}
-.step h3{margin:0 0 12px;font-size:1.75rem;font-weight:760;font-stretch:88%;letter-spacing:-.02em}
-.step p{margin:0;max-width:40ch;color:#D6D2CA;font-size:clamp(1.0625rem,.3vw + 1rem,1.1875rem)}
-/* Pricing teaser: one full-bleed photo band carrying the fixed-quote statement (the quote sheet lives only on /pricing/).
-   The photo (garden path and planting) shows through on the right; the scrim keeps at least .70 ink behind the copy (left half on wide
-   screens, lower 60% up to 900px, where the copy spans the full width) so body text holds 4.5:1 even over a white pixel. */
-.pricing{position:relative;isolation:isolate;overflow:hidden;padding-block:clamp(120px,16vw,220px)}
-.pricing-media{position:absolute;inset:0;z-index:-1;overflow:hidden;background:var(--ink-2)}
-.pricing-media img{width:100%;height:100%;object-fit:cover;object-position:60% 70%}
-.pricing-media::after{content:"";position:absolute;inset:0;background:linear-gradient(90deg,rgba(14,14,13,.88) 0%,rgba(14,14,13,.74) 50%,rgba(14,14,13,.15) 100%)}
-.pricing-copy{max-width:min(100%,720px)}
-.pricing-copy h2{font-size:clamp(2.6rem,5.6vw,5.4rem);font-weight:800;font-stretch:84%;line-height:.95;letter-spacing:-.025em}
-.pricing-copy p{margin:28px 0;max-width:46ch;color:#D6D2CA;font-size:clamp(1.0625rem,.5vw + .95rem,1.25rem)}
-/* Questions: heading, intro and contact link on the left; the accordion across the right. */
-.questions-grid{align-items:start}
-.questions-head{grid-column:1/span 4}
-.questions-head h2{font-size:clamp(2.75rem,6.2vw,6rem)}
-.questions-head p{margin:24px 0 8px;max-width:34ch;color:var(--stone)}
-.questions-list{grid-column:6/-1;max-width:none}
-.questions-list summary{font-size:clamp(1.125rem,1.3vw,1.375rem)}
-.questions{padding-block:var(--section-lg)}
-.band{position:relative;isolation:isolate;overflow:hidden;padding-block:clamp(140px,20vw,280px)}
+.band{position:relative;isolation:isolate;overflow:hidden;padding-block:clamp(96px,12vw,176px)}
 .band-media{position:absolute;inset:0;z-index:-1}
 .band-media img{object-position:50% 40%}
 .band-media::after{content:"";position:absolute;inset:0;background:linear-gradient(90deg,rgba(14,14,13,.86) 0%,rgba(14,14,13,.6) 55%,rgba(14,14,13,.35) 100%)}
@@ -187,33 +143,11 @@
 .intro-word>span{display:block}
 .intro-hint{position:absolute;right:var(--gut);bottom:28px;color:var(--stone);font-size:.9rem}
 
-/* Concept projects: skip link and the pinned sequence. .is-pinned is added by home.js only on large screens with motion. */
-.work-head .skip-proj{margin-left:24px}
-.work-stage{position:relative}
-.work-count{display:none}
-.work-exit{display:none}
-/* Pinned: each copy block is a mask its text moves through (never a fade), and a decorative bone layer rises over the last
-   project as the pin ends, so the release meets the bone section after it. home.js drives both. */
-.work-stage.is-pinned .proj-mask{overflow:hidden}
-.work-stage.is-pinned .work-exit{position:absolute;inset:0;z-index:5;display:block;background:var(--bone);pointer-events:none;clip-path:inset(100% 0 0 0)}
-.work-stage.is-pinned{height:100svh;overflow:hidden}
-.work-stage.is-pinned .proj{position:absolute;inset:0;min-height:0;padding-block:100px 56px;border:0}
-.work-stage.is-pinned .proj:nth-of-type(2){z-index:2}
-.work-stage.is-pinned .proj:nth-of-type(3){z-index:3}
-.work-stage.is-pinned .work-count{position:absolute;z-index:4;left:var(--gut);bottom:32px;display:flex;align-items:center;gap:14px;color:var(--stone);font:600 .9rem/1 var(--font-display);font-variant-numeric:tabular-nums}
-.work-count-n{color:var(--bone)}
-.work-count-bar{position:relative;width:96px;height:1px;background:var(--line)}
-.work-count-bar i{position:absolute;inset:0;background:var(--bone);transform-origin:0 50%}
-@media(min-width:1441px){.work-stage.is-pinned .work-count{left:calc((100vw - var(--max)) / 2 + var(--gut))}}
-
 /* Services rows: each heading links to its section on the Services page. */
 .svc h3 a{text-decoration:none}
 .svc h3 a:hover{text-decoration:underline;text-decoration-thickness:2px;text-underline-offset:.12em}
 
 /* Responsive */
-@media(max-width:1080px){
-.proj-copy{grid-column:1/span 5}
-}
 @media(max-width:900px){
 .hero{display:block;min-height:0}
 .hero-photo{position:relative;inset:auto;height:58svh;min-height:340px;max-height:560px;z-index:0}
@@ -224,41 +158,18 @@
 .hero-device{right:var(--gut);top:calc(min(max(58svh,340px),560px) - 268px);bottom:auto}
 .hero-device .phone{--pw:112px}
 .hero-cap{display:none}
-.statement-photo{aspect-ratio:4/3}
-.statement h2,.statement-body,.statement-photo,.ba-copy,.compare,.who-head h2,.who-head p,.process-head,.steps,.questions-head,.questions-list{grid-column:1/-1;grid-row:auto}
+.ba-copy,.compare{grid-column:1/-1;grid-row:auto}
 .compare{margin-top:40px}
-.who-head p{margin-top:20px}
-.who-row{grid-template-columns:repeat(2,minmax(0,1fr));row-gap:28px;padding-inline:var(--gut)}
-.who-row li:nth-child(n){margin-top:0}
-.who-row li:nth-child(even){margin-top:48px}
-.who-row li:nth-child(5){grid-column:1/-1}
-.who-row li:nth-child(5) .who-img{aspect-ratio:16/10}
-.process-photo{aspect-ratio:16/10}
-.steps{margin-top:56px}
-.step{grid-template-columns:48px minmax(0,1fr)}
-.questions-list{margin-top:40px}
-.pricing-media::after{background:linear-gradient(0deg,rgba(14,14,13,.9) 0%,rgba(14,14,13,.74) 60%,rgba(14,14,13,.55) 85%,rgba(14,14,13,.25) 100%)}
 .svc-list,.svc-panel{grid-column:1/-1;grid-row:auto}
 .svc-panel{position:relative;top:auto;aspect-ratio:16/10;margin-bottom:clamp(32px,6vw,48px)}
 }
 @media(max-width:860px){
 .work-head{grid-template-columns:1fr}
 .work-head div{justify-self:start}
-.proj{display:block;min-height:0;padding:0 0 80px;border:0}
-.proj-media{position:relative;height:64vw;max-height:520px}
-.proj-media::after{background:linear-gradient(0deg,var(--ink) 0%,rgba(14,14,13,0) 60%)}
-.proj-in{display:flex;flex-direction:column}
-.proj-devices{order:-1;max-width:none;margin:-34vw 0 40px}
-.devices-hb .laptop{width:86%}
-.devices-hb .phone-sm{--pw:27vw;bottom:-10%}
-.devices-gl .laptop{width:86%;margin-inline:auto}
-.devices-fc{justify-content:flex-start;gap:16px}
-.devices-fc .phone{--pw:42vw}
-.devices-fc .phone-b{margin-top:18vw}
-}
-@media(max-width:768px){
-.devices-hb .laptop,.devices-hb .phone-sm{display:none}
-.devices-hb .phone-home{--pw:min(58vw,260px);display:block}
+.reel-head h2,.reel-head p{grid-column:1/-1}
+.reel-head p{margin-top:16px}
+.teaser{grid-template-columns:1fr;row-gap:40px}
+.teaser-img{aspect-ratio:16/9}
 }
 @media(max-width:640px){
 /* Phones: the headline, sub and calls to action sit over the darkened photo so the H1 and primary CTA are above the fold. */
@@ -269,6 +180,11 @@
 .hero-device{display:none}
 .actions .button,.band .button{width:100%}
 .compare-stage{aspect-ratio:4/5}
+/* Phones: the vertical cut in a 9:16 frame, capped so it never fills more than about three quarters of the screen. */
+.reel-frame{width:min(100%,calc(74svh * 9 / 16));aspect-ratio:9/16}
+.reel-cap{width:auto;text-align:center}
+.work-head .ulink{display:flex;width:fit-content}
+.work-head .ulink+.ulink{margin-left:0}
 }
 
 /* Motion: only for people who have not asked for reduced motion. Transitions on transform and opacity only.

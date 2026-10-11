@@ -83,6 +83,23 @@
 .faq-head{grid-column:1/span 4;position:sticky;top:108px}
 .faq-list{grid-column:6/-1;max-width:none}
 
+/* Services: "How it works" (moved from the homepage, Night Shift Task 28): heading, intro and photo on the left; five large
+   numbered steps on the right. It sits before the FAQ. */
+.process{padding-block:var(--section-lg)}
+.process-grid{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));column-gap:var(--col-gap);align-items:start}
+.process-head h2{margin:0}
+.process-head{grid-column:1/span 5}
+.process-head p{margin:24px 0 0;max-width:36ch;color:var(--stone);font-size:clamp(1.0625rem,.5vw + .95rem,1.25rem)}
+.process-photo{margin:clamp(40px,5vw,64px) 0 0;aspect-ratio:4/5;overflow:hidden;background:var(--ink-2)}
+.process-photo img{width:100%;height:100%;object-fit:cover;object-position:52% 70%}
+.steps{grid-column:7/-1;list-style:none;margin:0;padding:0;border-top:1px solid var(--line)}
+.step{display:grid;grid-template-columns:clamp(48px,5vw,72px) minmax(0,1fr);column-gap:clamp(16px,2vw,32px);align-items:baseline;padding:clamp(28px,3vw,44px) 0;border-bottom:1px solid var(--line)}
+.step-n{font:700 clamp(1.25rem,1.6vw,1.5rem)/1 var(--font-display);font-stretch:110%;letter-spacing:0;font-variant-numeric:tabular-nums;color:var(--stone)}
+.step:first-child .step-n{color:var(--amber)}
+.step-body{min-width:0}
+.step h3{margin:0 0 12px;font-size:1.75rem;font-weight:760;font-stretch:88%;letter-spacing:-.02em}
+.step p{margin:0;max-width:40ch;color:#D6D2CA;font-size:clamp(1.0625rem,.3vw + 1rem,1.1875rem)}
+
 /* Pricing */
 .pr-hero{padding-block:clamp(64px,9vw,136px) var(--section);overflow:hidden}
 .pr-hero .g12{align-items:end}
@@ -280,6 +297,20 @@
 .ab-build-list span{max-width:44ch;color:var(--stone)}
 .ab-promise{margin:clamp(40px,5vw,64px) 0 0;max-width:62ch;color:#D6D2CA;font-size:clamp(1.0625rem,.5vw + .95rem,1.25rem)}
 
+/* About: the trades row (moved from the homepage, Night Shift Task 28), before the closing call to action. */
+.who{padding-block:var(--section-lg) calc(var(--section-lg) - 24px);overflow:hidden}
+.who-head{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));column-gap:var(--col-gap);align-items:end;margin-bottom:clamp(48px,6vw,88px)}
+.who-head h2{grid-column:1/span 7;margin:0}
+.who-head p{grid-column:9/-1;margin:0}
+.who-row{list-style:none;margin:0;display:grid;grid-template-columns:1.05fr .9fr 1.2fr .9fr 1fr;gap:clamp(10px,1.2vw,18px);padding:0 clamp(10px,1.2vw,18px);align-items:start}
+.who-img{overflow:hidden;aspect-ratio:4/5;background:var(--bone-2)}
+.who-img img{width:100%;height:100%;object-fit:cover}
+.who-row li:nth-child(2){margin-top:clamp(40px,8vw,128px)}
+.who-row li:nth-child(3){margin-top:clamp(16px,3vw,48px)}
+.who-row li:nth-child(4){margin-top:clamp(64px,11vw,176px)}
+.who-row li:nth-child(even) .who-img{aspect-ratio:3/4}
+.who-row figcaption{margin-top:14px;font:620 clamp(1rem,1.2vw,1.2rem)/1.2 var(--font-display);font-stretch:104%}
+
 /* Demonstration project page */
 .demo-side h2{font-size:1.25rem;font-weight:650;font-stretch:100%;line-height:1.1;letter-spacing:-.01em}
 .page-hero .pg-h{max-width:14ch}
@@ -334,6 +365,16 @@
 .pr-care-media{position:relative;height:70vw;max-height:480px;z-index:0}
 .pr-care-in{padding-block:0 var(--section)}
 .pr-care-card{position:relative;margin-top:-64px}
+.who-head h2,.who-head p,.process-head,.steps{grid-column:1/-1;grid-row:auto}
+.who-head p{margin-top:20px}
+.who-row{grid-template-columns:repeat(2,minmax(0,1fr));row-gap:28px;padding-inline:var(--gut)}
+.who-row li:nth-child(n){margin-top:0}
+.who-row li:nth-child(even){margin-top:48px}
+.who-row li:nth-child(5){grid-column:1/-1}
+.who-row li:nth-child(5) .who-img{aspect-ratio:16/10}
+.process-photo{aspect-ratio:16/10}
+.steps{margin-top:56px}
+.step{grid-template-columns:48px minmax(0,1fr)}
 }
 @media(max-width:860px){
 .wk-index{grid-template-columns:repeat(2,minmax(0,1fr));gap:28px 12px}

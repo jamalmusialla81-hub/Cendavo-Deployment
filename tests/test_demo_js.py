@@ -126,13 +126,10 @@ function run(env) {
   figure.parts = { '[data-compare-controls]': [controls] };
   const intro = element('intro', { '.intro-mark path': many('arc', 3), '.intro-word > span': many('word', 1) });
   const photo = element('photo', { img: many('img', 1) });
-  const projects = [0, 1, 2].map(i => element('proj' + i, { '.proj-mask > *': many('copy', 3), '.proj-devices': many('devices', 1), '.proj-media': many('media', 1), '.proj-media img': many('mimg', 1) }));
-  const counter = element('counter'), bar = element('bar');
-  const stage = element('stage', { '.proj': projects, '.work-count-n': [counter], '.work-count-bar i': [bar], '.work-exit': [element('exit')] });
   // Classes motion-boot.js would have set: .ph-wait (openings held by CSS) and, on a first visit, .ns-intro.
   const root = element('html'); root.classList = classList(['js'].concat(env.introClass || env.wait ? ['motion'] : [], env.introClass ? ['ns-intro'] : [], env.wait ? ['ph-wait'] : []));
   const parts = { '[data-compare]': [figure], '.intro': env.noPanel ? [] : [intro], '.hero-h .ln > span': many('line', 4), '.hero-photo': [photo],
-    '[data-hero-fade]': many('fade', 2), '.hero-device': many('device', 1), '[data-work]': [stage], '.proj': projects };
+    '[data-hero-fade]': many('fade', 2), '.hero-device': many('device', 1) };
   const doc = { documentElement: root, querySelector: s => (parts[s] || [])[0] || null, querySelectorAll: s => parts[s] || [] };
   const { win, listeners, store } = makeWindow(env);
   let log = null;
@@ -145,7 +142,6 @@ function run(env) {
     const [first] = log.timelines;
     const introTl = log.timelines.find(tl => tl.vars.onComplete);
     const hero = log.timelines.find(tl => tl.vars.paused);
-    const pin = log.timelines.find(tl => tl.vars.scrollTrigger && tl.vars.scrollTrigger.pin);
     out.queries = log.queries;
     out.plugins = log.plugins;
     out.introEnd = introTl ? introTl.duration() : null;
@@ -163,27 +159,10 @@ function run(env) {
     out.introWord = introTl ? introTl.tweens.filter(t => (t.names[0] || '').startsWith('word')).map(shape) : null;
     out.autoAlpha = log.varsSeen.some(v => v && ('autoAlpha' in v || 'visibility' in v));
     out.snap = log.varsSeen.some(v => v && v.scrollTrigger && 'snap' in v.scrollTrigger);
-    out.pinned = stage.classList.contains('is-pinned');
-    out.stackTimelines = log.timelines.filter(tl => tl.vars.scrollTrigger && tl.vars.scrollTrigger.once).length;
-    if (pin) {
-      out.pinEnd = pin.vars.scrollTrigger.end();
-      out.pinScrub = pin.vars.scrollTrigger.scrub;
-      out.focusListeners = (stage.listeners.focusin || []).length;
-      const target = many('link', 1)[0];
-      projects[2].parts.link = [target];
-      stage.listeners.focusin[0]({ target });
-      out.focusScroll = win.scrolled.slice();
-      // Move the pinned timeline's playhead (what is on screen) to a share of its length and read the counter.
-      const counterAt = progress => { pin.now = progress * pin.duration(); pin.vars.onUpdate(); return counter.textContent; };
-      out.counter = counterAt(1);
-      out.pinDuration = pin.duration();
-      out.counterSamples = [0, 0.2, 0.3, 0.6, 0.8, 1].map(progress => [progress, counterAt(progress)]);
-      out.pinScrollUpdate = 'onUpdate' in pin.vars.scrollTrigger;
-      const value = v => (typeof v === 'function' ? v(0, null) : v);
-      out.pinTweens = pin.tweens.map(t => ({ at: t.at, end: t.end, n: t.n, names: t.names, opacity: t.vars.opacity, fromOpacity: t.from && t.from.opacity,
-        yPercent: t.vars.yPercent, fromYPercent: t.from && t.from.yPercent, y: value(t.vars.y), fromY: t.from && value(t.from.y), clipPath: t.vars.clipPath }));
-      out.pinLabels = pin.labels;
-    }
+    // Night Shift Task 28: no pinned or scroll-driven project sequence on the homepage any more.
+    out.pins = log.timelines.filter(tl => tl.vars.scrollTrigger && tl.vars.scrollTrigger.pin).length;
+    out.scrollTimelines = log.timelines.filter(tl => tl.vars.scrollTrigger).length;
+    out.scrollTweens = log.varsSeen.filter(v => v && v.scrollTrigger).length;
     if (env.skipWith) {
       let prevented = false;
       const event = { type: env.skipWith, key: 'a', preventDefault() { prevented = true; } };
@@ -209,6 +188,74 @@ console.log(JSON.stringify({
   reduced: run({ ...desktop, gsap: true, introClass: true, reduce: true }),
   phone: run({ width: 390, height: 844, fine: false, reduce: false, gsap: true, introClass: false, wait: true }),
 }));
+"""
+
+# Night Shift Task 28: runs assets/home.js's showreel controller with a fake <video> (play() resolves, or rejects like iOS Low
+# Power Mode), a fake IntersectionObserver the test drives by hand, matchMedia, Save-Data and optional GSAP.
+REEL_SCRIPT = HARNESS + r"""
+const source = fs.readFileSync(process.argv[1], 'utf8');
+const WIDE = { src: '/assets/video/cendavo-showreel-1600.mp4', poster: '/assets/video/cendavo-showreel-poster-1600.jpg' };
+const NARROW = { src: '/assets/video/cendavo-showreel-vertical-720.mp4', poster: '/assets/video/cendavo-showreel-vertical-poster-720.jpg' };
+const settle = () => new Promise(resolve => setImmediate(resolve));
+async function run(env) {
+  const src = element('source'); src.attrs.src = WIDE.src;
+  const video = element('video', { source: [src] });
+  video.attrs = { controls: '', poster: WIDE.poster, muted: '' };
+  video.dataset = { narrowSrc: NARROW.src, narrowPoster: NARROW.poster };
+  Object.assign(video, { paused: true, muted: false, plays: 0, pauses: 0, loads: 0 });
+  const fire = type => (video.listeners[type] || []).forEach(fn => fn({ type }));
+  video.removeAttribute = key => { delete video.attrs[key]; };
+  video.load = () => { video.loads++; };
+  video.play = () => {
+    video.plays++;
+    if (env.refuse) return Promise.reject(new Error('NotAllowedError'));  // the browser keeps the video paused
+    if (env.throws) throw new Error('old browser');
+    video.paused = false; fire('play');
+    return Promise.resolve();
+  };
+  video.pause = () => { video.pauses++; if (!video.paused) { video.paused = true; fire('pause'); } };
+  const toggle = element('toggle'); toggle.hidden = true; toggle.textContent = 'Play showreel'; toggle.attrs.type = 'button';
+  const reel = element('reel', { video: [video], '[data-reel-toggle]': [toggle] });
+  const root = element('html'); root.classList = classList(['js']);
+  const parts = { '[data-reel]': [reel] };
+  const doc = { documentElement: root, querySelector: s => (parts[s] || [])[0] || null, querySelectorAll: s => parts[s] || [] };
+  const observers = [];
+  class FakeObserver { constructor(callback, options) { this.callback = callback; this.options = options; this.targets = []; observers.push(this); } observe(target) { this.targets.push(target); } }
+  const { win } = makeWindow(env, {
+    IntersectionObserver: env.noObserver ? undefined : FakeObserver,
+    navigator: env.saveData ? { connection: { saveData: true } } : { connection: {} },
+  });
+  if (env.gsap) { const stub = makeGsap(env); win.gsap = stub.gsap; win.ScrollTrigger = stub.ScrollTrigger; }
+  let error = null;
+  try { vm.runInNewContext(source, { window: win, document: doc, setImmediate }); } catch (e) { error = String(e); }
+  const state = () => ({ playing: !video.paused, label: toggle.textContent, plays: video.plays });
+  const view = async on => { observers.forEach(o => o.callback([{ isIntersecting: on, target: video }])); await settle(); return state(); };
+  const press = async () => { (toggle.listeners.click || []).forEach(fn => fn({ type: 'click' })); await settle(); return state(); };
+  await settle();
+  const out = { error, controls: 'controls' in video.attrs, muted: video.muted, hidden: toggle.hidden, type: toggle.attrs.type,
+    src: src.attrs.src, poster: video.attrs.poster, loads: video.loads, observed: observers.flatMap(o => o.targets).filter(t => t === video).length,
+    threshold: observers.length ? observers[0].options.threshold : null, initial: state() };
+  out.steps = [];
+  out.steps.push(['in view', await view(true)]);
+  out.steps.push(['out of view', await view(false)]);
+  out.steps.push(['back in view', await view(true)]);
+  out.steps.push(['press', await press()]);
+  out.steps.push(['out of view', await view(false)]);
+  out.steps.push(['back in view', await view(true)]);
+  out.steps.push(['press', await press()]);
+  out.steps.push(['out of view', await view(false)]);
+  return out;
+}
+(async () => {
+  const desktop = { width: 1440, height: 900, fine: true, reduce: false };
+  const phone = { width: 390, height: 844, fine: false, reduce: false };
+  const cases = { desktop, phone, edge: { ...desktop, width: 640 }, wide: { ...desktop, width: 641 }, reduced: { ...desktop, reduce: true },
+    saveData: { ...phone, saveData: true }, refuse: { ...phone, refuse: true }, throws: { ...desktop, throws: true },
+    noObserver: { ...desktop, noObserver: true }, gsap: { ...desktop, gsap: true } };
+  const out = {};
+  for (const [name, env] of Object.entries(cases)) out[name] = await run(env);
+  console.log(JSON.stringify(out));
+})();
 """
 
 # Runs assets/motion-boot.js with stubbed document, matchMedia, location, sessionStorage and setTimeout.
@@ -547,7 +594,7 @@ class DemoScriptTests(unittest.TestCase):
         self.assertIsNone(reduced['heroEnd'])
         self.assertIsNone(reduced['introEnd'])
         self.assertNotIn('ns-intro', reduced['classes'])
-        self.assertFalse(reduced['pinned'])
+        self.assertEqual(reduced['pins'], 0)
 
     def test_home_intro_and_hero_stay_within_their_time_limits(self):
         r = self.node_json(HOME_SCRIPT, HOME)
@@ -622,89 +669,90 @@ class DemoScriptTests(unittest.TestCase):
                 self.assertIn(1, after['heroProgress'])  # the hero jumps to its final state
                 self.assertEqual(after['listenersLeft'], 0)
 
-    def test_home_projects_pin_is_capped_and_follows_focus(self):
+    def test_home_has_no_pinned_or_scroll_driven_project_sequence(self):
+        # Night Shift Task 28 (owner): the pinned concept-project sequence, its counter and its bone exit layer are gone. The
+        # three projects are plain cards, so home.js creates no pin and no scroll-linked timeline on any screen.
         r = self.node_json(HOME_SCRIPT, HOME)
-        first = r['first']
-        self.assertTrue(first['pinned'])
-        self.assertEqual(first['pinEnd'], '+=' + str(int(900 * 2.5)))  # two and a half viewport heights at most (Task 23)
-        self.assertIsInstance(first['pinScrub'], (int, float))
-        self.assertEqual(first['focusListeners'], 1)
-        # Focus inside the third project scrolls to where that project is fully shown, within the pinned range.
-        self.assertEqual(len(first['focusScroll']), 1)
-        self.assertGreater(first['focusScroll'][0], 1000)
-        self.assertLessEqual(first['focusScroll'][0], 1000 + 2 * 900)
-        self.assertEqual(first['counter'], '3')
-        # Phones: no pin, stacked reveals that run once per project.
-        phone = r['phone']
-        self.assertFalse(phone['pinned'])
-        self.assertIsNone(phone.get('pinEnd'))
-        self.assertEqual(phone['stackTimelines'], 3)
+        for name in ('first', 'pointer', 'late', 'noIntro', 'released', 'reduced', 'phone'):
+            with self.subTest(case=name):
+                self.assertEqual(r[name]['pins'], 0)
+                self.assertEqual(r[name]['scrollTimelines'], 0)
+                self.assertEqual(r[name]['scrollTweens'], 0)
+        js = HOME.read_text(encoding='utf-8')
+        for gone in ('pin:', 'PIN_', 'STACK_QUERY', 'work-exit', 'work-count', 'is-pinned', '[data-work]', '.proj'):
+            with self.subTest(gone=gone):
+                self.assertNotIn(gone, js)
 
-    def test_home_projects_swap_text_quickly_and_never_show_two_device_sets(self):
-        # Night Shift Task 17 (design critique): one project's text is always readable and the devices hand over back to back.
-        # Task 23: no opacity at all (no grey ghosts): copy moves through its masks, devices travel a full viewport.
-        r = self.node_json(HOME_SCRIPT, HOME)
-        tweens = r['first']['pinTweens']
-        text = [t for t in tweens if t['n'] == 3]  # each project's three copy masks
-        devices = [t for t in tweens if (t['names'][0] or '').startswith('devices')]
-        self.assertEqual(len(text), 4)
-        self.assertEqual(len(devices), 4)
-        for tween in tweens:
-            with self.subTest(tween=tween['names'][0], at=tween['at']):
-                self.assertIsNone(tween.get('opacity'))
-                self.assertIsNone(tween.get('fromOpacity'))
-        # Outgoing copy leaves up out of its mask; incoming copy rises in from below it.
-        self.assertEqual([(t.get('fromYPercent'), t.get('yPercent')) for t in text], [(None, -110), (110, 0), (None, -110), (110, 0)])
-        # Outgoing devices leave a full viewport up; incoming ones arrive from a full viewport below (always off-frame).
-        self.assertEqual([(t.get('fromY'), t.get('y')) for t in devices], [(None, -900), (900, 0), (None, -900), (900, 0)])
-        labels = r['first']['pinLabels']
-        for index in (1, 2):
-            text_out, text_in = text[2 * index - 2:2 * index]
-            dev_out, dev_in = devices[2 * index - 2:2 * index]
-            with self.subTest(transition=index):
-                self.assertLessEqual(text_out['end'] - text_out['at'], 0.25 + 1e-9)
-                self.assertLessEqual(text_in['end'] - text_in['at'], 0.25 + 1e-9)
-                # No gap longer than 0.1 and no overlap longer than 0.1 between outgoing and incoming text.
-                self.assertLessEqual(abs(text_in['at'] - text_out['end']), 0.1 + 1e-9)
-                # Incoming devices start at most 0.1 before the outgoing ones are gone.
-                self.assertGreaterEqual(dev_in['at'], dev_out['end'] - 0.1 - 1e-9)
-                # Everything has settled by the project's focus-scroll label.
-                self.assertLessEqual(max(t['end'] for t in (text_in, dev_in)), labels['p%d' % index] + 1e-9)
-                self.assertGreaterEqual(text_out['at'], labels['p%d' % (index - 1)])
+    def test_showreel_picks_the_cut_for_the_screen(self):
+        # (a) At 640px and below the vertical cut and poster; above it the 1600 ones (home.css switches the frame at the same width).
+        r = self.node_json(REEL_SCRIPT, HOME)
+        wide = ('/assets/video/cendavo-showreel-1600.mp4', '/assets/video/cendavo-showreel-poster-1600.jpg')
+        narrow = ('/assets/video/cendavo-showreel-vertical-720.mp4', '/assets/video/cendavo-showreel-vertical-poster-720.jpg')
+        for name, expected in (('desktop', wide), ('wide', wide), ('phone', narrow), ('edge', narrow)):
+            with self.subTest(case=name):
+                self.assertIsNone(r[name]['error'])
+                self.assertEqual((r[name]['src'], r[name]['poster']), expected)
+        self.assertEqual(r['phone']['loads'], 1)  # load() picks up the new source; preload="none" means nothing downloads yet
+        self.assertEqual(r['desktop']['loads'], 0)
+        for path in wide + narrow:
+            self.assertTrue((HOME.parents[1] / path.lstrip('/')).is_file(), path)
 
-    def test_home_projects_counter_matches_the_title_on_screen(self):
-        # Night Shift Task 21: the counter changes at the middle of each text swap (outgoing text gone, incoming arriving),
-        # measured on the timeline's own playhead, not at equal slices of the scroll and not ahead of the scrubbed visuals.
-        r = self.node_json(HOME_SCRIPT, HOME)
-        first = r['first']
-        self.assertFalse(first['pinScrollUpdate'])  # scroll progress runs ahead of the scrubbed timeline, so it is not used
-        text = [t for t in first['pinTweens'] if t['n'] == 3]
-        swaps = [(text[i]['end'] + text[i + 1]['at']) / 2 for i in (0, 2)]
-        samples = first['counterSamples']
-        self.assertEqual([p for p, _ in samples], [0, 0.2, 0.3, 0.6, 0.8, 1])
-        for progress, shown in samples:
-            with self.subTest(progress=progress):
-                time = progress * first['pinDuration']
-                expected = 1 + sum(1 for swap in swaps if time >= swap)
-                self.assertEqual(shown, str(expected))
-        # 0.2 is past the first swap but would still round to project 1 with equal slices.
-        self.assertEqual([shown for _, shown in samples], ['1', '2', '2', '2', '3', '3'])
-        for index, swap in enumerate(swaps):
-            with self.subTest(transition=index + 1):
-                text_out, text_in = text[2 * index], text[2 * index + 1]
-                self.assertGreaterEqual(swap, text_in['at'] - 1e-9)  # the new title has started to appear
-                self.assertLessEqual(swap, text_out['end'] + 1e-9)  # and the old one is on its way out
+    def test_showreel_swaps_native_controls_for_one_labelled_button(self):
+        # (b) JS removes the native controls and shows a type="button" toggle whose label follows the real playback state.
+        r = self.node_json(REEL_SCRIPT, HOME)
+        for name, result in r.items():
+            with self.subTest(case=name):
+                self.assertIsNone(result['error'])
+                self.assertFalse(result['controls'])
+                self.assertFalse(result['hidden'])
+                self.assertEqual(result['type'], 'button')
+                self.assertTrue(result['muted'])
+                self.assertEqual(result['initial'], {'playing': False, 'label': 'Play showreel', 'plays': 0})  # nothing before it is seen
+                for step, state in result['steps']:
+                    self.assertEqual(state['label'], 'Pause showreel' if state['playing'] else 'Play showreel', step)
 
-    def test_home_pin_release_layer_rises_after_the_last_project(self):
-        # Night Shift Task 23: a decorative bone layer rises over the lower stage after the last project's label, so focus
-        # never lands under it and the release meets the bone section that follows.
-        r = self.node_json(HOME_SCRIPT, HOME)
-        first = r['first']
-        exits = [t for t in first['pinTweens'] if t['names'] == ['exit']]
-        self.assertEqual(len(exits), 1)
-        self.assertGreaterEqual(exits[0]['at'], first['pinLabels']['p2'])
-        self.assertTrue(exits[0].get('clipPath', '').startswith('inset('))
-        self.assertAlmostEqual(exits[0]['end'], first['pinDuration'])
+    def test_showreel_plays_in_view_and_remembers_a_pause(self):
+        # (c) Plays when in view, pauses when it leaves; (d) after Pause, coming back into view does not resume it.
+        r = self.node_json(REEL_SCRIPT, HOME)
+        for name in ('desktop', 'phone', 'gsap'):
+            with self.subTest(case=name):
+                result = r[name]
+                self.assertEqual(result['observed'], 1)
+                self.assertGreater(result['threshold'], 0)
+                self.assertEqual([(step, state['playing']) for step, state in result['steps']],
+                                 [('in view', True), ('out of view', False), ('back in view', True), ('press', False),
+                                  ('out of view', False), ('back in view', False), ('press', True), ('out of view', False)])
+                self.assertEqual(result['steps'][5][1]['label'], 'Play showreel')
+
+    def test_showreel_never_starts_itself_with_reduced_motion_or_save_data(self):
+        # (e) Reduced motion and (g) Save-Data: no play() call until the visitor presses Play; the button offers "Play showreel".
+        r = self.node_json(REEL_SCRIPT, HOME)
+        for name in ('reduced', 'saveData'):
+            with self.subTest(case=name):
+                steps = r[name]['steps']
+                for step, state in steps[:3]:
+                    self.assertEqual(state, {'playing': False, 'label': 'Play showreel', 'plays': 0}, step)
+                self.assertEqual(steps[3], ['press', {'playing': True, 'label': 'Pause showreel', 'plays': 1}])
+                self.assertFalse(steps[4][1]['playing'])  # leaving the view still pauses it
+
+    def test_showreel_survives_refused_playback_and_missing_apis(self):
+        # (f) A refused play() (iOS Low Power Mode) or a throwing one leaves "Play showreel" and throws nothing; without
+        # IntersectionObserver nothing autoplays but the button still works; (h) it needs no GSAP.
+        r = self.node_json(REEL_SCRIPT, HOME)
+        for name in ('refuse', 'throws'):
+            with self.subTest(case=name):
+                self.assertIsNone(r[name]['error'])
+                self.assertGreater(r[name]['steps'][0][1]['plays'], 0)  # it tried
+                for step, state in r[name]['steps']:
+                    self.assertEqual((state['playing'], state['label']), (False, 'Play showreel'), step)
+        no_observer = r['noObserver']
+        self.assertEqual(no_observer['observed'], 0)
+        self.assertEqual(no_observer['steps'][2][1], {'playing': False, 'label': 'Play showreel', 'plays': 0})
+        self.assertEqual(no_observer['steps'][3][1], {'playing': True, 'label': 'Pause showreel', 'plays': 1})
+        self.assertEqual(r['desktop']['steps'], r['gsap']['steps'])  # the same with or without GSAP
+        # The controller sits before the "GSAP is optional" bail-out, so a missing GSAP never stops it.
+        js = HOME.read_text(encoding='utf-8')
+        self.assertLess(js.index("doc.querySelector('[data-reel]')"), js.index('if (!gsap || !ScrollTrigger)'))
 
     def test_motion_boot_only_starts_the_intro_on_a_first_plain_visit(self):
         r = self.node_json(BOOT_SCRIPT, BOOT)
