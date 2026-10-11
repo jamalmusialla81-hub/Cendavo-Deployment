@@ -450,6 +450,46 @@ class DesignSystemTests(unittest.TestCase):
         self.assertIn('.compare{--pos:50%', self.home_css)
         self.assertIn('clip-path:inset(0 calc(100% - var(--pos)) 0 0)', self.home_css)
 
+    def test_dated_before_page_reads_as_a_full_2009_site(self):
+        # Supervisor review (Task 11): no large empty area; a second column of news, a guestbook link and a hit counter.
+        before = re.search(r'<div class="mock mock-before" aria-hidden="true">(.*?)<div class="mock mock-after"', self.home_main, re.S).group(1)
+        news = re.search(r'<div class="old-news">(.*?)</div>', before, re.S).group(1)
+        self.assertIn('<b>Latest news</b>', news)
+        self.assertGreaterEqual(len(re.findall(r'<i>\d{2}/\d{2}/20\d{2}</i>', news)), 2)
+        self.assertIn('<div class="old-cols">', before)
+        self.assertRegex(before, r'<u>[^<]*[Gg]uestbook[^<]*</u>')
+        self.assertIn('class="old-count"', before)
+        self.assertIn('Under construction', before)
+        self.assertIn('2009', before)
+        self.assertRegex(self.home_css, r'\.old-cols\{[^}]*grid-template-columns:auto minmax\(0,1fr\)')
+
+    def test_statement_text_is_centred_against_its_photo(self):
+        rule = re.search(r'\.statement-body\{([^}]*)\}', self.home_css).group(1)
+        self.assertIn('align-self:center', rule)
+        self.assertNotIn('align-self:end', rule)
+
+    def test_harbourside_shows_its_homepage_phone_on_small_screens(self):
+        # At 768px and below the laptop and booking phone give way to one homepage phone, kept in normal flow.
+        devices = re.search(r'<div class="proj-devices devices-hb">(.*?)</article>', self.home_main, re.S).group(1)
+        self.assertEqual(devices.count('role="img"'), 3)
+        phone = re.search(r'<div class="phone phone-home" role="img" aria-label="([^"]+)">(.*?)</div></div></div></div>', devices, re.S)
+        self.assertIsNotNone(phone)
+        self.assertIn('Harbourside Mobile Detailing homepage', phone.group(1))
+        screen = phone.group(2)
+        self.assertIn('<div class="phone-screen" aria-hidden="true"><div class="ms hbm">', screen)
+        self.assertIn('<div class="hbm-hero"><img ', screen)
+        self.assertIn('Showroom finish, in your driveway.', screen)
+        self.assertIn('<div class="hbm-btn">Book a detail</div>', screen)
+        unguarded, blocks = without_blocks(self.home_css, '@media(max-width:768px){')
+        self.assertIn('.phone-home{display:none}', unguarded)
+        small = ''.join(blocks)
+        self.assertIn('.devices-hb .laptop,.devices-hb .phone-sm{display:none}', small)
+        shown = re.search(r'\.devices-hb \.phone-home\{([^}]*)\}', small).group(1)
+        self.assertIn('display:block', shown)
+        self.assertNotIn('position:absolute', shown)
+        # The 768px rules come after the 860px ones, so they win at equal specificity.
+        self.assertGreater(self.home_css.index('@media(max-width:768px){'), self.home_css.index('@media(max-width:860px){'))
+
     def test_concept_projects_are_labelled(self):
         articles = re.findall(r'<article class="proj [^"]*"[^>]*>(.*?)</article>', self.home_main, re.S)
         self.assertEqual(len(articles), 3)
@@ -861,6 +901,31 @@ class InnerPageTests(unittest.TestCase):
         self.assertIn('<p class="notice" id="enquiry-privacy">', main)
         self.assertNotIn('@', main)
         self.assertNotIn('<script', main)
+
+    def test_demo_table_scrolls_inside_a_labelled_region(self):
+        # Supervisor review (Task 11): the page must not scroll sideways on phones. Every table sits in a focusable,
+        # labelled overflow container, and the demo columns may shrink below the table's width (minmax(0,1fr), not 1fr).
+        main = self.main['demo/index.html']
+        self.assertGreaterEqual(main.count('<table'), 1)
+        wraps = re.findall(r'<div class="table-wrap"([^>]*)><table\b', main)
+        self.assertEqual(len(wraps), main.count('<table'))
+        for attrs in wraps:
+            with self.subTest(wrap=attrs):
+                self.assertIn('role="region"', attrs)
+                self.assertIn('tabindex="0"', attrs)
+                label = re.search(r'aria-labelledby="([^"]+)"', attrs).group(1)
+                self.assertRegex(main, rf'<h2 id="{re.escape(label)}">[^<]+</h2>')
+        css = (OUT / 'assets/site.css').read_text() + (OUT / 'assets/pages.css').read_text()
+        self.assertIn('.table-wrap{overflow-x:auto}', css)
+        checked = 0
+        for selector, body in re.findall(r'([^{}]*)\{([^{}]*)\}', css):
+            if not re.search(r'\.demo-(?:shell|grid)(?![\w-])', selector):
+                continue
+            for value in re.findall(r'grid-template-columns:([^;]+)', body):
+                checked += 1
+                with self.subTest(selector=selector.strip()[:60], value=value):
+                    self.assertNotRegex(value, r'(?<![,\w.])1fr')
+        self.assertGreaterEqual(checked, 3)
 
     def test_no_inline_scripts_or_styles_and_headers_unchanged(self):
         for route in self.ROUTES:
