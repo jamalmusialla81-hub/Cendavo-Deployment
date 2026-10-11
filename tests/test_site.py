@@ -1725,5 +1725,178 @@ class RepetitionTests(unittest.TestCase):
                 self.assertNotIn('\\2014', css)
 
 
+# Night Shift Task 20: the Work page's Harbourside case study is left exactly as it was (sha256 of its source <article>).
+HARBOURSIDE_SHA256 = '55eee74d6abbd44b17cffe7bd56b4704abae5169c6eaedd2c2d38b558a4a1301'
+# The photos /work/ referenced before Task 20; the new art direction reuses them and adds no new downloads.
+WORK_PHOTOS = {'barber-chair', 'barber-cut', 'barber-interior', 'barber-shave', 'detail-buffer', 'detail-dash', 'detail-headlight',
+               'detail-mono', 'detail-splash', 'detail-wax', 'garden-deck', 'garden-lawn', 'garden-path', 'garden-walk', 'garden-wall'}
+
+
+class WorkArtDirectionTests(unittest.TestCase):
+    """Night Shift Task 20: three concept projects, three art directions (Harbourside as is, Greenline mirrored with a pull
+    line and overlapping screens, Fade & Co led by its screens on a dimmed photo band), in markup and CSS only."""
+
+    @classmethod
+    def setUpClass(cls):
+        build()
+        root = Path(__file__).resolve().parents[1]
+        cls.source = (root / 'pages/work.html').read_text()
+        cls.work = main_of((OUT / 'work/index.html').read_text())
+        cls.pages_css = (OUT / 'assets/pages.css').read_text()
+        cls.base = base_rules(cls.pages_css)
+        cls.narrow = media_blocks(cls.pages_css, 'max-width:860px')
+        site = (OUT / 'assets/site.css').read_text()
+        cls.tokens = {k: v.strip() for k, v in re.findall(r'(--[\w-]+):([^;]+)', re.search(r':root\{(.*?)\}', site, re.S).group(1))}
+
+    def article(self, slug, html=None):
+        return re.search(rf'<article [^>]*id="{slug}"[^>]*>.*?</article>', html or self.source, re.S).group(0)
+
+    def test_harbourside_is_unchanged(self):
+        import hashlib
+        self.assertEqual(hashlib.sha256(self.article('harbourside').encode()).hexdigest(), HARBOURSIDE_SHA256)
+        self.assertEqual(re.findall(r'<article [^>]*id="([^"]+)"', self.source), ['harbourside', 'greenline', 'fade-co'])
+
+    def test_greenline_is_mirrored_with_a_pull_line(self):
+        gl = self.article('greenline')
+        self.assertIn('grid-column:1/span 7', rules_for(self.base, '.gl-cover-media')[0])
+        self.assertIn('grid-column:8/-1', rules_for(self.base, '.gl-cover-copy')[0])
+        # Mirrored in CSS only: the copy (and its h2) still comes before the photo, and the screens follow the cover.
+        self.assertLess(gl.index('class="gl-cover-copy"'), gl.index('</h2>'))
+        self.assertLess(gl.index('</h2>'), gl.index('class="gl-cover-media"'))
+        self.assertLess(gl.index('</header>'), gl.index('<section class="cs-screens'))
+        self.assertLess(gl.index('<section class="cs-screens'), gl.index('class="cs-brief"'))
+        brief = re.search(r'<section class="cs-brief"[^>]*>(.*?)</section>', gl, re.S).group(1)
+        self.assertEqual(re.findall(r'<p class="([^"]+)"', brief), ['gl-pull'])
+        self.assertEqual(len(re.findall(r'<li><b>', gl)), 3)  # the three "what the site does" points stay
+        pull = rules_for(self.base, '.gl-pull')
+        self.assertEqual(len(pull), 1)
+        self.assertIn('clamp(1.9rem,3.4vw,3.25rem)', pull[0])
+        self.assertIn('var(--font-display)', pull[0])
+
+    def test_greenline_screens_overlap_the_cover_on_wide_screens_only(self):
+        stage = rules_for(self.base, '.stage-gl')
+        self.assertEqual(len(stage), 1)
+        self.assertIn('margin-top:calc(var(--gl-lift) * -1)', stage[0])
+        self.assertRegex(stage[0], r'--gl-lift:clamp\(\d+px,\d+vw,\d+px\)')
+        # The phone drops below "Key screens" by the full lift, so only the laptop rises over the photo.
+        self.assertIn('calc(var(--gl-lift) + 24px)', rules_for(self.base, '.stage-gl .scr-phone')[0])
+        self.assertIn('overflow-x:clip', rules_for(self.base, '#greenline .cs-screens')[0])
+        narrow = rules_for(self.narrow, '.stage-gl')
+        self.assertEqual(len(narrow), 1)
+        self.assertIn('margin-top:0', narrow[0])
+        self.assertEqual(rules_for(self.narrow, '.stage-gl .scr-phone'), ['margin:40px auto 0'])
+        self.assertEqual(rules_for(self.narrow, '#greenline .cs-screens .pg-label'), ['margin:0 0 40px'])
+        # Phones (390px): nothing in the small-screen rules is wider than the viewport.
+        for css in (self.narrow, media_blocks(self.pages_css, 'max-width:640px'), media_blocks(self.pages_css, 'max-width:900px')):
+            for px in re.findall(r'(?<![-\w])(?:min-)?width:(\d+)px', css):
+                self.assertLessEqual(int(px), 390)
+            for vw in re.findall(r'([\d.]+)vw', css):
+                self.assertLessEqual(float(vw), 100)
+
+    def test_greenline_green_is_one_sparing_accessible_accent(self):
+        greenline = [(selectors, body) for selectors, body in re.findall(r'([^{}]+)\{([^{}]*)\}', re.sub(r'/\*.*?\*/', '', self.pages_css, flags=re.S))
+                     if '#greenline' in selectors or '.gl-' in selectors]
+        colours = {c.upper() for _, body in greenline for c in re.findall(r'#[0-9A-Fa-f]{6}\b', body)}
+        self.assertEqual(colours, {'#23422F'})
+        self.assertLessEqual(self.pages_css.upper().count('#23422F'), 3)
+        self.assertIn('color:#23422F', rules_for(self.base, '#greenline .cs-label')[0])
+        self.assertGreaterEqual(contrast('#23422F', self.tokens['--bone']), 4.5)
+
+    def test_fade_co_leads_with_its_screens_on_a_dimmed_band(self):
+        fc = self.article('fade-co')
+        self.assertNotIn('cs-cover', fc)
+        order = ['</h2>', CONCEPT_LABEL, '<dl class="cs-facts">', '</header>', '<div class="fc-band" aria-hidden="true"',
+                 '<section class="cs-screens', 'class="cs-brief"', 'class="cs-does"']
+        positions = [fc.index(marker) for marker in order]
+        self.assertEqual(positions, sorted(positions))
+        band = re.search(r'<div class="fc-band"[^>]*>(.*?)</div>', fc, re.S).group(1)
+        screens = re.search(r'<section class="cs-screens[^"]*"[^>]*>.*?</section>', fc, re.S).group(0)
+        self.assertNotIn('fc-band', screens)
+        parser = ImageCollector()
+        parser.feed(band)
+        self.assertEqual(len(parser.images), 1)
+        attrs, _ = parser.images[0]
+        self.assertRegex(attrs['src'], r'^/assets/images/barber-interior-(?:800|1600)\.jpg$')
+        self.assertIn('barber-interior-800.jpg 800w', attrs['srcset'])
+        self.assertTrue(attrs.get('sizes'))
+        self.assertEqual((attrs.get('alt'), attrs.get('loading'), attrs.get('decoding')), ('', 'lazy', 'async'))
+        # Dimming: a solid ink overlay (no CSS filter), checked over pure white as the worst case.
+        overlay = rules_for(self.base, '.fc-band::after')
+        self.assertEqual(len(overlay), 1)
+        alpha = float(re.fullmatch(r'.*background:rgba\(14,14,13,([\d.]+)\).*', overlay[0]).group(1))
+        self.assertGreaterEqual(alpha, 0.75)
+        for selector in ('.fc-band', '.fc-band::after', '.fc-band img', '.fc-stage'):
+            for rule in rules_for(self.pages_css, selector):
+                self.assertNotRegex(rule, r'(?<![-\w])filter:')
+        for colour in (self.tokens['--stone'], self.tokens['--bone']):
+            self.assertGreaterEqual(contrast(colour, ink_over_white(alpha)), 4.5)
+
+    def test_fade_co_screens_keep_their_band_padding(self):
+        # Resolve padding on the Fade & Co screens section the way the cascade does: of the top-level rules whose selector is
+        # a compound of classes the section carries, the highest specificity wins, then the later rule.
+        section = re.search(r'<section class="([^"]+)" aria-labelledby="fc-screens">', self.source).group(1).split()
+        self.assertEqual(section, ['cs-screens', 'fc-screens'])
+        winner = None
+        rules = re.findall(r'([^{}]+)\{([^{}]*)\}', re.sub(r'/\*.*?\*/', '', self.base, flags=re.S))
+        for order, (selectors, body) in enumerate(rules):
+            for selector in (part.strip() for part in selectors.split(',')):
+                classes = re.fullmatch(r'((?:\.[\w-]+)+)', selector)
+                if not classes or not re.search(r'(?<![-\w])padding(?:-block|-top)?:', body):
+                    continue
+                names = classes.group(1).lstrip('.').split('.')
+                if set(names) <= set(section) and (winner is None or (len(names), order) >= winner[:2]):
+                    winner = (len(names), order, selector, body)
+        self.assertIsNotNone(winner)
+        self.assertEqual(winner[2], '.cs-screens.fc-screens')
+        top = re.search(r'padding-block:(\S+?)(?: \S+)?(?:;|$)', winner[3]).group(1)
+        self.assertNotEqual(top, '0')
+        self.assertTrue(top.startswith('clamp(56px'))
+
+    def test_page_layout_classes_do_not_reuse_mockup_class_names(self):
+        # kit.css styles the mini-site mockups with unscoped classes (e.g. .fc-body is absolutely positioned inside a
+        # phone screen); a page-level wrapper with the same name would inherit that layout and be pulled out of flow.
+        kit = set(re.findall(r'\.([a-z][\w-]*)', re.sub(r'/\*.*?\*/', '', (OUT / 'assets/kit.css').read_text(), flags=re.S)))
+        outside_mockups = re.sub(r'<div class="(?:laptop|phone)-screen" aria-hidden="true">.*?</figure>', '', self.source, flags=re.S)
+        for article in re.findall(r'<article\b.*?</article>', outside_mockups, re.S):
+            for classes in re.findall(r'class="([^"]+)"', article):
+                for name in classes.split():
+                    if name.startswith(('fc-', 'gl-', 'hb-')):
+                        with self.subTest(name=name):
+                            self.assertNotIn(name, kit)
+        self.assertIn('<div class="wrap g12 cs-body fc-copy">', self.source)
+
+    def test_work_images_stay_lazy_and_reuse_existing_photos(self):
+        self.assertEqual({u.rsplit('-', 1)[0] for u in re.findall(r'/assets/images/([a-z-]+-(?:800|1600))\.jpg', self.source)}, WORK_PHOTOS)
+        self.assertEqual(self.source.count('fetchpriority="high"'), 1)
+        below = self.source.split('</ul>', 1)[1]  # everything after the project index
+        parser = ImageCollector()
+        parser.feed(below)
+        self.assertTrue(parser.images)
+        for attrs, _ in parser.images:
+            with self.subTest(img=attrs.get('src')):
+                self.assertEqual((attrs.get('loading'), attrs.get('decoding')), ('lazy', 'async'))
+                for name in ('width', 'height', 'srcset', 'sizes'):
+                    self.assertTrue(attrs.get(name), name)
+        # Motion: only the existing hooks, and still one device stage per project.
+        self.assertTrue(set(re.findall(r'\s(data-[a-z-]+)', self.work)) <= set(MOTION_HOOKS) | {'data-ph-fade'})
+        for slug in ('harbourside', 'greenline', 'fade-co'):
+            self.assertEqual(self.article(slug, self.work).count(' data-devices'), 1)
+
+    def test_work_sections_are_shorter(self):
+        self.assertEqual(rules_for(self.base, '.cs-body'), ['padding-block:clamp(48px,6vw,88px)'])
+        self.assertEqual(rules_for(self.base, '.cs.bone'), ['padding-top:var(--section)'])
+        self.assertIn('padding-block:0 var(--section)', rules_for(self.base, '.cs-screens')[0])
+        self.assertIn('padding-top:clamp(48px,6vw,88px)', rules_for(self.base, '.cs-screens-dark')[0])
+        # Only Harbourside's cover keeps a near-full-screen height; the other projects open compactly.
+        for selectors, body in re.findall(r'([^{}]+)\{([^{}]*)\}', self.pages_css):
+            if re.search(r'\.(?:cs|gl|fc|stage|scr|wk)-', selectors):
+                for value in re.findall(r'min-height:min\((\d+)s?vh', body) + re.findall(r'min-height:(\d+)s?vh', body):
+                    with self.subTest(selectors=selectors.strip()):
+                        self.assertTrue(int(value) < 90 or selectors.strip() == '.cs-cover')
+        self.assertEqual(self.source.count('class="cs-cover"'), 1)
+        for needle in ('class="wrap wk-index"','id="demo"', 'href="/demo/"', 'class="cta-band"', 'href="/contact/"'):
+            self.assertIn(needle, self.work)
+
+
 if __name__ == '__main__':
     unittest.main()

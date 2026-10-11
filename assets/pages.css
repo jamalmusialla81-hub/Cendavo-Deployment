@@ -31,7 +31,7 @@
 /* Photo-backed closing call to action */
 .cta-band{position:relative;isolation:isolate;overflow:hidden;padding-block:clamp(120px,18vw,240px)}
 .cta-band-media{position:absolute;inset:0;z-index:-1}
-.cta-band-media img,.sv-band img,.sv-hero-media img,.chap-photo img,.care-photo img,.pr-inc-photo img,.pr-care-media img,.ct-photo img,.wk-tile-img img,.cs-cover-media img,.gl-cover-media img,.aff-img img{width:100%;height:100%;object-fit:cover}
+.cta-band-media img,.sv-band img,.sv-hero-media img,.chap-photo img,.care-photo img,.pr-inc-photo img,.pr-care-media img,.ct-photo img,.wk-tile-img img,.cs-cover-media img,.gl-cover-media img,.fc-band img,.aff-img img{width:100%;height:100%;object-fit:cover}
 .cta-band-media::after{content:"";position:absolute;inset:0;background:linear-gradient(90deg,rgba(14,14,13,.86) 0%,rgba(14,14,13,.6) 55%,rgba(14,14,13,.35) 100%)}
 .cta-band h2{max-width:12ch;margin:0;font-size:clamp(3rem,7.4vw,7.4rem);font-weight:800;font-stretch:84%;line-height:.93;letter-spacing:-.025em}
 .cta-band p{margin:28px 0 36px;max-width:40ch;color:#D6D2CA;font-size:clamp(1.0625rem,.5vw + .95rem,1.25rem)}
@@ -173,7 +173,6 @@
 .cs-cover{position:relative;isolation:isolate;min-height:min(90svh,860px);display:flex;align-items:flex-end}
 .cs-cover-media{position:absolute;inset:0;z-index:-1;overflow:hidden;background:var(--ink-2)}
 .cs-cover-media::after{content:"";position:absolute;inset:0;background:linear-gradient(0deg,var(--ink) 0%,rgba(14,14,13,.55) 32%,rgba(14,14,13,0) 62%)}
-.cs-fc .cs-cover-media::after{background:linear-gradient(90deg,rgba(14,14,13,.9) 0%,rgba(14,14,13,.6) 40%,rgba(14,14,13,.2) 75%),linear-gradient(0deg,var(--ink) 0%,rgba(14,14,13,0) 30%)}
 .cs-cover-in{padding-block:180px clamp(40px,5vw,72px)}
 /* Harbourside: the cover photo (detail-mono) is mostly blown-out white spray, so the car is moved right and a dark scrim holds
    behind the left half, where the copy sits. The label and facts are kept to 44% of the row so they stay on the scrim; the
@@ -181,7 +180,7 @@
 #harbourside .cs-cover-media img{object-position:70% 50%}
 #harbourside .cs-cover-media::after{background:linear-gradient(90deg,rgba(14,14,13,.9) 0%,rgba(14,14,13,.9) 50%,rgba(14,14,13,0) 80%),linear-gradient(0deg,var(--ink) 0%,rgba(14,14,13,0) 30%)}
 #harbourside .cs-label,#harbourside .cs-facts{max-width:44%}
-.cs-body{padding-block:var(--section)}
+.cs-body{padding-block:clamp(48px,6vw,88px)}
 .cs-brief{grid-column:1/span 5}
 .cs-does{grid-column:7/-1}
 .cs-lede{font:700 clamp(1.5rem,2.5vw,2.35rem)/1.12 var(--font-display);font-stretch:92%;letter-spacing:-.014em;max-width:26ch;color:inherit}
@@ -191,16 +190,32 @@
 .cs-list b{color:var(--bone);font:650 1em/1.4 var(--font-display)}
 .bone .cs-list li{color:var(--ink-soft);border-bottom-color:var(--line-dark)}
 .bone .cs-list b{color:var(--ink)}
-.cs.bone{padding-top:var(--section-lg)}
+.cs.bone{padding-top:var(--section)}
+/* Greenline: mirrored (photo left, copy right). The copy still comes first in the markup, so the title is read first. */
 .gl-cover{align-items:end}
-.gl-cover-copy{grid-column:1/span 5;grid-row:1;padding-bottom:8px}
+.gl-cover-copy{grid-column:8/-1;grid-row:1;padding-bottom:8px}
 .gl-cover-copy .cs-title{max-width:9ch;font-size:clamp(3rem,6.2vw,6.4rem)}
-.gl-cover-media{grid-column:6/-1;grid-row:1;aspect-ratio:4/3;overflow:hidden;background:var(--bone-2)}
+.gl-cover-media{grid-column:1/span 7;grid-row:1;aspect-ratio:4/3;overflow:hidden;background:var(--bone-2)}
 .gl-cover-media img{object-position:40% 60%}
+#greenline .cs-label{color:#23422F}
+#greenline .cs-brief{grid-column:1/span 7}
+#greenline .cs-does{grid-column:9/-1}
+.gl-pull{margin:0;max-width:22ch;color:var(--ink);font:760 clamp(1.9rem,3.4vw,3.25rem)/1.04 var(--font-display);font-stretch:88%;letter-spacing:-.02em}
+.gl-pull::before{content:"";display:block;width:56px;height:4px;margin-bottom:clamp(20px,2vw,28px);background:#23422F}
+/* Fade & Co: a compact title block, then the key screens on a dimmed full-bleed photo band as the opener. The band is a
+   decorative sibling of the screens section (aria-hidden) and its solid ink overlay is checked against white in tests. */
+.fc-head{display:grid;grid-template-columns:minmax(0,7fr) minmax(0,5fr);column-gap:var(--col-gap);align-items:end;padding-block:var(--section) clamp(40px,4vw,64px)}
+.fc-head .cs-title,.fc-head .cs-label{grid-column:1}
+.fc-head .cs-facts{grid-column:2;grid-row:1/span 2;align-self:end;margin-top:0}
+.fc-stage{position:relative;isolation:isolate}
+.fc-band{position:absolute;inset:0;z-index:-1;overflow:hidden;background:var(--ink-2)}
+.fc-band::after{content:"";position:absolute;inset:0;background:rgba(14,14,13,.85)}
+.cs-screens.fc-screens{padding-block:clamp(56px,7vw,104px)}
+.fc-copy .cs-lede{font-size:clamp(1.35rem,2vw,1.85rem)}
 /* Work: key screens of each concept project (device frames and mini-sites come from kit.css) */
-.cs-screens{overflow:hidden;padding-block:0 var(--section-lg)}
-.cs-screens-dark{padding-top:var(--section);background:var(--ink-2)}
-.cs-screens .pg-label{margin-bottom:clamp(40px,5vw,72px)}
+.cs-screens{overflow:hidden;padding-block:0 var(--section)}
+.cs-screens-dark{padding-top:clamp(48px,6vw,88px);background:var(--ink-2)}
+.cs-screens .pg-label{margin-bottom:clamp(28px,3.4vw,48px)}
 .scr{margin:0}
 .scr figcaption{margin-top:18px;padding-top:12px;border-top:1px solid var(--line);color:var(--stone);font:600 .9rem/1.3 var(--font-display);font-stretch:104%}
 .bone .scr figcaption{border-top-color:var(--line-dark);color:var(--ink-soft)}
@@ -212,10 +227,16 @@
 .stage-fc{grid-template-columns:auto auto minmax(0,1fr)}
 .stage-hb .phone,.stage-fc .phone{--pw:clamp(150px,13vw,214px)}
 .stage-hb .scr-phone-b,.stage-fc .scr-phone-b{margin-bottom:clamp(32px,5vw,80px)}
-.stage-gl{padding-bottom:40px}
-.stage-gl .scr-laptop{width:80%}
-.stage-gl .scr-phone{position:absolute;right:2%;bottom:0}
-.stage-gl .phone{--pw:clamp(170px,15vw,248px)}
+/* Greenline key screens: on wide screens the stage is lifted so the laptop overlaps the bottom edge of the cover photo
+   (columns 1-7). "Key screens" sits in the copy column (8-12) and the phone drops below it, so nothing covers text. */
+#greenline .cs-screens{overflow:visible;overflow-x:clip}
+#greenline .cs-screens .pg-label{margin:0 0 0 calc((100% - 11 * var(--col-gap)) * 7 / 12 + 7 * var(--col-gap))}
+#greenline .cs-body{padding-top:0}
+.stage-gl{--gl-lift:clamp(96px,12vw,180px);display:flex;justify-content:space-between;align-items:flex-start;margin-top:calc(var(--gl-lift) * -1)}
+.stage-gl .scr-laptop{width:56%}
+.stage-gl .scr-phone{margin:calc(var(--gl-lift) + 24px) 6% 0 0}
+.stage-gl .phone{--pw:clamp(150px,13vw,214px)}
+#demo{padding-block:var(--section)}
 .wk-demo-card{grid-column:1/span 5}
 .wk-demo-tag{display:inline-block;margin-bottom:28px;padding:7px 12px;border:1px solid var(--ink);border-radius:var(--radius-sm);color:var(--ink);font:620 .9rem/1.2 var(--font-display)}
 .bone p.wk-demo-tag{color:var(--ink)}
@@ -288,20 +309,23 @@
 .cs-cover{display:block;min-height:0}
 .cs-cover-media{position:relative;height:72vw;max-height:560px;z-index:0}
 .cs-cover-in{position:relative;margin-top:-18vw;padding-top:0}
-.cs-fc .cs-cover-media::after{background:linear-gradient(0deg,var(--ink) 0%,rgba(14,14,13,0) 50%)}
 /* The copy overlaps the bottom 18vw (at most about 28%) of the photo: keep that band near-opaque ink. */
 #harbourside .cs-cover-media::after{background:linear-gradient(0deg,var(--ink) 0%,rgba(14,14,13,.88) 32%,rgba(14,14,13,0) 64%)}
 #harbourside .cs-label,#harbourside .cs-facts{max-width:none}
 .gl-cover-media{margin:36px calc(-1 * var(--gut)) 0}
+.fc-head{display:block}
+.fc-head .cs-facts{margin-top:clamp(28px,3vw,44px)}
 /* Key screens: the laptop takes the full row, the two phones share the next one; nothing is positioned absolutely. */
 .stage-hb,.stage-fc{grid-template-columns:repeat(2,minmax(0,1fr));row-gap:40px;align-items:start}
 .stage-hb .scr-laptop,.stage-fc .scr-laptop{grid-column:1/-1}
 .stage-hb .phone,.stage-fc .phone{--pw:min(220px,calc(50vw - var(--gut) - 10px))}
 .stage-hb .scr-phone-b,.stage-fc .scr-phone-b{margin:48px 0 0}
 .scr-phone{justify-self:center}
-.stage-gl{padding-bottom:0}
+#greenline .cs-screens{padding-top:48px}
+#greenline .cs-screens .pg-label{margin:0 0 40px}
+.stage-gl{display:block;margin-top:0}
 .stage-gl .scr-laptop{width:auto}
-.stage-gl .scr-phone{position:static;margin:40px auto 0}
+.stage-gl .scr-phone{margin:40px auto 0}
 .stage-gl .phone{--pw:min(240px,52vw)}
 }
 @media(max-width:640px){
