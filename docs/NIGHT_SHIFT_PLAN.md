@@ -148,3 +148,10 @@ Source: `docs/design/night-shift/critique/CRITIQUE3.md` items 1–5 (frame captu
 4. **Home "What we do":** rows also become active on scroll (ScrollTrigger centre crossing), not only hover/focus; dim inactive row headings (≥3:1 contrast); swap the photo with a clip-path wipe instead of opacity; Care plan photo → `garden-deck`.
 5. **Pin release:** add a short exit where a bone-coloured layer wipes up as the pin ends, so the release lands on the next section's colour instead of a hard cut.
 All motion inside `gsap.matchMedia` reduced-motion guard; transform/opacity/clip-path only; CLS 0; same test rules; **never `cd` in Bash**.
+
+## Task 24 — Services variety and photo repetition (profile `site`)
+Source: `docs/design/night-shift/critique/CRITIQUE3.md` item 6 and "minor". Do these, nothing else:
+1. **Services page**: the same chapter template runs three times. Keep New website and Redesign as they are; make **Care plan** one full-bleed dark band without a photo — the "Every month" items set as a large typographic list (Archivo, ~2 rem) in two columns, with the who/what/how-long/what-we-need facts in a compact row beneath.
+2. **Photo repetition**: Services closing CTA `trade-panel` → `garden-path` (`trade-panel` is already the New website photo); Work closing CTA `garden-lawn` → `detail-rear`; About closing CTA `garden-lawn` → `garden-deck` only if `garden-deck` is not already on About, otherwise `detail-headlight`. Keep `garden-lawn` on Home only.
+3. Drop the generic fade-up on headings below the fold on inner pages if Task 23 introduced consistent line-mask reveals (avoid double animation); otherwise leave as is.
+Never use `barber-tools`. Keep accessibility, CSP, enquiry wiring, tests; same test rules; **never `cd` in Bash**.
