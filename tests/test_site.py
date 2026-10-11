@@ -358,11 +358,18 @@ class DesignSystemTests(unittest.TestCase):
         for css in (self.css, self.home_css, self.pages_css, self.kit_css):
             for banned in ('@import', 'http', 'fonts.googleapis'):
                 self.assertNotIn(banned, css)
-        for route in self.ROUTES:
+        from scripts.build_site import BASE_URL
+        for route in self.ROUTES + ['404.html']:
             with self.subTest(route=route):
                 html = (OUT / route).read_text()
                 self.assertNotRegex(html, r'\bsrc="(?!/)')
-                self.assertNotRegex(html, r'<link[^>]+href="(?!/)')
+                self.assertNotRegex(html, r'\bsrcset="(?!/)')
+                # The one absolute <link> allowed is the canonical URL, and only on our own origin.
+                rest = re.sub(rf'<link rel="canonical" href="{re.escape(BASE_URL)}/[^"]*">', '', html, count=1)
+                self.assertNotRegex(rest, r'<link[^>]+href="(?!/)')
+                # Absolute URLs in Open Graph metadata (read by link-preview crawlers, never by visitors) stay on our origin.
+                for url in re.findall(r'content="([a-z][a-z0-9+.-]*:/*[^"]*)"', html, re.I):
+                    self.assertTrue(url.startswith(BASE_URL + '/'), url)
         headers = (OUT / '_headers').read_text()
         self.assertIn("style-src 'self';", headers)
         self.assertIn("font-src 'self';", headers)
@@ -496,7 +503,7 @@ class DesignSystemTests(unittest.TestCase):
         self.assertIn('Harbourside Mobile Detailing homepage', phone.group(1))
         screen = phone.group(2)
         self.assertIn('<div class="phone-screen" aria-hidden="true"><div class="ms hbm">', screen)
-        self.assertIn('<div class="hbm-hero"><img ', screen)
+        self.assertRegex(screen, r'<div class="hbm-hero"><picture><source type="image/avif" [^>]*><img ')
         self.assertIn('Showroom finish, in your driveway.', screen)
         self.assertIn('<div class="hbm-btn">Book a detail</div>', screen)
         unguarded, blocks = without_blocks(self.home_css, '@media(max-width:768px){')
@@ -914,7 +921,8 @@ class InnerPageTests(unittest.TestCase):
         for route in MOTION_ROUTES:
             for frame in re.findall(r'<(?:div|figure|span)[^>]*data-parallax[^>]*>(.*?)</(?:div|figure|span)>', self.main[route], re.S):
                 with self.subTest(route=route, frame=frame[:50]):
-                    self.assertTrue(frame.lstrip().startswith('<img '))
+                    # Exactly one photo: its <picture> (AVIF source, then the JPEG img) and nothing else.
+                    self.assertRegex(frame.strip(), r'^<picture><source type="image/avif" [^>]*><img [^>]*></picture>$')
 
     def test_images_on_every_route_are_local_sized_and_described(self):
         for route in self.ROUTES:
@@ -1093,6 +1101,160 @@ class InnerPageTests(unittest.TestCase):
                 low, high = int(weight.group(1)), int(weight.group(2) or weight.group(1))
                 weights.update(w for w in (400, 700) if low <= w <= high)
         self.assertEqual(weights, {400, 700})
+
+
+class PictureCollector(HTMLParser):
+    """Collect every <img> with its parent tag name and the <source> elements of its enclosing <picture>."""
+
+    def __init__(self):
+        super().__init__()
+        self.stack, self.sources, self.images = [], [], []
+
+    def handle_starttag(self, tag, attrs):
+        attrs = dict(attrs)
+        if tag == 'picture':
+            self.sources = []
+        if tag == 'source':
+            self.sources.append((attrs, self.stack[-1] if self.stack else None))
+        elif tag == 'img':
+            parent = self.stack[-1] if self.stack else None
+            self.images.append((attrs, parent, list(self.sources) if parent == 'picture' else []))
+        elif tag not in VOID_ELEMENTS:
+            self.stack.append(tag)
+
+    def handle_endtag(self, tag):
+        if tag not in VOID_ELEMENTS and self.stack:
+            self.stack.pop()
+
+
+class ImagePerformanceAndSharingTests(unittest.TestCase):
+    """Night Shift Task 13: AVIF photos with JPEG fallback, canonical/Open Graph/Twitter metadata, and the 404 page."""
+    ROUTES = SiteBuildTests.ROUTES
+    PATHS = {'index.html': '/', 'work/index.html': '/work/', 'services/index.html': '/services/',
+             'pricing/index.html': '/pricing/', 'demo/index.html': '/demo/', 'contact/index.html': '/contact/'}
+
+    @classmethod
+    def setUpClass(cls):
+        build()
+        cls.html = {route: (OUT / route).read_text() for route in cls.ROUTES}
+
+    def test_base_url_is_defined_once_and_used_by_the_sitemap(self):
+        from scripts.build_site import BASE_URL
+        self.assertEqual(BASE_URL, 'https://cendavo-deployment.pages.dev')
+        source = (Path(__file__).resolve().parents[1] / 'scripts/build_site.py').read_text()
+        self.assertEqual(source.count('cendavo-deployment.pages.dev'), 1)
+        sitemap = (OUT / 'sitemap.xml').read_text()
+        self.assertEqual(re.findall(r'<loc>([^<]+)</loc>', sitemap), [BASE_URL + path for path in self.PATHS.values()])
+
+    def test_every_photo_has_an_avif_source_ahead_of_its_jpeg(self):
+        total = 0
+        for route in self.ROUTES:
+            parser = PictureCollector()
+            parser.feed(main_of(self.html[route]))
+            total += len(parser.images)
+            for attrs, parent, sources in parser.images:
+                with self.subTest(route=route, src=attrs.get('src')):
+                    self.assertEqual(parent, 'picture')
+                    self.assertEqual(len(sources), 1)
+                    source, source_parent = sources[0]
+                    self.assertEqual(source_parent, 'picture')
+                    self.assertEqual(source.get('type'), 'image/avif')
+                    self.assertEqual(source.get('srcset'), attrs['srcset'].replace('.jpg', '.avif'))
+                    self.assertEqual(source.get('sizes'), attrs['sizes'])
+                    self.assertTrue(attrs['src'].endswith('.jpg'))  # the fallback img stays JPEG
+                    urls = [part.split()[0] for part in source['srcset'].split(',')]
+                    self.assertEqual(len(urls), 2)
+                    for url in urls:
+                        self.assertRegex(url, r'^/assets/images/[a-z-]+-(?:800|1600)\.avif$')
+                        self.assertTrue((OUT / url.lstrip('/')).is_file(), url)
+            with self.subTest(route=route):
+                main = main_of(self.html[route])
+                self.assertEqual(main.count('<picture>'), len(parser.images))
+                self.assertEqual(main.count('<source '), len(parser.images))
+        self.assertGreaterEqual(total, 40)
+
+    def test_wrapping_keeps_the_original_img_markup(self):
+        # The build only wraps: each img tag in the page source appears unchanged in the built page.
+        pages = Path(__file__).resolve().parents[1] / 'pages'
+        for route, path in self.PATHS.items():
+            name = 'index' if path == '/' else path.strip('/')
+            tags = re.findall(r'<img\b[^>]*>', (pages / f'{name}.html').read_text())
+            built = main_of(self.html[route])
+            for tag in tags:
+                with self.subTest(route=route, tag=tag[:70]):
+                    self.assertIn(f'>{tag}</picture>', built)
+            self.assertEqual(built.count('<img '), len(tags))
+
+    def test_picture_does_not_change_layout(self):
+        css = (OUT / 'assets/site.css').read_text()
+        self.assertIn('picture{display:contents}', base_rules(css))
+
+    def test_canonical_open_graph_and_twitter_metadata(self):
+        from scripts.build_site import BASE_URL
+        for route, path in self.PATHS.items():
+            html = self.html[route]
+            head = html.split('</head>', 1)[0]
+            url = BASE_URL + path
+            title = re.search(r'<title>(.*?)</title>', head).group(1)
+            desc = re.search(r'<meta name="description" content="([^"]*)">', head).group(1)
+            expected = {'og:type': 'website', 'og:site_name': 'Cendavo', 'og:title': title, 'og:description': desc,
+                        'og:url': url, 'og:image': BASE_URL + '/assets/social/cendavo-og.jpg', 'og:image:width': '1200',
+                        'og:image:height': '630'}
+            with self.subTest(route=route):
+                self.assertEqual(head.count('rel="canonical"'), 1)
+                self.assertIn(f'<link rel="canonical" href="{url}">', head)
+                for name, value in expected.items():
+                    with self.subTest(route=route, property=name):
+                        self.assertEqual(re.findall(rf'<meta property="{re.escape(name)}" content="([^"]*)">', head), [value])
+                alt = re.findall(r'<meta property="og:image:alt" content="([^"]*)">', head)
+                self.assertEqual(len(alt), 1)
+                self.assertTrue(alt[0].strip())
+                self.assertEqual(head.count('<meta name="twitter:card" content="summary_large_image">'), 1)
+                self.assertEqual(head.count('twitter:'), 1)
+                self.assertNotIn('noindex', html)
+        # Titles and descriptions keep their wording.
+        self.assertIn('<title>Pricing — Cendavo</title>', self.html['pricing/index.html'])
+        self.assertIn('<meta property="og:title" content="Cendavo — Website design for Sydney’s local service businesses">', self.html['index.html'])
+
+    def test_share_card_is_1200_by_630(self):
+        card = OUT / 'assets/social/cendavo-og.jpg'
+        self.assertTrue(card.is_file())
+        self.assertEqual(jpeg_size(card), (1200, 630))
+
+    def test_not_found_page(self):
+        from scripts.build_site import NAV
+        self.assertTrue((OUT / '404.html').is_file())
+        self.assertFalse((OUT / '404').exists())
+        self.assertNotIn('404', (OUT / 'sitemap.xml').read_text())
+        self.assertNotIn('404', ''.join(href for _, href in NAV))
+        html = (OUT / '404.html').read_text()
+        head = html.split('</head>', 1)[0]
+        self.assertIn('<meta name="robots" content="noindex">', head)
+        self.assertIn('<title>Page not found — Cendavo</title>', head)
+        for banned in ('rel="canonical"', 'og:', 'twitter:'):
+            with self.subTest(banned=banned):
+                self.assertNotIn(banned, html)
+        # Standard chrome: skip link, main target, header, header CTA, footer; no page marked current.
+        self.assertIn('<body><a class="skip-link" href="#main">', html)
+        self.assertIn('<main id="main" tabindex="-1">', html)
+        self.assertIn('<header class="site-header">', html)
+        self.assertIn('<a class="button small" href="/contact/">Request a free consultation</a>', html)
+        self.assertIn('<footer class="footer">', html)
+        self.assertNotIn('aria-current', html)
+        self.assertIn('<link rel="stylesheet" href="/assets/pages.css">', html)
+        self.assertNotIn('kit.css', html)
+        self.assertNotIn('home.css', html)
+        # No motion: no GSAP, motion scripts or hooks; only the shared site script.
+        self.assertEqual(re.findall(r'<script src="([^"]+)"', html), ['/assets/site.js'])
+        for hook in MOTION_HOOKS:
+            self.assertNotIn(hook, html)
+        main = main_of(html)
+        self.assertEqual(main.count('<h1'), 1)
+        for href in ('/', '/work/', '/contact/'):
+            with self.subTest(href=href):
+                self.assertIn(f'href="{href}"', main)
+        self.assertNotIn('<img', main)
+        self.assertNotIn(' style="', html)
 
 
 if __name__ == '__main__':
