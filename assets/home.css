@@ -90,11 +90,12 @@
 .step h3{margin:0 0 12px;font-size:1.75rem;font-weight:760;font-stretch:88%;letter-spacing:-.02em}
 .step p{margin:0;max-width:40ch;color:#D6D2CA;font-size:clamp(1.0625rem,.3vw + 1rem,1.1875rem)}
 /* Pricing teaser: one full-bleed photo band carrying the fixed-quote statement (the quote sheet lives only on /pricing/).
-   The scrim holds at least .86 ink behind the copy on wide screens and .84 over the whole photo up to 900px, where the copy spans the full width. */
+   The photo (garden path and planting) shows through on the right; the scrim keeps at least .70 ink behind the copy (left half on wide
+   screens, lower 60% up to 900px, where the copy spans the full width) so body text holds 4.5:1 even over a white pixel. */
 .pricing{position:relative;isolation:isolate;overflow:hidden;padding-block:clamp(120px,16vw,220px)}
 .pricing-media{position:absolute;inset:0;z-index:-1;overflow:hidden;background:var(--ink-2)}
-.pricing-media img{width:100%;height:100%;object-fit:cover;object-position:70% 40%}
-.pricing-media::after{content:"";position:absolute;inset:0;background:linear-gradient(90deg,rgba(14,14,13,.9) 0%,rgba(14,14,13,.86) 50%,rgba(14,14,13,.4) 100%)}
+.pricing-media img{width:100%;height:100%;object-fit:cover;object-position:60% 70%}
+.pricing-media::after{content:"";position:absolute;inset:0;background:linear-gradient(90deg,rgba(14,14,13,.88) 0%,rgba(14,14,13,.74) 50%,rgba(14,14,13,.15) 100%)}
 .pricing-copy{max-width:min(100%,720px)}
 .pricing-copy h2{font-size:clamp(2.6rem,5.6vw,5.4rem);font-weight:800;font-stretch:84%;line-height:.95;letter-spacing:-.025em}
 .pricing-copy p{margin:28px 0;max-width:46ch;color:#D6D2CA;font-size:clamp(1.0625rem,.5vw + .95rem,1.25rem)}
@@ -225,7 +226,7 @@
 .steps{margin-top:56px}
 .step{grid-template-columns:48px minmax(0,1fr)}
 .questions-list{margin-top:40px}
-.pricing-media::after{background:rgba(14,14,13,.84)}
+.pricing-media::after{background:linear-gradient(0deg,rgba(14,14,13,.9) 0%,rgba(14,14,13,.74) 60%,rgba(14,14,13,.55) 85%,rgba(14,14,13,.25) 100%)}
 .svc{grid-template-columns:minmax(0,1fr) 96px;align-items:start}
 .svc img{aspect-ratio:4/5}
 }

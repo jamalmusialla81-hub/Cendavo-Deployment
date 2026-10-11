@@ -859,28 +859,59 @@ class DesignSystemTests(unittest.TestCase):
         self.assertNotIn('quote-paper', self.home_main)
         self.assertNotIn('Always included', self.home_main)
         self.assertNotIn('inc-list', self.home_main)
-        # One decorative photo (barber-client, used nowhere else on the page), AVIF first, lazy, sized, hidden from AT.
+        # One decorative photo (garden-walk, the path and planting), AVIF first, lazy, sized, hidden from AT. The old, very
+        # dark barber-client photo is gone from the homepage: under the scrim it read as an empty black block (Task 19).
         media = re.search(r'<div class="pricing-media" aria-hidden="true" data-parallax>(.*?)</div>', section, re.S)
         self.assertIsNotNone(media)
-        self.assertRegex(media.group(1), r'^<picture><source type="image/avif" srcset="/assets/images/barber-client-800\.avif 800w, '
-                                         r'/assets/images/barber-client-1600\.avif 1600w" [^>]*><img [^>]*></picture>$')
+        self.assertRegex(media.group(1), r'^<picture><source type="image/avif" srcset="/assets/images/garden-walk-800\.avif 800w, '
+                                         r'/assets/images/garden-walk-1600\.avif 1600w" [^>]*><img [^>]*></picture>$')
         parser = ImageCollector()
         parser.feed(section)
         self.assertEqual(len(parser.images), 1)
         attrs, hidden = parser.images[0]
-        self.assertIn('barber-client', attrs['src'])
-        self.assertEqual((attrs.get('alt'), attrs.get('loading')), ('', 'lazy'))
-        self.assertTrue(attrs.get('width') and attrs.get('height'))
+        self.assertIn('garden-walk', attrs['src'])
+        self.assertIn('garden-walk-800.jpg 800w, /assets/images/garden-walk-1600.jpg 1600w', attrs['srcset'])
+        self.assertEqual(attrs.get('sizes'), '100vw')
+        self.assertEqual((attrs.get('alt'), attrs.get('loading'), attrs.get('decoding')), ('', 'lazy', 'async'))
+        self.assertEqual((attrs.get('width'), attrs.get('height')), ('1600', '1067'))
         self.assertTrue(hidden)
-        self.assertEqual(self.home_main.count('barber-client-800.jpg 800w'), 1)
-        # The statement sits on a dark scrim: at least .86 ink behind the left-hand copy, and a flat .84 where it spans
-        # the full width (900px and below).
+        self.assertNotIn('barber-client', (OUT / 'index.html').read_text())
+        self.assertIn('object-position:60% 70%', rules_for(base_rules(self.home_css), '.pricing-media img')[0])
+
+        def alpha_at(stops, position):
+            """Interpolated scrim alpha at a gradient position (%), clamped to the first and last stops."""
+            if position <= stops[0][1]:
+                return stops[0][0]
+            for (a1, p1), (a2, p2) in zip(stops, stops[1:]):
+                if p1 <= position <= p2:
+                    return a1 if p2 == p1 else a1 + (a2 - a1) * (position - p1) / (p2 - p1)
+            return stops[-1][0]
+
+        def lowest_alpha(stops, up_to):
+            """Lowest scrim alpha anywhere from 0% to `up_to`% (linear between stops, so stops plus the end point)."""
+            return min([alpha for alpha, position in stops if position <= up_to] + [alpha_at(stops, up_to)])
+
+        # Wide screens: a horizontal scrim, dark behind the left-hand copy and light on the right so the photo reads.
+        # At .70 ink over a white pixel the #D6D2CA body text still holds 4.5:1; the copy stays within the left half.
         scrim = rules_for(base_rules(self.home_css), '.pricing-media::after')[0]
+        self.assertIn('linear-gradient(90deg,', scrim)
         stops = gradient_stops(scrim)
-        self.assertTrue(stops)
-        self.assertGreaterEqual(min(alpha for alpha, position in stops if position <= 50), 0.86)
-        self.assertEqual(rules_for(media_blocks(self.home_css, 'max-width:900px'), '.pricing-media::after'),
-                         ['background:rgba(14,14,13,.84)'])
+        self.assertGreaterEqual(len(stops), 3)
+        self.assertGreaterEqual(lowest_alpha(stops, 50), 0.70)
+        self.assertGreaterEqual(contrast('#D6D2CA', ink_over_white(alpha_at(stops, 50))), 4.5)
+        self.assertLessEqual(stops[-1][0], 0.30)
+        # 900px and below the copy spans the full width, so the scrim runs bottom-up instead: at least .70 over the lower
+        # 60% (the paragraph), at least .50 at 85% (the heading: bone at 3:1 as large text) and light at the top.
+        narrow = rules_for(media_blocks(self.home_css, 'max-width:900px'), '.pricing-media::after')
+        self.assertEqual(len(narrow), 1)
+        self.assertRegex(narrow[0], r'^background:linear-gradient\((?:0deg|to top),')
+        narrow_stops = gradient_stops(narrow[0])
+        self.assertGreaterEqual(lowest_alpha(narrow_stops, 60), 0.70)
+        self.assertGreaterEqual(contrast('#D6D2CA', ink_over_white(alpha_at(narrow_stops, 60))), 4.5)
+        self.assertGreaterEqual(lowest_alpha(narrow_stops, 85), 0.50)
+        self.assertGreaterEqual(contrast('#EDEAE3', ink_over_white(lowest_alpha(narrow_stops, 85))), 3)
+        self.assertLessEqual(narrow_stops[-1][0], 0.35)
+        self.assertEqual(rules_for(media_blocks(self.home_css, 'max-width:640px'), '.pricing-media::after'), [])
         self.assertIn('max-width:min(100%,720px)', rules_for(base_rules(self.home_css), '.pricing-copy')[0])
         # The quote sheet itself is still on /pricing/, as a labelled illustration whose parts are hidden from AT.
         pricing = main_of((OUT / 'pricing/index.html').read_text())
