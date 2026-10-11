@@ -142,6 +142,8 @@ class ForgeQueueTests(IsolatedAgentTests):
                     argv, prompt = command.call_args.args[:2]
                     self.assertIn('Skill', argv[argv.index('--tools') + 1])
                     self.assertIn('insane-web-design:design', prompt)
+                    # Agents run with --restricted, which ignores user-enabled plugins: the directory must be passed.
+                    self.assertEqual(argv[argv.index('--plugin-dir'):][:2], ['--plugin-dir', str(plugin_dir.resolve())])
             with patch.dict(os.environ, {forge.DESIGN_PLUGIN_DIR_ENV:str(plugin_dir)}):
                 override = forge.discover_design_plugin()
             self.assertTrue(override.explicit_load)
@@ -309,6 +311,12 @@ class AgentPermissionTests(IsolatedAgentTests):
         self.assertNotIn('Skill', reviewer[reviewer.index('--tools') + 1])
         front = forge.claude_argv('cendavo-builder', True, plugin=avail, frontend=True)
         self.assertIn('Skill(insane-web-design:*)', front[front.index('--allowedTools') + 1])
+        self.assertNotIn('--plugin-dir', plain)
+        self.assertNotIn('--plugin-dir', reviewer)
+        located = forge.DesignPlugin(True, 'ok', ('design',), Path('/plugins/insane-web-design'))
+        for agent, writable in (('cendavo-strategist', False), ('cendavo-builder', True)):
+            argv = forge.claude_argv(agent, writable, plugin=located, frontend=True)
+            self.assertEqual(argv[argv.index('--plugin-dir') + 1], '/plugins/insane-web-design')
 
     def test_explicit_mcp_tools_only_for_configured_agents(self):
         write_config(forge.ROOT, {'mcp_servers': {'docs': {'command': '/usr/bin/true', 'args': ['x'], 'tools': ['search', 'read_page'],

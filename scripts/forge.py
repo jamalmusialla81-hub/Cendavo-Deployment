@@ -900,7 +900,9 @@ def claude_argv(agent, writable_call, plugin=None, frontend=False, cwd=None, ses
         argv += ['--resume', session['id']] if session.get('started') else ['--session-id', session['id']]
     else:
         argv.append('--no-session-persistence')
-    if use_skills and plugin.explicit_load and plugin.path:
+    if use_skills and plugin.path:
+        # --restricted ignores user settings, which is where an installed plugin is enabled, so the validated
+        # local plugin directory must always be loaded explicitly or its skills are 'Unknown skill' to the agent.
         argv += ['--plugin-dir', str(plugin.path)]
     return argv
 
