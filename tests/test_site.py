@@ -58,7 +58,7 @@ class SiteBuildTests(unittest.TestCase):
         for setting in ('Content-Security-Policy:', 'X-Content-Type-Options: nosniff', "connect-src 'self'", "object-src 'none'"):
             self.assertIn(setting, headers)
 
-    ROUTES = ['index.html','work/index.html','services/index.html','pricing/index.html','demo/index.html','contact/index.html']
+    ROUTES = ['index.html','work/index.html','services/index.html','pricing/index.html','demo/index.html','about/index.html','contact/index.html']
 
     def test_skip_link_and_main_target_on_every_page(self):
         for route in self.ROUTES:
@@ -267,8 +267,8 @@ GSAP_TAGS = ['<script src="/assets/vendor/gsap/gsap.min.js" defer></script>',
 HOME_TAG = '<script src="/assets/home.js" defer></script>'
 # Pages that show device or quote mockups and so load the shared mockup kit (kit.css).
 KIT_ROUTES = ['index.html', 'work/index.html', 'pricing/index.html']
-# Pages with GSAP motion (Night Shift Task 10). Contact (the enquiry form) and Demo (the browser app) stay static.
-MOTION_ROUTES = ['index.html', 'work/index.html', 'services/index.html', 'pricing/index.html']
+# Pages with GSAP motion (Night Shift Task 10; About added in Task 15). Contact (the enquiry form) and Demo (the browser app) stay static.
+MOTION_ROUTES = ['index.html', 'work/index.html', 'services/index.html', 'pricing/index.html', 'about/index.html']
 STATIC_ROUTES = ['contact/index.html', 'demo/index.html']
 MOTION_HOOKS = ('data-ph', 'data-reveal', 'data-parallax', 'data-devices', 'data-rise', 'data-work', 'data-intro')
 # Network, storage and markup-injection APIs no motion script may use; autoAlpha (visibility:hidden), snap (scroll
@@ -379,8 +379,8 @@ class DesignSystemTests(unittest.TestCase):
 
     def test_global_chrome(self):
         from scripts.build_site import NAV
-        self.assertEqual([label for label, _ in NAV], ['Home', 'Work', 'Services', 'Pricing', 'Demo project', 'Contact'])
-        self.assertEqual([href for _, href in NAV], ['/', '/work/', '/services/', '/pricing/', '/demo/', '/contact/'])
+        self.assertEqual([label for label, _ in NAV], ['Home', 'Work', 'Services', 'Pricing', 'Demo project', 'About', 'Contact'])
+        self.assertEqual([href for _, href in NAV], ['/', '/work/', '/services/', '/pricing/', '/demo/', '/about/', '/contact/'])
         for route in self.ROUTES:
             with self.subTest(route=route):
                 html = (OUT / route).read_text()
@@ -1028,10 +1028,14 @@ class InnerPageTests(unittest.TestCase):
 
     def test_inner_pages_make_no_unconfirmed_operational_promises(self):
         # The owner has not confirmed call length, timelines or staffing; say "a short free consultation" instead.
+        # The one exception: About (Task 15) restates the homepage's published "fixed quote … in writing" commitment
+        # (pages/index.html); every other inner page keeps the full list.
         for route in self.INNER:
             text = visible_text(self.main[route]).lower()
             with self.subTest(route=route):
                 for banned in ('20-minute', 'twenty minutes', 'same person', 'a few weeks', 'in writing'):
+                    if route == 'about/index.html' and banned == 'in writing':
+                        continue
                     self.assertNotIn(banned, text)
                 self.assertNotRegex(text, r'\d+\s*(day|week|hour|minute)')
         for route in ('services/index.html', 'pricing/index.html', 'contact/index.html'):
@@ -1131,7 +1135,8 @@ class ImagePerformanceAndSharingTests(unittest.TestCase):
     """Night Shift Task 13: AVIF photos with JPEG fallback, canonical/Open Graph/Twitter metadata, and the 404 page."""
     ROUTES = SiteBuildTests.ROUTES
     PATHS = {'index.html': '/', 'work/index.html': '/work/', 'services/index.html': '/services/',
-             'pricing/index.html': '/pricing/', 'demo/index.html': '/demo/', 'contact/index.html': '/contact/'}
+             'pricing/index.html': '/pricing/', 'demo/index.html': '/demo/', 'about/index.html': '/about/',
+             'contact/index.html': '/contact/'}
 
     @classmethod
     def setUpClass(cls):
@@ -1271,6 +1276,92 @@ class ImagePerformanceAndSharingTests(unittest.TestCase):
                 self.assertIn(f'href="{href}"', main)
         self.assertNotIn('<img', main)
         self.assertNotIn(' style="', html)
+
+
+class AboutPageTests(unittest.TestCase):
+    """Night Shift Task 15: an honest About page. The owner has given no names, credentials, client history or years in
+    business, so the page restates commitments the site already makes and claims nothing else."""
+    ROUTE = 'about/index.html'
+    # Phrases that would state or imply size, history, endorsements or guarantees nobody has confirmed.
+    INVENTED_CLAIMS = ('years of experience', 'years in business', 'since 19', 'since 20', 'founded', 'award',
+                       'clients include', 'trusted by', 'testimonial', 'certified', 'guarantee', 'lock-in',
+                       'month to month', 'team of', '%', '$')
+
+    @classmethod
+    def setUpClass(cls):
+        build()
+        cls.html = (OUT / cls.ROUTE).read_text()
+        cls.head = cls.html.split('</head>', 1)[0]
+        cls.main = main_of(cls.html)
+        cls.text = visible_text(cls.main).lower()
+        cls.source = (Path(__file__).resolve().parents[1] / 'pages/about.html').read_text()
+
+    def test_title_description_and_sharing_metadata(self):
+        from scripts.build_site import BASE_URL
+        url = BASE_URL + '/about/'
+        self.assertIn('<title>About — Cendavo</title>', self.head)
+        desc = re.search(r'<meta name="description" content="([^"]*)">', self.head).group(1)
+        self.assertIn('Sydney', desc)
+        self.assertIn('local service businesses', desc)
+        self.assertIn(f'<link rel="canonical" href="{url}">', self.head)
+        self.assertEqual(re.findall(r'<meta property="og:url" content="([^"]*)">', self.head), [url])
+        self.assertIn(f'<loc>{url}</loc>', (OUT / 'sitemap.xml').read_text())
+
+    def test_nav_marks_only_about_as_current(self):
+        current = re.findall(r'<a href="([^"]+)" aria-current="page">([^<]+)</a>', self.html)
+        self.assertEqual(self.html.count('aria-current'), len(current))
+        self.assertEqual(set(current), {('/about/', 'About')})
+        for route in SiteBuildTests.ROUTES:
+            if route != self.ROUTE:
+                with self.subTest(route=route):
+                    self.assertNotIn('href="/about/" aria-current', (OUT / route).read_text())
+                    self.assertIn('<a href="/about/">About</a>', (OUT / route).read_text())
+
+    def test_sections_appear_in_order(self):
+        self.assertEqual(self.main.count('<h1'), 1)
+        h2s = [visible_text(h).strip() for h in re.findall(r'<h2[^>]*>(.*?)</h2>', self.main, re.S)]
+        self.assertEqual(h2s[:3], ['How we think', 'What you can expect', 'How we build'])
+        self.assertEqual(len(h2s), 4)  # the fourth is the closing call to action
+        think = self.main.split('id="ab-think-title"', 1)[1].split('<h2', 1)[0]
+        self.assertTrue(3 <= think.count('<h3') <= 4)
+        closing = self.main.rsplit('<section', 1)[1]
+        self.assertIn('href="/contact/">Request a free consultation</a>', closing)
+
+    def test_states_only_published_commitments(self):
+        for fact in ('sydney', 'fixed quote', 'in writing', 'domain', 'plain language', 'the care plan is optional'):
+            with self.subTest(fact=fact):
+                self.assertIn(fact, self.text)
+        # "In writing" appears only as the homepage's published quote commitment.
+        self.assertEqual(self.text.count('in writing'), self.text.count('fixed price in writing'))
+        for banned in self.INVENTED_CLAIMS + SiteBuildTests.SAAS_WORDING:
+            with self.subTest(banned=banned):
+                self.assertNotIn(banned, self.text)
+        self.assertNotRegex(self.text, r'\d+\s*\+?\s*(clients|projects|websites|years)')
+        self.assertNotRegex(self.text, r'\d+\+')
+
+    def test_photos_are_existing_described_and_few(self):
+        parser = ImageCollector()
+        parser.feed(self.main)
+        self.assertTrue(1 <= len(parser.images) <= 3, len(parser.images))
+        described = [attrs for attrs, hidden in parser.images if not hidden]
+        self.assertTrue(described)
+        for attrs in described:
+            with self.subTest(src=attrs['src']):
+                self.assertTrue(attrs['alt'].strip())
+                self.assertEqual(attrs.get('loading'), 'lazy')  # every photo sits below the type-only opening
+        self.assertNotIn('barber-tools', self.html)
+
+    def test_reuses_shared_assets_and_motion_hooks_only(self):
+        self.assertEqual(re.findall(r'<link rel="stylesheet" href="([^"]+)">', self.head), ['/assets/site.css', '/assets/pages.css'])
+        scripts = re.findall(r'<script src="([^"]+)"', self.html)
+        self.assertEqual(scripts, ['/assets/motion-boot.js', '/assets/site.js', '/assets/vendor/gsap/gsap.min.js',
+                                   '/assets/vendor/gsap/ScrollTrigger.min.js', '/assets/motion.js'])
+        self.assertNotIn('data-intro', self.html)
+        self.assertNotIn(' data-ph', self.main)  # no page-opening animation: the headline is visible from first paint
+        self.assertIn('data-rise', self.main)
+        for hook in re.findall(r'data-(?:rise|reveal|parallax)(=?)', self.main):
+            self.assertEqual(hook, '')
+        self.assertNotIn('http', self.source)
 
 
 if __name__ == '__main__':

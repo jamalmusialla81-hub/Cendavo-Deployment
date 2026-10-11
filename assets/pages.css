@@ -1,5 +1,5 @@
-/* Cendavo inner pages (work, services, pricing, contact, demo, and the 404 page). Loaded after site.css on every page except the homepage.
-   Nothing is hidden by CSS. On Work, Services and Pricing, motion.js adds GSAP reveals through data attributes in the
+/* Cendavo inner pages (work, services, pricing, about, contact, demo, and the 404 page). Loaded after site.css on every page except the homepage.
+   Nothing is hidden by CSS. On Work, Services, Pricing and About, motion.js adds GSAP reveals through data attributes in the
    page markup, setting initial states from JS only; Contact and Demo stay static. The only CSS movement
    is the hover/focus feedback in the guarded block at the end. Tokens, buttons, form fields, FAQ and focus rings come from site.css;
    the device and quote mockups on Work and Pricing come from kit.css. */
@@ -213,7 +213,17 @@
 .wk-demo-note{margin:18px 0 32px;padding-left:14px;border-left:2px solid var(--ink);font-size:.95rem}
 .wk-demo-list{grid-column:7/-1;border-top:1px solid var(--ink)}
 .wk-demo-list li{padding:26px 0 28px;border-bottom:1px solid var(--line-dark)}
-.bone .wk-demo-list span,.bone .inc-grid span{color:var(--ink-soft)}
+.bone .wk-demo-list span,.bone .inc-grid span,.bone .exp span{color:var(--ink-soft)}
+
+/* About (reuses the Work hero, the Services chapter photo, Contact's .exp grid and Pricing's includes block) */
+.ab-list{list-style:none;margin:clamp(40px,5vw,64px) 0 0;padding:0;border-top:1px solid var(--bone)}
+.ab-list li{padding:26px 0 28px;border-bottom:1px solid var(--line)}
+.ab-list h3{font-weight:720;font-stretch:92%}
+.ab-list p{margin-top:10px;max-width:52ch;color:var(--stone)}
+.ab-head{grid-column:1/span 4}
+.ab-head p{margin-top:var(--space-5)}
+.bone .exp{border-top-color:var(--ink)}
+.bone .exp li{border-bottom-color:var(--line-dark)}
 
 /* Demonstration project page */
 .demo-side h2{font-size:1.25rem;font-weight:650;font-stretch:100%;line-height:1.1;letter-spacing:-.01em}

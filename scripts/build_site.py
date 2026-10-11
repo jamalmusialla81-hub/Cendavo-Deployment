@@ -11,14 +11,14 @@ OUT = ROOT / 'dist'
 BASE_URL = 'https://cendavo-deployment.pages.dev'
 SHARE_IMAGE = '/assets/social/cendavo-og.jpg'  # 1200×630 share card
 SHARE_IMAGE_ALT = 'Websites for Sydney’s local service businesses. The Cendavo logo and a Request a free consultation button.'
-TITLES = {'index': 'Cendavo — Website design for Sydney’s local service businesses', 'work': 'Work — Cendavo', 'services': 'Services — Cendavo', 'pricing': 'Pricing — Cendavo', 'demo': 'Demo project — Cendavo', 'contact': 'Contact — Cendavo', '404': 'Page not found — Cendavo'}
-DESCRIPTIONS = {'index': 'Cendavo designs, builds, redesigns and looks after websites for local service businesses in Sydney.', 'work': 'Concept projects by Cendavo: three fictional Sydney service businesses, designed the way we would design yours.', 'services': 'New websites, redesigns and care plans for local service businesses in Sydney, from Cendavo.', 'pricing': 'How Cendavo prices websites: a fixed quote after a free consultation, what every project includes and what affects the quote.', 'demo': 'A Cendavo demonstration project that runs in your browser with sample data only.', 'contact': 'Request a website design, redesign or maintenance consultation with Cendavo in Sydney.', '404': 'This page could not be found on the Cendavo website.'}
+TITLES = {'index': 'Cendavo — Website design for Sydney’s local service businesses', 'work': 'Work — Cendavo', 'services': 'Services — Cendavo', 'pricing': 'Pricing — Cendavo', 'demo': 'Demo project — Cendavo', 'about': 'About — Cendavo', 'contact': 'Contact — Cendavo', '404': 'Page not found — Cendavo'}
+DESCRIPTIONS = {'index': 'Cendavo designs, builds, redesigns and looks after websites for local service businesses in Sydney.', 'work': 'Concept projects by Cendavo: three fictional Sydney service businesses, designed the way we would design yours.', 'services': 'New websites, redesigns and care plans for local service businesses in Sydney, from Cendavo.', 'pricing': 'How Cendavo prices websites: a fixed quote after a free consultation, what every project includes and what affects the quote.', 'demo': 'A Cendavo demonstration project that runs in your browser with sample data only.', 'about': 'About Cendavo, a small Sydney studio that designs, builds and looks after websites for local service businesses: how we think, what you can expect and how we build.', 'contact': 'Request a website design, redesign or maintenance consultation with Cendavo in Sydney.', '404': 'This page could not be found on the Cendavo website.'}
 # The 404 page is built to dist/404.html (Cloudflare Pages serves it, with a 404 status, for unknown URLs). It is not in
 # NAV or the sitemap, carries noindex and no canonical or sharing metadata.
 NOT_FOUND = '404'
 # Brand mark: three arcs forming a C (first arc amber via CSS). Inline SVG, decorative.
 MARK = '<svg class="mark" viewBox="0 0 200 200" aria-hidden="true" focusable="false"><path d="M55.67 43.26C86.24 19.38 130.22 24.01 155.16 53.72L135.24 70.43C119.31 51.45 91.21 48.5 71.68 63.75Z"/><path d="M48.21 150.02C21.26 122.11 21.26 77.89 48.21 49.98L66.91 68.05C49.7 85.87 49.7 114.13 66.91 131.95Z"/><path d="M155.16 146.28C130.22 175.99 86.24 180.62 55.67 156.74L71.68 136.25C91.21 151.5 119.31 148.55 135.24 129.57Z"/></svg>'
-NAV = [('Home', '/'), ('Work', '/work/'), ('Services', '/services/'), ('Pricing', '/pricing/'), ('Demo project', '/demo/'), ('Contact', '/contact/')]
+NAV = [('Home', '/'), ('Work', '/work/'), ('Services', '/services/'), ('Pricing', '/pricing/'), ('Demo project', '/demo/'), ('About', '/about/'), ('Contact', '/contact/')]
 # Page-specific scripts: each is loaded only on the page that uses it.
 # Page-specific stylesheets: the homepage's sections and device mockups (home.css) load only on /;
 # every inner page loads the shared inner-page stylesheet (pages.css) instead. The mockup kit (kit.css: device frames,
@@ -35,10 +35,10 @@ def page_styles(key):
 # LICENSE.txt there) loads, deferred, only on the pages that animate: GSAP, then ScrollTrigger, then motion.js (shared
 # reveals), then home.js on /. Those pages also load motion-boot.js in <head> (external, not deferred) to set the
 # .js/.motion classes before first paint; only the homepage's tag carries data-intro, which allows the first-visit intro.
-# Contact (the enquiry form) and Demo (the browser app) load no GSAP and no motion scripts.
-MOTION_PAGES = ('index', 'work', 'services', 'pricing')
+# About reuses the shared reveals only (no page-specific script). Contact (the enquiry form) and Demo (the browser app) load no GSAP and no motion scripts.
+MOTION_PAGES = ('index', 'work', 'services', 'pricing', 'about')
 GSAP = '<script src="/assets/vendor/gsap/gsap.min.js" defer></script><script src="/assets/vendor/gsap/ScrollTrigger.min.js" defer></script><script src="/assets/motion.js" defer></script>'
-PAGE_SCRIPTS = {'index': GSAP + '<script src="/assets/home.js" defer></script>', 'work': GSAP, 'services': GSAP, 'pricing': GSAP, 'demo': '<script src="/assets/demo.js" defer></script>', 'contact': '<script src="/assets/enquiry.js" defer></script>'}
+PAGE_SCRIPTS = {'index': GSAP + '<script src="/assets/home.js" defer></script>', 'work': GSAP, 'services': GSAP, 'pricing': GSAP, 'about': GSAP, 'demo': '<script src="/assets/demo.js" defer></script>', 'contact': '<script src="/assets/enquiry.js" defer></script>'}
 
 
 def boot_script(key):
