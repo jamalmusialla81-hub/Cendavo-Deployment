@@ -1,38 +1,40 @@
-# Cendavo progress — 10 October 2026
+# Cendavo progress
 
-## Product
+Updated 2026-10-12.
 
-| Capability | Current state | Next decision |
-| --- | --- | --- |
-| Business website | Five public pages live on Cloudflare Pages | Reposition the remaining pages around website design (task B) |
-| Website enquiries | Contact form posts to a Cloudflare Pages Function that validates input and stores it in D1 (`ENQUIRIES_DB`), with idempotent retries, a honeypot and a minimum fill time. Setup: `docs/ENQUIRIES.md` | Owner creates the D1 database and binding; no notifications, admin view or retention rule yet; decide how often to check D1 |
-| Enquiry and booking request flow | Browser-local demo using synthetic requests | Validate flow with local service businesses before a hosted backend |
-| Request tracking | New, Follow-up and Done states in demo | Status filter and open-first ordering exist; next, show the demo to local operators before adding workflow features |
-| Follow-up preparation | Local text draft and copy action; nothing sends | Design review and consent before any real messaging |
-| Data export | Demo button downloads all sample requests as a CSV built in the browser; nothing is uploaded | Note in operator sessions whether anyone asks for export before adding formats or import |
-| Shared business accounts | Not built | Define tenant isolation, sign-in and access policy first |
-| Payments and subscriptions | Not built | Validate pricing and operating cost first |
+Cendavo is a website design, redesign and care studio for local service businesses. The earlier plan for a hosted admin product is no longer what the site offers, and that work is not being continued.
 
-The current increment is a functional demo, not a production SaaS for real customer information. Do not enter customer data into it.
+## Built
+
+| Area | Current state |
+| --- | --- |
+| Studio site | Home, Work, Services, Pricing, About, Contact, Demonstration project and a 404 page (`noindex`, not in the sitemap), built from `pages/` by `scripts/build_site.py`. "Night Shift" photography-led design, see [NIGHT_SHIFT_PLAN.md](NIGHT_SHIFT_PLAN.md). |
+| Work | Fictional concept projects only, each labelled "Concept project · fictional business". No real clients, testimonials or results. |
+| Demonstration project | Browser-local request queue on synthetic sample data, with a CSV download. Sends and uploads nothing. |
+| Enquiries | Contact form → Pages Function `functions/api/enquiry.js` → D1 binding `ENQUIRIES_DB` (`migrations/0001_enquiries.sql`). Server-side validation, idempotent retries, honeypot, minimum fill time. No notifications, admin view, retention rule or CAPTCHA yet. See [ENQUIRIES.md](ENQUIRIES.md). |
+| Assets | Self-hosted Archivo and Atkinson Hyperlegible fonts, vendored GSAP and ScrollTrigger with reduced-motion handling, AVIF photos with JPEG fallback, Open Graph share card, self-only Content Security Policy. |
+
+## Open owner decisions
+
+1. **Enquiry storage setup:** create the D1 database, apply the migration and bind `ENQUIRIES_DB` for Production and Preview. Add a free WAF rate-limit rule for `/api/enquiry`. The steps are in [ENQUIRIES.md](ENQUIRIES.md). These docs can't confirm whether the binding exists yet.
+2. **Public contact channel:** the site publishes no email address or phone number. The contact form is the only channel.
+3. **Prices:** none are confirmed. The site says only "fixed quote after a free consultation". Project prices and care-plan pricing are still to be decided. The earlier SaaS hypothesis of A$49–99 per month was never validated and is retired.
+4. **Enquiry handling:** decide how long enquiries are kept and how often D1 is checked.
+5. **Enquiry scope:** confirm or reverse the "Differences from the task spec" in [ENQUIRIES.md](ENQUIRIES.md). They are not owner decisions yet.
+6. **Design approval:** review the Night Shift design on branch `design/night-shift` and decide whether to merge it to `main`.
+7. **Decision record:** record the pivot from a SaaS product to a studio in [DECISIONS.md](DECISIONS.md). There is no entry for it yet.
+8. **Lead Hunter:** not built and not queued. It needs a decision on acceptable data sources and where research data lives. See [CENDAVO_LEAD_HUNTER_PLAN.md](CENDAVO_LEAD_HUNTER_PLAN.md).
 
 ## Business assumptions
 
-- **Proposed price:** A$49–99 per month, unvalidated. No checkout exists.
-- **Customer acquisition:** Initial target groups are laundromats, tailors, cleaners, repair shops and other local services. Demand, conversion, sales cycle and acquisition cost have not been measured.
-- **Revenue:** No verified revenue data has been supplied. The website makes no revenue or customer claims.
-- **Operating cost:** The only database is the D1 enquiry store; there is no messaging provider. Cloudflare account billing and future backend costs have not been verified; calculate them before launching paid subscriptions. Claude usage depends on its subscription terms and limits; no separate API billing is configured by Forge.
+- **Customers:** local service businesses in Sydney, such as detailers, landscapers, cleaners and barbers. Demand, conversion, sales cycle and acquisition cost have not been measured.
+- **Revenue:** no verified revenue data exists, and the site makes no revenue or customer claims.
+- **Operating cost:** Cloudflare Pages, Functions and D1 on the account's current plan. There is no messaging provider and no checkout. Check the current free-plan limits on the account.
 
 ## Engineering and release
 
-- **Tests:** The site build, eight local unit tests, JavaScript syntax checks and macOS sandboxed test run pass. GitHub Checks passed for the deployed revision.
-- **Security:** The demo stores sample data in the browser, inserts text through DOM text nodes, sends no requests to Cendavo, and ships restrictive response headers. The enquiry endpoint accepts same-origin JSON up to 16 KB, validates every field on the server, uses parameterised SQL, stores no IP or user-agent data and never returns database errors. Spam controls are a honeypot and fill time only; a free Cloudflare WAF rate-limit rule is recommended. The future hosted product needs authentication, tenant isolation, data retention and abuse controls before real customer use.
-- **Deployment:** `main` is connected to Cloudflare Pages project `cendavo-deployment`. Build command and output directory are configured. The home page and demo return HTTP 200. The manual GitHub Actions deploy workflow also passed for commit `2d83b7b`.
-- **Agent workflow:** Four Claude Code role files (Strategist, Builder, Security Reviewer, Functional Auditor; no Codex), persistent queue, bounded runtime, stop switch, logs and local Git checkpoints are implemented. Claude Code is installed but authentication has not completed; the runner paused without starting a task. No Claude Builder or Strategist output has been produced yet.
-
-## Next queued tasks
-
-1. Improve the demo request workflow for a real local service task.
-2. Improve keyboard and screen reader access.
-3. ~~Add browser-local export of synthetic demo requests.~~ Done: CSV download only (no import or other formats).
-
-Forge will process these after Claude Code is authenticated with the user's subscription. The host must remain awake and online during an overnight run.
+- **Branch and deployment:** the Night Shift design is on `design/night-shift`. It is not deployed and won't be merged to `main` until the owner approves the visuals. Pushes to `main` deploy to Cloudflare Pages project `cendavo-deployment`, and the GitHub Actions deploy workflow is manual and limited to `main`.
+- **Tests:** `python3 -m unittest discover -s tests -v` covers the build, pages, demo script, enquiry function and Forge tooling. The run commands are in the [README](../README.md).
+- **CI gap (open):** `.github/workflows/checks.yml` runs `node --check` on `assets/site.js` and `assets/demo.js` only. `enquiry.js`, `home.js`, `motion.js` and `motion-boot.js` are not syntax-checked in CI. Adding them needs a task with permission to change CI.
+- **Security:** the enquiry endpoint accepts same-origin JSON up to 16 KB, validates every field on the server, uses parameterised SQL, stores no IP or user-agent data and never returns database errors. Spam controls are the honeypot and fill time only, so a rate-limit rule is recommended (decision 1).
+- **Agent workflow:** Forge runs the Claude-only Strategist → Builder → Security Reviewer → tests → Functional Auditor loop. See [FORGE.md](FORGE.md).
