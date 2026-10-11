@@ -813,8 +813,10 @@ class DesignSystemTests(unittest.TestCase):
                         with self.subTest(css=name, selectors=selectors.strip()[:60]):
                             # Top-level selectors only: commas inside :is(...) do not split a selector.
                             parts = [part.strip() for part in re.sub(r'\([^()]*\)', '()', selectors).split(',')]
+                            # Task 26: the one narrower hold is the homepage hero photo, clipped only without the intro.
                             self.assertTrue(all(part.startswith('.ph-wait ') for part in parts)
-                                            or parts == ['.svc-panel.is-live .svc-photo'], selectors)
+                                            or parts == ['.svc-panel.is-live .svc-photo']
+                                            or selectors.strip() == '.ph-wait:not(.ns-intro) .hero-photo', selectors)
 
     def test_layout_basics(self):
         for selector, css in (('.button{', self.css), ('.menu{', self.css), ('.compare-button{', self.home_css)):
@@ -2272,12 +2274,22 @@ class MotionQualityTests(unittest.TestCase):
                     self.assertIn(classes, ('sv-hero-media', 'ab-photo'))
         # The homepage hero and intro are held the same way and opened with fromTo, never from.
         home = self.guarded(self.home_css)
-        for rule in ('.ph-wait .hero-h .ln>span{transform:translateY(108%)}', '.ph-wait .hero-photo{clip-path:inset(0 0 0 100%)}',
+        for rule in ('.ph-wait .hero-h .ln>span{transform:translateY(108%)}', '.ph-wait:not(.ns-intro) .hero-photo{clip-path:inset(0 0 0 100%)}',
                      '.ph-wait :is(.hero-sub,.hero .actions){opacity:0;transform:translateY(18px)}',
                      '.ph-wait .hero-device{opacity:0;transform:translateY(70px)}', '.ph-wait .intro-mark path{opacity:0}',
                      '.ph-wait .intro-word>span{transform:translateY(110%)}'):
             with self.subTest(rule=rule):
                 self.assertIn(rule, home)
+        # Night Shift Task 26: under the first-visit intro the hero photo is never clip-hidden, so it paints beneath the
+        # panel and stays the first-visit LCP element. Only the no-intro hold clips it, and nothing else hides it.
+        bare = re.sub(r'/\*.*?\*/', '', home, flags=re.S)
+        photo_rules = [(sel.strip(), body) for sel, body in re.findall(r'([^{}]+)\{([^{}]*)\}', bare) if '.hero-photo' in sel]
+        hiding = [sel for sel, body in photo_rules if re.search(r'clip-path|opacity:0(?![.\d])|visibility', body)]
+        self.assertEqual(hiding, ['.ph-wait:not(.ns-intro) .hero-photo'])
+        for sel, body in photo_rules:
+            if '.ns-intro' in sel and ':not(.ns-intro)' not in sel:
+                self.assertNotIn('clip-path', body, sel)
+        self.assertNotRegex(bare, r'\.ph-wait \.hero-photo\{')
         hero = self.home_js.split('const heroTimeline', 1)[1].split("mm.add('(prefers-reduced-motion: reduce)'", 1)[0]
         self.assertNotIn('.from(', hero)
         self.assertIn('class="hero-sub" data-hero-fade', self.home)

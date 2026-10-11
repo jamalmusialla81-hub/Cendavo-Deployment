@@ -285,7 +285,8 @@
 /* Hero start states, only while motion-boot.js holds .ph-wait: home.js takes them over with GSAP and removes the class (a
    2.5 s timer removes it whatever happens), so the hero never paints, vanishes and replays on a repeat visit. */
 .ph-wait .hero-h .ln>span{transform:translateY(108%)}
-.ph-wait .hero-photo{clip-path:inset(0 0 0 100%)}
+/* Not under the first-visit intro (Task 26): there the photo paints beneath the opaque panel, keeping first-visit LCP fast. */
+.ph-wait:not(.ns-intro) .hero-photo{clip-path:inset(0 0 0 100%)}
 .ph-wait :is(.hero-sub,.hero .actions){opacity:0;transform:translateY(18px)}
 .ph-wait .hero-device{opacity:0;transform:translateY(70px)}
 .ph-wait .intro-mark path{opacity:0}

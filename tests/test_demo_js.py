@@ -152,6 +152,8 @@ function run(env) {
     out.heroAt = introTl ? introTl.callbacks.map(c => c.at) : [];
     out.heroEnd = hero ? hero.duration() : null;
     out.heroPlayed = hero ? hero.played.slice() : null;
+    out.heroPhotoClip = hero ? hero.tweens.filter(t => t.names[0] === 'photo' && ((t.from && 'clipPath' in t.from) || 'clipPath' in t.vars)).map(t => t.from.clipPath) : null;
+    out.heroPhotoScale = hero ? hero.tweens.filter(t => t.names[0].startsWith('img') && t.from && t.from.scale === 1.08 && t.vars.scale === 1).length : null;
     out.heroOpacityOnly = hero ? hero.tweens.every(t => !('autoAlpha' in t.vars) && !('visibility' in t.vars)) : null;
     out.openingKinds = [hero, introTl].filter(Boolean).flatMap(tl => tl.tweens.map(t => t.kind));
     out.introWipeAt = introTl ? introTl.tweens.find(t => t.names[0] === 'intro').at : null;
@@ -578,6 +580,25 @@ class DemoScriptTests(unittest.TestCase):
         self.assertIsNone(released['heroEnd'])
         self.assertIsNone(released['heroPlayed'])
         self.assertNotIn('ph-wait', released['classes'])
+
+    def test_home_hero_photo_paints_under_the_first_visit_intro(self):
+        # Night Shift Task 26: with the intro the photo is never clipped (it paints beneath the panel and stays the LCP
+        # element) and only settles in scale; without the intro, or when scripts arrive late, it still wipes in.
+        r = self.node_json(HOME_SCRIPT, HOME)
+        first = r['first']
+        self.assertEqual(first['heroPhotoClip'], [])
+        self.assertEqual(first['heroPhotoScale'], 1)
+        self.assertEqual(first['heroAt'], [0.95])
+        self.assertLessEqual(first['introEnd'], 1.4)
+        self.assertLessEqual(first['heroEnd'], 1.2)
+        for name in ('noIntro', 'late', 'phone'):
+            with self.subTest(case=name):
+                self.assertEqual(r[name]['heroPhotoClip'], ['inset(0 0 0 100%)'])
+                self.assertEqual(r[name]['heroPhotoScale'], 1)
+                self.assertEqual(r[name]['heroPlayed'], [0])
+        # Late scripts: the intro class goes in the same synchronous run, so the CSS no-intro clip and the JS clip agree.
+        self.assertNotIn('ns-intro', r['late']['classes'])
+        self.assertNotIn('ph-wait', r['late']['classes'])
 
     def test_home_intro_is_skipped_by_any_input_without_swallowing_it(self):
         r = self.node_json(HOME_SCRIPT, HOME)

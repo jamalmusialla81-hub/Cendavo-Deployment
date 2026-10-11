@@ -67,8 +67,8 @@
   gsap.registerPlugin(ScrollTrigger);
   const mm = gsap.matchMedia();
 
-  // Hero (1.2 s): lines rise through masks, the photo un-masks, copy and phone follow. fromTo applies the CSS .ph-wait states.
-  const heroTimeline = () => {
+  // Hero (1.2 s): lines rise through masks, the photo un-masks (not under the intro: LCP), copy and phone follow. fromTo applies the CSS .ph-wait states.
+  const heroTimeline = underIntro => {
     const tl = gsap.timeline({ paused: true, defaults: { ease: 'power4.out' } });
     const lines = $$('.hero-h .ln > span');
     const photo = $$('.hero-photo');
@@ -76,8 +76,8 @@
     const device = $$('.hero-device');
     if (lines.length) tl.fromTo(lines, { yPercent: 108 }, { yPercent: 0, duration: 0.8, stagger: 0.08 }, 0);
     if (photo.length) {
-      tl.fromTo(photo, { clipPath: 'inset(0 0 0 100%)' }, { clipPath: 'inset(0 0 0 0%)', duration: 1, ease: 'expo.inOut', clearProps: 'clipPath' }, 0)
-        .fromTo($$('img', photo[0]), { scale: 1.08 }, { scale: 1, duration: 1.2, ease: 'power3.out' }, 0);
+      if (!underIntro) tl.fromTo(photo, { clipPath: 'inset(0 0 0 100%)' }, { clipPath: 'inset(0 0 0 0%)', duration: 1, ease: 'expo.inOut', clearProps: 'clipPath' }, 0);
+      tl.fromTo($$('img', photo[0]), { scale: 1.08 }, { scale: 1, duration: 1.2, ease: 'power3.out' }, 0);
     }
     if (fades.length) tl.fromTo(fades, { y: 18, opacity: 0 }, { y: 0, opacity: 1, duration: 0.6, stagger: 0.1 }, 0.35);
     if (device.length) tl.fromTo(device, { y: 70, opacity: 0 }, { y: 0, opacity: 1, duration: 0.75, ease: 'power3.out' }, 0.4);
@@ -107,7 +107,7 @@
     const onTime = !window.performance || window.performance.now() <= INTRO_LATEST_START_MS;
     const intro = panel && onTime && root.classList.contains('ns-intro');
     if (intro || root.classList.contains('ph-wait')) {
-      const hero = heroTimeline();
+      const hero = heroTimeline(intro);
       if (intro) playIntro(panel, hero);
       else {
         endIntro();
