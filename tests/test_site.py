@@ -2249,7 +2249,7 @@ class MotionQualityTests(unittest.TestCase):
         # The opening animates the line spans' yPercent, never the heading's opacity.
         opening = self.motion.split("$$('[data-ph]')", 1)[1].split('const rises', 1)[0]
         self.assertIn("$$('h1 .ln > span', head)", opening)
-        self.assertIn('{ yPercent: 108 }', opening)
+        self.assertIn('{ yPercent: 108, y: 0 }', opening)  # Task 27: the pixel y GSAP reads from the CSS hold is reset
         self.assertNotIn('.from(', opening)
         self.assertNotIn("$$('h1', head)", opening)
 

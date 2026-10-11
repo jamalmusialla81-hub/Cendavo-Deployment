@@ -50,7 +50,7 @@
     update();
   }
 
-  // The intro skip never cancels the event: the key, click or scroll still does what it would.
+  // Skipping the intro never cancels the key, click or scroll.
   let onSkip = null;
   const endIntro = () => {
     root.classList.remove('ns-intro');
@@ -67,14 +67,14 @@
   gsap.registerPlugin(ScrollTrigger);
   const mm = gsap.matchMedia();
 
-  // Hero (1.2 s): lines rise through masks, the photo un-masks (not under the intro: LCP), copy and phone follow. fromTo applies the CSS .ph-wait states.
+  // Hero (1.2 s): lines rise, photo un-masks (not under the intro: LCP), copy, phone. fromTo takes over .ph-wait (y: 0: GSAP reads its % as px).
   const heroTimeline = underIntro => {
     const tl = gsap.timeline({ paused: true, defaults: { ease: 'power4.out' } });
     const lines = $$('.hero-h .ln > span');
     const photo = $$('.hero-photo');
     const fades = $$('[data-hero-fade]');
     const device = $$('.hero-device');
-    if (lines.length) tl.fromTo(lines, { yPercent: 108 }, { yPercent: 0, duration: 0.8, stagger: 0.08 }, 0);
+    if (lines.length) tl.fromTo(lines, { yPercent: 108, y: 0 }, { yPercent: 0, y: 0, duration: 0.8, stagger: 0.08, clearProps: 'transform' }, 0);
     if (photo.length) {
       if (!underIntro) tl.fromTo(photo, { clipPath: 'inset(0 0 0 100%)' }, { clipPath: 'inset(0 0 0 0%)', duration: 1, ease: 'expo.inOut', clearProps: 'clipPath' }, 0);
       tl.fromTo($$('img', photo[0]), { scale: 1.08 }, { scale: 1, duration: 1.2, ease: 'power3.out' }, 0);
@@ -88,7 +88,7 @@
   const playIntro = (panel, hero) => {
     const tl = gsap.timeline({ onComplete: endIntro });
     tl.fromTo($$('.intro-mark path', panel), { rotation: index => [-70, 60, -60][index % 3], svgOrigin: '100 100', opacity: 0 }, { rotation: 0, svgOrigin: '100 100', opacity: 1, duration: 0.55, stagger: 0.08, ease: 'power4.out' }, 0.05)
-      .fromTo($$('.intro-word > span', panel), { yPercent: 110 }, { yPercent: 0, duration: 0.45, ease: 'power4.out' }, 0.3)
+      .fromTo($$('.intro-word > span', panel), { yPercent: 110, y: 0 }, { yPercent: 0, y: 0, duration: 0.45, ease: 'power4.out' }, 0.3)
       .fromTo(panel, { clipPath: 'inset(0 0 0% 0)' }, { clipPath: 'inset(0 0 100% 0)', duration: 0.6, ease: 'power4.inOut' }, 0.75)
       .add(() => hero.play(0), 0.95);
     onSkip = () => {

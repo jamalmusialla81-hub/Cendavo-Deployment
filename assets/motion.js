@@ -57,7 +57,7 @@
         const lines = $$('h1 .ln > span', head);
         const media = $$('[data-ph-media]', head);
         const fades = $$('[data-ph-fade]', head);
-        if (lines.length) tl.fromTo(lines, { yPercent: 108 }, { yPercent: 0, duration: 0.9, stagger: 0.08, clearProps: 'transform' }, 0);
+        if (lines.length) tl.fromTo(lines, { yPercent: 108, y: 0 }, { yPercent: 0, y: 0, duration: 0.9, stagger: 0.08, clearProps: 'transform' }, 0);
         if (media.length) tl.fromTo(media, { clipPath: 'inset(0 0 0 100%)' }, { clipPath: 'inset(0 0 0 0%)', duration: 1, stagger: 0.12, ease: 'expo.inOut', clearProps: 'clipPath' }, 0.05);
         if (fades.length) tl.fromTo(fades, { y: 18, opacity: 0 }, { y: 0, opacity: 1, duration: 0.6, stagger: 0.08, clearProps: 'opacity,transform' }, 0.3);
       });

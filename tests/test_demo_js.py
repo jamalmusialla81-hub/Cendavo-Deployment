@@ -157,6 +157,10 @@ function run(env) {
     out.heroOpacityOnly = hero ? hero.tweens.every(t => !('autoAlpha' in t.vars) && !('visibility' in t.vars)) : null;
     out.openingKinds = [hero, introTl].filter(Boolean).flatMap(tl => tl.tweens.map(t => t.kind));
     out.introWipeAt = introTl ? introTl.tweens.find(t => t.names[0] === 'intro').at : null;
+    // Task 27: the start and end states of the percentage tweens that take over CSS translateY(%) holds.
+    const shape = t => ({ kind: t.kind, from: t.from || null, yPercent: t.vars.yPercent, y: t.vars.y, clearProps: t.vars.clearProps || null });
+    out.heroLines = hero ? hero.tweens.filter(t => (t.names[0] || '').startsWith('line')).map(shape) : null;
+    out.introWord = introTl ? introTl.tweens.filter(t => (t.names[0] || '').startsWith('word')).map(shape) : null;
     out.autoAlpha = log.varsSeen.some(v => v && ('autoAlpha' in v || 'visibility' in v));
     out.snap = log.varsSeen.some(v => v && v.scrollTrigger && 'snap' in v.scrollTrigger);
     out.pinned = stage.classList.contains('is-pinned');
@@ -271,6 +275,8 @@ function run(env) {
     out.openingKinds = opening.map(t => t.kind);
     out.openingNames = opening.map(t => t.names[0]);
     out.lineFrom = (opening.find(t => t.names[0] === 'line0') || {}).from || null;
+    const lineTo = (opening.find(t => t.names[0] === 'line0') || {}).vars || null;
+    out.lineTo = lineTo ? { yPercent: lineTo.yPercent, y: lineTo.y, clearProps: lineTo.clearProps || null } : null;
     out.mediaStagger = (opening.find(t => t.names[0] === 'phm0') || {}).vars?.stagger || 0;
     out.setNames = log.setNames.slice();
     out.revealNames = log.tweens.filter(t => t.kind === 'from').flatMap(t => t.names);
@@ -773,7 +779,7 @@ class DemoScriptTests(unittest.TestCase):
                 self.assertTrue(result['openingKinds'])
                 self.assertEqual(set(result['openingKinds']), {'fromTo'})
                 self.assertIn('line0', result['openingNames'])
-                self.assertEqual(result['lineFrom'], {'yPercent': 108})
+                self.assertEqual(result['lineFrom'], {'yPercent': 108, 'y': 0})
                 self.assertGreater(result['mediaStagger'], 0)
                 hidden = result['setNames'] + result['revealNames']
                 for name_on_screen in ('riseOnScreen', 'revealOnScreen', 'devOnScreen'):
@@ -781,6 +787,47 @@ class DemoScriptTests(unittest.TestCase):
                 for name_below in ('rise0', 'reveal0', 'dev0'):
                     self.assertIn(name_below, hidden)
         self.assertEqual(r['reduced']['openingKinds'], [])
+
+    def test_percentage_openings_reset_the_pixel_y_gsap_reads_from_css(self):
+        # Night Shift Task 27: GSAP turns a CSS translateY(108%) into a pixel y. A tween that only animates yPercent keeps
+        # that y, so the homepage H1 stayed below its mask. Every such tween pins y to 0 at both ends; the headlines also
+        # clear the transform once they land.
+        home = self.node_json(HOME_SCRIPT, HOME)
+        for name in ('first', 'noIntro', 'late', 'phone'):
+            with self.subTest(case=name):
+                lines = home[name]['heroLines']
+                self.assertEqual(len(lines), 1)
+                self.assertEqual(lines[0]['kind'], 'fromTo')
+                self.assertEqual(lines[0]['from'], {'yPercent': 108, 'y': 0})
+                self.assertEqual((lines[0]['yPercent'], lines[0]['y']), (0, 0))
+                self.assertIn('transform', lines[0]['clearProps'].split(','))
+        word = home['first']['introWord']
+        self.assertEqual(len(word), 1)
+        self.assertEqual(word[0]['from'], {'yPercent': 110, 'y': 0})
+        self.assertEqual((word[0]['yPercent'], word[0]['y']), (0, 0))
+        motion = self.node_json(MOTION_SCRIPT, MOTION)
+        for name in ('desktop', 'touch'):
+            with self.subTest(case=name):
+                self.assertEqual(motion[name]['lineFrom'], {'yPercent': 108, 'y': 0})
+                self.assertEqual(motion[name]['lineTo']['yPercent'], 0)
+                self.assertEqual(motion[name]['lineTo']['y'], 0)
+                self.assertIn('transform', motion[name]['lineTo']['clearProps'].split(','))
+
+    def test_every_css_percentage_hold_has_a_js_takeover_that_resets_y(self):
+        # Static guard for Task 27: each .ph-wait rule that starts at translateY(<n>%) needs a fromTo starting at
+        # { yPercent: <n>, y: 0 }, or GSAP would keep the CSS offset as pixels on top of the percentage tween.
+        import re
+        assets = HOME.parent
+        js = '\n'.join(path.read_text(encoding='utf-8') for path in sorted(assets.glob('*.js')))
+        holds = []
+        for css in sorted(assets.glob('*.css')):
+            for rule in re.findall(r'[^{}]*\.ph-wait[^{}]*\{[^}]*\}', css.read_text(encoding='utf-8')):
+                holds += [(css.name, rule.strip(), n) for n in re.findall(r'translateY\((-?\d+(?:\.\d+)?)%\)', rule)]
+        self.assertGreaterEqual(len(holds), 3)  # hero lines, intro word, inner-page lines
+        for name, rule, n in holds:
+            with self.subTest(css=name, rule=rule):
+                pattern = r'fromTo\([^;]*?\{\s*yPercent:\s*%s,\s*y:\s*0\s*\}' % re.escape(n)
+                self.assertRegex(js, pattern)
 
     def test_motion_js_services_rows_wipe_dim_and_follow_scroll(self):
         # Night Shift Task 23: with GSAP motion the photo swap is a clip-path wipe (the outgoing photo waits beneath as
