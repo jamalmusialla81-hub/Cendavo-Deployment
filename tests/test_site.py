@@ -222,6 +222,22 @@ def jpeg_size(path):
     raise ValueError(f'no SOF marker in {path}')
 
 
+def base_rules(css):
+    """css with every @media and @container block removed, so only top-level rules remain."""
+    while (match := re.search(r'@(?:media|container)\b[^{]*\{', css)):
+        css = without_blocks(css, match.group(0))[0]
+    return css
+
+
+def minimum_px(value):
+    """Smallest size a CSS font-size can resolve to: a px/rem literal, or the first argument of clamp()/max()."""
+    match = re.match(r'\s*(?:(?:clamp|max)\(\s*)?([\d.]+)(px|rem)\b', value)
+    if not match:
+        return 0.0
+    number = float(match.group(1))
+    return number * 16 if match.group(2) == 'rem' else number
+
+
 VOID_ELEMENTS = {'area', 'base', 'br', 'col', 'embed', 'hr', 'img', 'input', 'link', 'meta', 'source', 'track', 'wbr'}
 
 
@@ -249,6 +265,8 @@ GSAP_TAGS = ['<script src="/assets/vendor/gsap/gsap.min.js" defer></script>',
              '<script src="/assets/vendor/gsap/ScrollTrigger.min.js" defer></script>',
              '<script src="/assets/motion.js" defer></script>']
 HOME_TAG = '<script src="/assets/home.js" defer></script>'
+# Pages that show device or quote mockups and so load the shared mockup kit (kit.css).
+KIT_ROUTES = ['index.html', 'work/index.html', 'pricing/index.html']
 # Pages with GSAP motion (Night Shift Task 10). Contact (the enquiry form) and Demo (the browser app) stay static.
 MOTION_ROUTES = ['index.html', 'work/index.html', 'services/index.html', 'pricing/index.html']
 STATIC_ROUTES = ['contact/index.html', 'demo/index.html']
@@ -268,6 +286,7 @@ class DesignSystemTests(unittest.TestCase):
         cls.css = (OUT / 'assets/site.css').read_text()
         cls.home_css = (OUT / 'assets/home.css').read_text()
         cls.pages_css = (OUT / 'assets/pages.css').read_text()
+        cls.kit_css = (OUT / 'assets/kit.css').read_text()
         cls.home = (OUT / 'index.html').read_text()
         cls.home_main = cls.home.split('<main id="main" tabindex="-1">', 1)[1].split('</main>', 1)[0]
         root = re.search(r':root\{(.*?)\}', cls.css, re.S).group(1)
@@ -336,7 +355,7 @@ class DesignSystemTests(unittest.TestCase):
                 self.assertEqual((OUT / route).read_text().count(preload), 1)
 
     def test_no_third_party_requests(self):
-        for css in (self.css, self.home_css, self.pages_css):
+        for css in (self.css, self.home_css, self.pages_css, self.kit_css):
             for banned in ('@import', 'http', 'fonts.googleapis'):
                 self.assertNotIn(banned, css)
         for route in self.ROUTES:
@@ -689,9 +708,16 @@ class DesignSystemTests(unittest.TestCase):
                 self.assertEqual(html.count('<link rel="stylesheet" href="/assets/site.css">'), 1)
                 # Inner pages share one page stylesheet; the homepage never loads it.
                 self.assertEqual(html.count('<link rel="stylesheet" href="/assets/pages.css">'), 0 if route == 'index.html' else 1)
+                # The mockup kit loads once, before the page stylesheet, only where mockups appear.
+                kit = '<link rel="stylesheet" href="/assets/kit.css">'
+                self.assertEqual(html.count(kit), 1 if route in KIT_ROUTES else 0)
+                if route in KIT_ROUTES:
+                    page_style = re.search(r'<link rel="stylesheet" href="/assets/(?:home|pages)\.css">', html).start()
+                    self.assertLess(html.index('<link rel="stylesheet" href="/assets/site.css">'), html.index(kit))
+                    self.assertLess(html.index(kit), page_style)
 
     def test_motion_is_guarded_and_compositor_only(self):
-        for name, css in (('site.css', self.css), ('home.css', self.home_css), ('pages.css', self.pages_css)):
+        for name, css in (('site.css', self.css), ('home.css', self.home_css), ('pages.css', self.pages_css), ('kit.css', self.kit_css)):
             unguarded, guarded = without_blocks(css, MOTION_GUARD)
             if name == 'site.css':
                 self.assertTrue(guarded)
@@ -706,7 +732,7 @@ class DesignSystemTests(unittest.TestCase):
 
     def test_reveal_states_come_from_javascript_only(self):
         # Content stays visible without JS, if GSAP fails, and with reduced motion: CSS never hides it.
-        for name, css in (('site.css', self.css), ('home.css', self.home_css), ('pages.css', self.pages_css)):
+        for name, css in (('site.css', self.css), ('home.css', self.home_css), ('pages.css', self.pages_css), ('kit.css', self.kit_css)):
             with self.subTest(css=name):
                 unguarded, _ = without_blocks(css, MOTION_GUARD)
                 for hook in ('data-rise', 'data-hero-fade') + MOTION_HOOKS:
@@ -726,13 +752,89 @@ class DesignSystemTests(unittest.TestCase):
         self.assertLessEqual((OUT / 'assets/site.css').stat().st_size, 30 * 1024)
         self.assertLessEqual((OUT / 'assets/home.css').stat().st_size, 30 * 1024)
         self.assertLessEqual((OUT / 'assets/pages.css').stat().st_size, 30 * 1024)
+        self.assertLessEqual((OUT / 'assets/kit.css').stat().st_size, 30 * 1024)
+
+    def test_mockup_kit_is_defined_once_and_shared(self):
+        # Task 12: device frames, mini-sites and the quote sheet live only in kit.css, not copied per page.
+        # Base rules only: responsive overrides inside @media/@container blocks are not second definitions.
+        sheets = {name: base_rules(css) for name, css in (('site.css', self.css), ('home.css', self.home_css),
+                                                         ('pages.css', self.pages_css), ('kit.css', self.kit_css))}
+        for selector in ('.laptop{', '.laptop-screen{', '.phone{', '.phone-screen{', '.ms{', '.hb{', '.gl{', '.fc{',
+                         '.gls{', '.fcd{', '.quote-paper{', '.quote-top{', '.quote-lines li{'):
+            with self.subTest(selector=selector):
+                pattern = r'(?:^|[}\n])' + re.escape(selector)
+                counts = {name: len(re.findall(pattern, css)) for name, css in sheets.items()}
+                self.assertEqual(sum(counts.values()), 1, counts)
+                self.assertEqual(counts['kit.css'], 1, counts)
+
+    def test_how_it_works_has_large_numerals_a_photo_and_readable_steps(self):
+        section = re.search(r'<section class="process"[^>]*>(.*?)</section>', self.home_main, re.S).group(1)
+        steps = re.findall(r'<li class="step">(.*?)</li>', section, re.S)
+        self.assertEqual(len(steps), 5)
+        for number, step in enumerate(steps, 1):
+            with self.subTest(step=number):
+                self.assertIn(f'<span class="step-n" aria-hidden="true">{number:02d}</span>', step)
+                self.assertLess(step.index('step-n'), step.index('<h3>'))
+        parser = ImageCollector()
+        parser.feed(section)
+        self.assertEqual(len(parser.images), 1)
+        attrs, hidden = parser.images[0]
+        self.assertEqual(attrs.get('loading'), 'lazy')
+        self.assertTrue(attrs.get('width') and attrs.get('height'))
+        self.assertTrue(attrs.get('alt', '').strip())
+        self.assertFalse(hidden)
+        numeral = re.search(r'(?:^|[}\n])\.step-n\{([^}]*)\}', self.home_css).group(1)
+        self.assertIn('var(--font-display)', numeral)
+        self.assertGreaterEqual(int(re.search(r'font-stretch:(\d+)%', numeral).group(1)), 105)
+        self.assertGreaterEqual(minimum_px(re.search(r'font:\d+ ([^/]+)/', numeral).group(1)), 48)
+        rules = re.findall(r'(?:^|[}\n])\.step p\{([^}]*)\}', self.home_css)
+        self.assertTrue(rules)
+        for rule in rules:
+            with self.subTest(rule=rule):
+                self.assertGreaterEqual(minimum_px(re.search(r'font-size:([^;]+)', rule).group(1)), 17)
+
+    def test_pricing_teaser_shows_the_quote_sheet_without_prices(self):
+        section = re.search(r'<section class="pricing bone"[^>]*>(.*?)</section>', self.home_main, re.S).group(1)
+        self.assertIn('<h2 id="pricing-title" data-rise>Fixed quote after a free consultation</h2>', section)
+        self.assertIn('<a class="ulink strong" href="/contact/">Ask for a fixed quote</a>', section)
+        self.assertIn('<h3>Always included</h3>', section)
+        self.assertEqual(section.count('<li><span class="inc-t">'), 3)
+        paper = re.search(r'<div class="quote-paper" data-devices role="img" aria-label="([^"]+)">(.*?)</div></div>\n', section, re.S)
+        self.assertIsNotNone(paper)
+        self.assertIn('Illustration', paper.group(1))
+        children = re.findall(r'<(?:div|ul) class="quote-[a-z]+"([^>]*)>', paper.group(2))
+        self.assertGreaterEqual(len(children), 4)
+        for attrs in children:
+            with self.subTest(child=attrs):
+                self.assertIn('aria-hidden="true"', attrs)
+        self.assertLess(section.index('pricing-title'), section.index('quote-paper'))
+        # The care plan and build prices are unconfirmed: no amount appears anywhere on the homepage.
+        self.assertNotRegex(self.home_main, r'\$\s*\d')
+        self.assertNotIn('A$', self.home_main)
+
+    def test_questions_sit_in_two_columns(self):
+        section = re.search(r'<section class="questions"[^>]*>(.*?)</section>', self.home_main, re.S).group(1)
+        head = re.search(r'<div class="questions-head">(.*?)</div>', section, re.S).group(1)
+        self.assertIn('<h2 id="faq-title" data-rise>Questions</h2>', head)
+        self.assertRegex(head, r'<p[^>]*>[^<]{20,}</p>')
+        self.assertIn('href="/contact/"', head)
+        answers = re.search(r'<div class="faq questions-list">(.*?)</div>', section, re.S).group(1)
+        self.assertEqual(re.findall(r'<summary>(.*?)</summary>', answers),
+                         ['Do I need to have everything ready before we talk?', 'Can you redesign the website I already have?',
+                          'How long does it take?', 'What happens after the site goes live?'])
+        self.assertEqual(section.count('<details>'), 4)
+        self.assertLess(section.index('<h2'), section.index('<details>'))
+        self.assertRegex(self.home_css, r'\.questions-head\{grid-column:1/span [3-5]\}')
+        self.assertRegex(self.home_css, r'\.questions-list\{grid-column:[5-7]/-1;max-width:none\}')
 
     def test_every_page_class_has_a_css_rule(self):
-        # The homepage loads site.css + home.css; inner pages load site.css + pages.css.
+        # The homepage loads site.css + home.css; inner pages load site.css + pages.css; /, /work/ and /pricing/ add kit.css.
         pages = Path(__file__).resolve().parents[1] / 'pages'
         checked = 0
         for page in pages.glob('*.html'):
             css = self.css + (self.home_css if page.stem == 'index' else self.pages_css)
+            if page.stem in ('index', 'work', 'pricing'):
+                css += self.kit_css
             classes = set()
             for attribute in re.findall(r'class="([^"]*)"', page.read_text()):
                 classes.update(attribute.split())
@@ -879,6 +981,42 @@ class InnerPageTests(unittest.TestCase):
         for address in re.findall(r'\b[\w-]+(?:\.[\w-]+)+\b', text):
             with self.subTest(address=address):
                 self.assertTrue(address.endswith('.example'))
+
+    def test_work_page_shows_key_screens_for_each_concept(self):
+        # Task 12: each concept project shows 2-3 labelled device screens; the mock text and photos stay silent.
+        main = self.main['work/index.html']
+        rest, stems = main, set()
+        for slug, name in (('harbourside', 'Harbourside'), ('greenline', 'Greenline'), ('fade-co', 'Fade and Co')):
+            with self.subTest(project=slug):
+                article = re.search(rf'<article [^>]*id="{slug}"[^>]*>(.*?)</article>', main, re.S).group(1)
+                self.assertEqual(article.count(' data-devices'), 1)
+                screens = re.search(r'<section class="cs-screens[^"]*" aria-labelledby="([^"]+)">(.*?)</section>', article, re.S)
+                self.assertIsNotNone(screens)
+                block = screens.group(2)
+                rest = rest.replace(block, '')
+                self.assertRegex(block, rf'<h3 id="{screens.group(1)}"[^>]*>Key screens</h3>')
+                self.assertLess(block.index('Key screens'), block.index(' data-devices'))
+                devices = re.findall(r'<div class="(?:laptop|phone)" role="img" aria-label="([^"]+)">', block)
+                self.assertTrue(2 <= len(devices) <= 3, len(devices))
+                self.assertEqual(block.count('role="img"'), len(devices))
+                for label in devices:
+                    self.assertIn(name, label)
+                self.assertEqual(len(re.findall(r'<div class="(?:laptop|phone)-screen" aria-hidden="true">', block)), len(devices))
+                parser = ImageCollector()
+                parser.feed(block)
+                self.assertTrue(parser.images)
+                for attrs, hidden in parser.images:
+                    with self.subTest(img=attrs.get('src')):
+                        self.assertTrue(hidden)
+                        self.assertEqual(attrs.get('alt'), '')
+                        self.assertEqual(attrs.get('loading'), 'lazy')
+                        self.assertEqual(attrs.get('decoding'), 'async')
+                        self.assertTrue(attrs.get('width') and attrs.get('height'))
+                        self.assertRegex(attrs['src'], r'^/assets/images/[a-z-]+-800\.jpg$')
+                        stems.add(attrs['src'].rsplit('-', 1)[0])
+        # Page weight: at most eight photos that the rest of the Work page does not already load.
+        elsewhere = {url.rsplit('-', 1)[0] for url in re.findall(r'/assets/images/[a-z-]+-(?:800|1600)\.jpg', rest)}
+        self.assertLessEqual(len(stems - elsewhere), 8)
 
     def test_inner_pages_make_no_unconfirmed_operational_promises(self):
         # The owner has not confirmed call length, timelines or staffing; say "a short free consultation" instead.
