@@ -69,7 +69,7 @@ function makeGsap(env) {
     registerPlugin() { log.plugins++; },
     matchMedia() { return { add(query, fn) { log.queries.push(query); if (media(query, env)) fn(); } }; },
     timeline(vars) {
-      const tl = { vars: vars || {}, tweens: [], labels: {}, cursor: 0, callbacks: [], played: [], progressed: [],
+      const tl = { vars: vars || {}, tweens: [], labels: {}, cursor: 0, callbacks: [], played: [], progressed: [], now: 0,
         scrollTrigger: vars && vars.scrollTrigger ? { start: 1000, end: 1000 + 2 * env.height } : undefined,
         from(t, v, p) { record(tl, 'from', t, v, p); return tl; },
         to(t, v, p) { record(tl, 'to', t, v, p); return tl; },
@@ -79,6 +79,7 @@ function makeGsap(env) {
         play(at) { tl.played.push(at); return tl; },
         progress(v) { tl.progressed.push(v); if (v === 1) { tl.callbacks.forEach(c => c.fn()); if (tl.vars.onComplete) tl.vars.onComplete(); } return tl; },
         duration() { return Math.max(0, ...tl.tweens.map(t => t.end), ...tl.callbacks.map(c => c.at)); },
+        time() { return tl.now; },
       };
       if (vars) log.varsSeen.push(vars);
       log.timelines.push(tl);
@@ -162,8 +163,12 @@ function run(env) {
       projects[2].parts.link = [target];
       stage.listeners.focusin[0]({ target });
       out.focusScroll = win.scrolled.slice();
-      pin.vars.scrollTrigger.onUpdate({ progress: 1 });
-      out.counter = counter.textContent;
+      // Move the pinned timeline's playhead (what is on screen) to a share of its length and read the counter.
+      const counterAt = progress => { pin.now = progress * pin.duration(); pin.vars.onUpdate(); return counter.textContent; };
+      out.counter = counterAt(1);
+      out.pinDuration = pin.duration();
+      out.counterSamples = [0, 0.2, 0.3, 0.6, 0.8, 1].map(progress => [progress, counterAt(progress)]);
+      out.pinScrollUpdate = 'onUpdate' in pin.vars.scrollTrigger;
       out.pinTweens = pin.tweens.map(t => ({ at: t.at, end: t.end, n: t.n, names: t.names, opacity: t.vars.opacity }));
       out.pinLabels = pin.labels;
     }
@@ -228,11 +233,13 @@ const source = fs.readFileSync(process.argv[1], 'utf8');
 function run(env) {
   const list = element('list');
   const rows = many('svc', 3).map(row => { row.parentNode = list; return row; });
+  const panel = element('panel');
+  const photos = many('photo', 3);
   const button = element('go');
   const summary = element('summary'); summary.tagName = 'SUMMARY';
   const answer = element('answer'); answer.tagName = 'P';
   const details = element('details'); details.children = [summary, answer];
-  const parts = { '.svc': rows, '.button.go': [button], details: [details], '[data-rise]': many('rise', 2), '[data-reveal]': many('reveal', 2),
+  const parts = { '.svc': rows, '.svc-panel': [panel], '.svc-photo': photos, '.button.go': [button], details: [details], '[data-rise]': many('rise', 2), '[data-reveal]': many('reveal', 2),
     '[data-parallax]': [element('frame', { img: many('pimg', 1) })], '[data-ph]': [element('head', { h1: many('h1', 1), '[data-ph-fade]': many('phf', 2), '[data-ph-media]': [element('phm', { img: many('phmimg', 1) })] })],
     '[data-devices]': many('dev', 1) };
   const doc = { querySelectorAll: s => parts[s] || [], querySelector: s => (parts[s] || [])[0] || null };
@@ -240,9 +247,10 @@ function run(env) {
   let log = null;
   if (env.gsap) { const stub = makeGsap(env); win.gsap = stub.gsap; win.ScrollTrigger = stub.ScrollTrigger; log = stub.log; }
   vm.runInNewContext(source, { window: win, document: doc });
-  const out = { live: list.classList.contains('is-live'), active: rows.map(r => r.classList.contains('is-active')) };
-  rows[2].listeners.mouseenter[0](); out.afterHover = rows.map(r => r.classList.contains('is-active'));
-  rows[1].listeners.focusin[0](); out.afterFocus = rows.map(r => r.classList.contains('is-active'));
+  const shown = () => photos.map(p => p.classList.contains('is-active'));
+  const out = { live: panel.classList.contains('is-live'), active: rows.map(r => r.classList.contains('is-active')), photos: shown() };
+  rows[2].listeners.mouseenter[0](); out.afterHover = rows.map(r => r.classList.contains('is-active')); out.photosAfterHover = shown();
+  rows[1].listeners.focusin[0](); out.afterFocus = rows.map(r => r.classList.contains('is-active')); out.photosAfterFocus = shown();
   if (log) {
     out.queries = log.queries;
     out.batches = log.batches;
@@ -583,6 +591,29 @@ class DemoScriptTests(unittest.TestCase):
                 self.assertLessEqual(max(t['end'] for t in (text_in, dev_in)), labels['p%d' % index] + 1e-9)
                 self.assertGreaterEqual(text_out['at'], labels['p%d' % (index - 1)])
 
+    def test_home_projects_counter_matches_the_title_on_screen(self):
+        # Night Shift Task 21: the counter changes at the middle of each text swap (outgoing text gone, incoming arriving),
+        # measured on the timeline's own playhead, not at equal slices of the scroll and not ahead of the scrubbed visuals.
+        r = self.node_json(HOME_SCRIPT, HOME)
+        first = r['first']
+        self.assertFalse(first['pinScrollUpdate'])  # scroll progress runs ahead of the scrubbed timeline, so it is not used
+        text = [t for t in first['pinTweens'] if t['n'] == 4]
+        swaps = [(text[i]['end'] + text[i + 1]['at']) / 2 for i in (0, 2)]
+        samples = first['counterSamples']
+        self.assertEqual([p for p, _ in samples], [0, 0.2, 0.3, 0.6, 0.8, 1])
+        for progress, shown in samples:
+            with self.subTest(progress=progress):
+                time = progress * first['pinDuration']
+                expected = 1 + sum(1 for swap in swaps if time >= swap)
+                self.assertEqual(shown, str(expected))
+        # 0.2 is past the first swap but would still round to project 1 with equal slices.
+        self.assertEqual([shown for _, shown in samples], ['1', '2', '2', '2', '3', '3'])
+        for index, swap in enumerate(swaps):
+            with self.subTest(transition=index + 1):
+                text_out, text_in = text[2 * index], text[2 * index + 1]
+                self.assertGreaterEqual(swap, text_in['at'] - 1e-9)  # the new title has started to appear
+                self.assertLessEqual(swap, text_out['end'] + 1e-9)  # and the old one is on its way out
+
     def test_motion_boot_only_starts_the_intro_on_a_first_plain_visit(self):
         r = self.node_json(BOOT_SCRIPT, BOOT)
         for name, result in r.items():
@@ -614,6 +645,10 @@ class DemoScriptTests(unittest.TestCase):
                 self.assertEqual(result['active'], [True, False, False])
                 self.assertEqual(result['afterHover'], [False, False, True])
                 self.assertEqual(result['afterFocus'], [False, True, False])
+                # The photo panel shows the photo for the active row: the first one at first, then the hovered or focused row's.
+                self.assertEqual(result['photos'], [True, False, False])
+                self.assertEqual(result['photosAfterHover'], [False, False, True])
+                self.assertEqual(result['photosAfterFocus'], [False, True, False])
         desktop = r['desktop']
         self.assertFalse(desktop['visibility'])
         self.assertTrue(desktop['pull'])

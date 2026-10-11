@@ -133,12 +133,16 @@
     };
     stage.classList.add('is-pinned');
     if (bar) gsap.set(bar, { scaleX: 1 / count, transformOrigin: '0 50%' });
+    // Timeline times at which each project's text takes over (the middle of its text swap). The counter follows the
+    // timeline's own playhead, which is what is on screen (scrub smoothing lets the scroll position run ahead of it),
+    // and changes together with the title rather than at equal slices of the scroll.
+    const swaps = [];
     const tl = gsap.timeline({
       defaults: { ease: 'power3.inOut' },
+      onUpdate: () => show(Math.min(count - 1, swaps.filter(swap => tl.time() >= swap).length)),
       scrollTrigger: {
         trigger: stage, pin: true, start: 'top top', scrub: 0.6, invalidateOnRefresh: true,
         end: () => '+=' + Math.round(window.innerHeight * PIN_VIEWPORTS),
-        onUpdate: self => show(Math.min(count - 1, Math.round(self.progress * (count - 1)))),
       },
     });
     tl.addLabel('p0', 0);
@@ -147,19 +151,22 @@
       const current = projects[index];
       const at = (index - 1) * 1.2;
       const copy = $$('.proj-copy > *', current);
+      const outgoing = $$('.proj-copy > *', previous);
       const devices = $$('.proj-devices', current);
       gsap.set($$('.proj-media', current), { clipPath: 'inset(100% 0 0 0)' });
       gsap.set(copy, { opacity: 0, y: 16 });
       gsap.set(devices, { opacity: 0, y: 140, rotation: 2.5, transformOrigin: '50% 100%' });
       // One quick text swap mid-wipe (each side 0.18 units, a 0.02 overlap) so one project's text is always on screen,
       // and the devices hand over back to back, so two laptops never share the frame.
-      tl.to($$('.proj-copy > *', previous), { opacity: 0, y: -16, stagger: 0.02, duration: 0.12, ease: 'power2.in' }, at + 0.3)
+      tl.to(outgoing, { opacity: 0, y: -16, stagger: 0.02, duration: 0.12, ease: 'power2.in' }, at + 0.3)
         .to($$('.proj-devices', previous), { opacity: 0, y: -110, duration: 0.35, ease: 'power2.in' }, at + 0.05)
         .to($$('.proj-media', current), { clipPath: 'inset(0% 0 0 0)', duration: 0.8 }, at + 0.1)
         .fromTo($$('.proj-media img', current), { scale: 1.1 }, { scale: 1, duration: 0.9, ease: 'power2.out' }, at + 0.1)
         .to(copy, { opacity: 1, y: 0, stagger: 0.02, duration: 0.12, ease: 'power2.out' }, at + 0.46)
         .to(devices, { opacity: 1, y: 0, rotation: 0, duration: 0.55, ease: 'power3.out' }, at + 0.4)
         .addLabel('p' + index, at + 1);
+      const outEnd = at + 0.3 + 0.12 + 0.02 * Math.max(0, outgoing.length - 1);
+      swaps.push((outEnd + at + 0.46) / 2);
     }
     tl.to({}, { duration: 0.3 });
     // Keyboard focus entering a project scrolls the page to the point where that project is fully shown.

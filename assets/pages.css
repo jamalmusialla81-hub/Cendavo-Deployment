@@ -15,7 +15,7 @@
 .pg-label{margin:0 0 var(--space-6);padding-bottom:14px;border-bottom:1px solid var(--bone);color:var(--stone);font:600 1rem/1.3 var(--font-display);font-stretch:104%;letter-spacing:0}
 .bone .pg-label{color:var(--ink-soft);border-bottom-color:var(--ink)}
 .btn-row{display:flex;flex-wrap:wrap;gap:var(--space-3);margin-top:var(--space-8)}
-.sv-chapters ul,.tick,.ab-build-list,.care-cycle,.pr-steps,.inc-grid,.aff,.ct-steps,.exp,.cs-list,.wk-demo-list{list-style:none;margin:0;padding:0}
+.sv-chapters ul,.tick,.ab-build-list,.care-cycle,.pr-steps,.inc-grid,.aff,.ct-steps,.cs-list,.wk-demo-list{list-style:none;margin:0;padding:0}
 .spec{margin:clamp(40px,5vw,64px) 0 0;border-top:1px solid var(--bone)}
 .spec-row{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,2fr);gap:var(--space-2) var(--space-6);padding:22px 0;border-bottom:1px solid var(--line)}
 .spec dt{font:650 1rem/1.4 var(--font-display);font-stretch:104%}
@@ -31,7 +31,7 @@
 /* Photo-backed closing call to action */
 .cta-band{position:relative;isolation:isolate;overflow:hidden;padding-block:clamp(120px,18vw,240px)}
 .cta-band-media{position:absolute;inset:0;z-index:-1}
-.cta-band-media img,.sv-band img,.sv-hero-media img,.chap-photo img,.care-photo img,.pr-inc-photo img,.pr-care-media img,.ct-photo img,.wk-tile-img img,.cs-cover-media img,.gl-cover-media img,.fc-band img,.aff-img img{width:100%;height:100%;object-fit:cover}
+.cta-band-media img,.sv-band img,.sv-hero-media img,.chap-photo img,.care-photo img,.pr-inc-photo img,.pr-care-media img,.wk-tile-img img,.cs-cover-media img,.gl-cover-media img,.fc-band img,.aff-img img{width:100%;height:100%;object-fit:cover}
 .cta-band-media::after{content:"";position:absolute;inset:0;background:linear-gradient(90deg,rgba(14,14,13,.86) 0%,rgba(14,14,13,.6) 55%,rgba(14,14,13,.35) 100%)}
 .cta-band h2{max-width:12ch;margin:0;font-size:clamp(3rem,7.4vw,7.4rem);font-weight:800;font-stretch:84%;line-height:.93;letter-spacing:-.025em}
 .cta-band p{margin:28px 0 36px;max-width:40ch;color:#D6D2CA;font-size:clamp(1.0625rem,.5vw + .95rem,1.25rem)}
@@ -68,8 +68,8 @@
 .care-month{margin-top:clamp(48px,6vw,80px)}
 .care-cycle{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));column-gap:clamp(20px,3vw,48px)}
 .care-cycle li{padding:24px 0;border-bottom:1px solid var(--line)}
-.care-cycle b,.inc-grid b,.exp b,.wk-demo-list b{display:block;font:720 clamp(1.3rem,1.8vw,1.75rem)/1.05 var(--font-display);font-stretch:92%;letter-spacing:-.01em}
-.care-cycle span,.inc-grid span,.exp span,.wk-demo-list span{display:block;margin-top:10px;color:var(--stone);font-size:1rem}
+.care-cycle b,.inc-grid b,.wk-demo-list b{display:block;font:720 clamp(1.3rem,1.8vw,1.75rem)/1.05 var(--font-display);font-stretch:92%;letter-spacing:-.01em}
+.care-cycle span,.inc-grid span,.wk-demo-list span{display:block;margin-top:10px;color:var(--stone);font-size:1rem}
 .faq-head{grid-column:1/span 4;position:sticky;top:108px}
 .faq-list{grid-column:6/-1;max-width:none}
 
@@ -89,8 +89,8 @@
 .pr-inc-head{grid-column:1/span 4}
 .pr-inc-head p{color:var(--stone)}
 .pr-inc-photo{margin-top:clamp(32px,4vw,56px);aspect-ratio:5/4;overflow:hidden;background:var(--ink-2)}
-.inc-grid,.exp{grid-column:6/-1;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));column-gap:clamp(20px,3vw,48px);border-top:1px solid var(--bone)}
-.inc-grid li,.exp li{padding:26px 0 28px;border-bottom:1px solid var(--line)}
+.inc-grid{grid-column:6/-1;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));column-gap:clamp(20px,3vw,48px);border-top:1px solid var(--bone)}
+.inc-grid li{padding:26px 0 28px;border-bottom:1px solid var(--line)}
 .pr-aff-head{align-items:end;margin-bottom:clamp(48px,6vw,80px)}
 .pr-aff-head h2{grid-column:1/span 6;margin:0}
 .pr-aff-head p{grid-column:8/-1;margin:0}
@@ -122,8 +122,6 @@
 .ct-steps li:first-child .ct-n{background:var(--amber);border-color:var(--amber);color:var(--ink)}
 .ct-steps b{display:block;font:650 1.0625rem/1.3 var(--font-display)}
 .ct-steps div span{display:block;margin-top:2px;color:var(--stone);font-size:1rem}
-.ct-photo{height:clamp(200px,22vw,340px);overflow:hidden;background:var(--ink-2)}
-.ct-photo img{object-position:30% 50%}
 .ct-form{padding:clamp(48px,6vw,96px) max(var(--gut),(100vw - var(--max)) / 2 + var(--gut)) clamp(56px,7vw,112px) clamp(28px,5vw,88px)}
 .ct-form-in{max-width:700px}
 .ct-form-h{font-size:clamp(2rem,3vw,2.75rem);font-weight:780;font-stretch:86%}
@@ -140,8 +138,8 @@
 .form-foot{display:grid;gap:18px;margin-top:var(--space-3)}
 .form-foot .button{justify-self:start}
 .form-foot .notice{max-width:62ch;font-size:.875rem}
-.ct-expect{border-top:1px solid var(--line)}
-.ct-expect h2{grid-column:1/span 4}
+/* What to expect from us, as one short line under the submit button. */
+.form-promise{margin:0;max-width:62ch;font-size:.9375rem}
 
 /* Work */
 .wk-hero{padding-block:clamp(64px,9vw,136px) var(--section)}
@@ -243,10 +241,21 @@
 .wk-demo-note{margin:18px 0 32px;padding-left:14px;border-left:2px solid var(--ink);font-size:.95rem}
 .wk-demo-list{grid-column:7/-1;border-top:1px solid var(--ink)}
 .wk-demo-list li{padding:26px 0 28px;border-bottom:1px solid var(--line-dark)}
-.bone .wk-demo-list span,.bone .inc-grid span,.bone .exp span{color:var(--ink-soft)}
+.bone .wk-demo-list span,.bone .inc-grid span{color:var(--ink-soft)}
 
-/* About (reuses the Work hero and the Services chapter photo). "How we build" is a full-width typographic band:
+/* About. The opening: headline with the intro under it on the left, three decorative 4:5 photos (aria-hidden) on the right,
+   set at staggered heights and running past the right gutter. "How we build" is a full-width typographic band:
    four statements set large in one stack, no card grid and no photo. */
+.ab-hero{padding-block:clamp(64px,9vw,136px) var(--section);overflow:hidden}
+.ab-hero-in{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));column-gap:var(--col-gap);align-items:start}
+.ab-hero-copy{grid-column:1/span 5}
+.ab-h{max-width:none;font-size:clamp(2.6rem,4.6vw,4.75rem)}
+.ab-photos{grid-column:6/-1;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px;align-items:start;margin-right:calc(-1 * var(--gut))}
+.ab-photo{aspect-ratio:4/5;overflow:hidden;background:var(--ink-2)}
+.ab-photo img{width:100%;height:100%;object-fit:cover}
+.ab-photo:nth-child(2){margin-top:64px}
+.ab-photo:nth-child(3){margin-top:32px}
+.ab-closing .cta-band-media img{object-position:50% 70%}
 .ab-list{list-style:none;margin:clamp(40px,5vw,64px) 0 0;padding:0;border-top:1px solid var(--bone)}
 .ab-list li{padding:26px 0 28px;border-bottom:1px solid var(--line)}
 .ab-list h3{font-weight:720;font-stretch:92%}
@@ -264,15 +273,29 @@
 /* Demonstration project page */
 .demo-side h2{font-size:1.25rem;font-weight:650;font-stretch:100%;line-height:1.1;letter-spacing:-.01em}
 .page-hero .pg-h{max-width:14ch}
+.demo-hero-copy,.demo-hero-aside{min-width:0}
+/* Large, tall screens only: the hero's right half carries the intro and the notice, and the app panel is pulled up 18vh into
+   room added under the hero, so it overlaps the hero's lower edge without covering its heading, text or notice. */
+@media(min-width:1081px) and (min-height:700px){
+.demo-hero{padding-bottom:calc(clamp(48px,6vw,88px) + 18vh)}
+.demo-hero-in{display:grid;grid-template-columns:minmax(0,7fr) minmax(0,5fr);column-gap:var(--col-gap);align-items:end}
+.demo-hero-aside .lead{margin-top:0}
+.demo-app{padding-top:0}
+.demo-shell{position:relative;z-index:1;margin-top:-18vh}
+.demo-side{box-shadow:0 0 0 1px var(--line)}
+}
 
 /* Responsive */
 @media(max-width:960px){
 .ct{grid-template-columns:1fr}
 .ct-side-in{padding:56px var(--gut) 48px}
-.ct-photo{display:none}
 .ct-form{padding:56px var(--gut) 72px}
 }
 @media(max-width:900px){
+.ab-hero-copy,.ab-photos{grid-column:1/-1}
+.ab-photos{gap:10px;margin:40px 0 0}
+.ab-photo:nth-child(2){margin-top:24px}
+.ab-photo:nth-child(3){margin-top:12px}
 .sv-hero{display:block;min-height:0}
 .sv-hero-media{position:relative;width:auto;height:56svh;min-height:320px;max-height:520px;z-index:0}
 .sv-hero-media::after{background:linear-gradient(0deg,var(--ink) 0%,rgba(14,14,13,0) 40%)}
@@ -285,7 +308,7 @@
 .chap-photo,.care-photo,.faq-head{position:static}
 .chap-photo{aspect-ratio:4/3;margin-bottom:48px}
 .care-photo{aspect-ratio:4/3;margin-top:40px}
-.chap-body,.faq-list,.inc-grid,.exp,.wk-demo-list,.cs-does{margin-top:48px}
+.chap-body,.faq-list,.inc-grid,.wk-demo-list,.cs-does{margin-top:48px}
 .quote{margin-top:64px}
 .pr-steps{grid-template-columns:1fr;row-gap:40px}
 .pr-steps::before{left:21px;right:auto;top:0;bottom:0;width:1px;height:auto}
@@ -330,7 +353,7 @@
 }
 @media(max-width:640px){
 .wk-index{padding-inline:16px}
-.spec-row,.care-cycle,.inc-grid,.exp,.field-row,.ab-build-list li{grid-template-columns:1fr}
+.spec-row,.care-cycle,.inc-grid,.field-row,.ab-build-list li{grid-template-columns:1fr}
 .ab-build-list span{margin-top:12px}
 .form-foot .button{justify-self:stretch}
 .scale{grid-template-columns:1fr 1fr;row-gap:8px}

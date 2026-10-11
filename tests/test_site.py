@@ -29,6 +29,7 @@ class SiteBuildTests(unittest.TestCase):
         hero = demo.split('<main id="main" tabindex="-1">', 1)[1].split('</h1>', 1)[0]
         self.assertIn('Demonstration project', hero)
         self.assertIn('sample data', hero)
+        self.assertIn('Demonstration project, sample data', hero)  # Task 21: a comma, not a spaced em dash
 
     # Old SaaS/subscription framing that must not return on any page (owner decision 2026-10-11).
     SAAS_WORDING = ('shared platform', 'focused admin tool', 'hypothes', 'subscri', 'a$', '/ month', 'per month',
@@ -1087,7 +1088,7 @@ class InnerPageTests(unittest.TestCase):
         self.assertEqual(main.count(CONCEPT_LABEL), 3)
         self.assertIn('href="/demo/"', main)
         self.assertIn('href="/contact/"', main)
-        self.assertIn('Demonstration project — sample data', main)
+        self.assertIn('Demonstration project, sample data', main)
         text = visible_text(main).lower()
         for banned in ('testimonial', 'trusted by', 'award', '%', '$'):
             with self.subTest(banned=banned):
@@ -1459,16 +1460,54 @@ class AboutPageTests(unittest.TestCase):
         self.assertNotRegex(self.text, r'\d+\+')
 
     def test_photos_are_existing_described_and_few(self):
+        # Night Shift Task 21: the opening holds three decorative 4:5 photos beside the headline; below it, at most two more.
+        hero, rest = self.main.split('</section>', 1)
         parser = ImageCollector()
-        parser.feed(self.main)
-        self.assertTrue(1 <= len(parser.images) <= 3, len(parser.images))
-        described = [attrs for attrs, hidden in parser.images if not hidden]
+        parser.feed(hero)
+        names = [re.search(r'/images/([a-z-]+)-(?:800|1600)\.jpg$', attrs['src']).group(1) for attrs, _ in parser.images]
+        self.assertEqual(names, ['barber-shave', 'garden-wall', 'detail-wax'])
+        self.assertIn('<div class="ab-photos" aria-hidden="true">', hero)
+        for index, (attrs, hidden) in enumerate(parser.images):
+            with self.subTest(hero_photo=names[index]):
+                self.assertTrue(hidden)
+                self.assertEqual(attrs.get('alt'), '')
+                self.assertTrue(attrs.get('width') and attrs.get('height'))
+                self.assertEqual(attrs.get('decoding'), 'async')
+                # Only the first loads straight away; the other two are lazy.
+                self.assertEqual(attrs.get('loading'), 'lazy' if index else None)
+                self.assertRegex(attrs['src'], r'-800\.jpg$')
+                self.assertNotIn('fetchpriority', attrs)
+        self.assertEqual(hero.count('<picture><source type="image/avif" '), 3)
+        # The intro paragraph sits directly under the headline, before the photos.
+        self.assertRegex(hero, r'</h1>\s*<p class="pg-sub">')
+        self.assertLess(hero.index('</h1>'), hero.index('ab-photos'))
+        below = ImageCollector()
+        below.feed(rest)
+        self.assertTrue(1 <= len(below.images) <= 2, len(below.images))
+        described = [attrs for attrs, hidden in below.images if not hidden]
         self.assertTrue(described)
-        for attrs in described:
+        for attrs, _ in below.images:
             with self.subTest(src=attrs['src']):
-                self.assertTrue(attrs['alt'].strip())
-                self.assertEqual(attrs.get('loading'), 'lazy')  # every photo sits below the type-only opening
+                self.assertEqual(attrs.get('loading'), 'lazy')  # every photo below the opening is lazy
+        for attrs in described:
+            self.assertTrue(attrs['alt'].strip())
         self.assertNotIn('barber-tools', self.html)
+
+    def test_opening_sets_copy_left_and_staggered_photos_right(self):
+        css = (OUT / 'assets/pages.css').read_text()
+        base = base_rules(css)
+        self.assertIn('grid-column:1/span 5', rules_for(base, '.ab-hero-copy')[0])
+        photos = rules_for(base, '.ab-photos')[0]
+        self.assertIn('grid-column:6/-1', photos)
+        self.assertIn('gap:16px', photos)
+        self.assertIn('margin-right:calc(-1 * var(--gut))', photos)  # runs past the right gutter
+        self.assertIn('aspect-ratio:4/5', rules_for(base, '.ab-photo')[0])
+        self.assertEqual(rules_for(base, '.ab-photo:nth-child(2)'), ['margin-top:64px'])
+        self.assertEqual(rules_for(base, '.ab-photo:nth-child(3)'), ['margin-top:32px'])
+        self.assertIn('overflow:hidden', rules_for(base, '.ab-hero')[0])  # the bleed never widens the page
+        narrow = media_blocks(css, 'max-width:900px')
+        self.assertIn('grid-column:1/-1', rules_for(narrow, '.ab-photos')[0])
+        self.assertIn('margin:40px 0 0', rules_for(narrow, '.ab-photos')[-1])
 
     def test_reuses_shared_assets_and_motion_hooks_only(self):
         self.assertEqual(re.findall(r'<link rel="stylesheet" href="([^"]+)">', self.head), ['/assets/site.css', '/assets/pages.css'])
@@ -1622,15 +1661,30 @@ class DesignCritiqueFixTests(unittest.TestCase):
     def test_services_rows_do_not_slide(self):
         self.assertNotIn('translateX(', self.home_css)
         self.assertNotRegex(self.home_css, r'\.svc[^{]*h3\{[^}]*transition')
+        # Night Shift Task 21: no scale on inactive rows (it misaligned their edges); the photo panel crossfades instead.
+        self.assertNotIn('scale(.94)', self.home_css)
         _, guarded = without_blocks(self.home_css, MOTION_GUARD)
-        self.assertIn('.svc-list.is-live .svc:not(.is-active) img{opacity:.55;transform:scale(.94)}', ''.join(guarded))
+        self.assertIn('.svc-panel.is-live .svc-photo.is-active{opacity:1;transition-delay:0s}', ''.join(guarded))
 
-    def test_contact_photo_is_hidden_on_phones(self):
-        hidden = [query for query in re.findall(r'@media\(max-width:(\d+)px\)\{', self.pages_css)
-                  if '.ct-photo{display:none}' in media_blocks(self.pages_css, f'max-width:{query}px')]
-        self.assertTrue(hidden)
-        self.assertTrue(all(int(query) >= 640 for query in hidden))
-        self.assertNotIn('.ct-photo{display:none}', base_rules(self.pages_css))
+    def test_contact_has_no_photo_sliver_and_one_line_of_expectations(self):
+        # Night Shift Task 21 (second critique): the thin photo band under the steps is gone on every screen size, and
+        # "What to expect from us" is one short line under the submit button instead of another heading and grid.
+        html = (OUT / 'contact/index.html').read_text()
+        main = main_of(html)
+        self.assertNotIn('ct-photo', html)
+        self.assertNotIn('ct-photo', self.pages_css)
+        self.assertNotIn('detail-headlight', html)
+        self.assertNotIn('<img', main)
+        self.assertNotIn('What to expect from us', html)
+        self.assertNotIn('ct-expect', html)
+        self.assertNotRegex(self.pages_css, r'\.exp(?![\w-])')
+        foot = re.search(r'<div class="form-foot">(.*?)</div></form>', main, re.S).group(1)
+        self.assertRegex(foot, r'^<button class="button large" type="submit">Send enquiry</button><p class="form-promise">[^<]{20,120}</p>'
+                               r'<p class="notice" id="enquiry-privacy">')
+        line = re.search(r'<p class="form-promise">([^<]+)</p>', foot).group(1)
+        for claim in ('person', 'plain language', 'no hard sell'):
+            self.assertIn(claim, line)
+        self.assertEqual(rules_for(base_rules(self.pages_css), '.form-promise'), ['margin:0;max-width:62ch;font-size:.9375rem'])
 
 
 class RepetitionTests(unittest.TestCase):
@@ -1672,8 +1726,9 @@ class RepetitionTests(unittest.TestCase):
         self.assertLess(contrast(colour, '#0E0E0D'), 1.5)
 
     def test_closing_photo_differs_per_page(self):
-        expected = {'index.html': 'detail-rear', 'work/index.html': 'garden-lawn', 'services/index.html': 'barber-interior',
-                    'pricing/index.html': 'garden-deck', 'about/index.html': 'detail-headlight'}
+        # Night Shift Task 21: Services no longer opens and closes on barbershop photos; About's closing photo is garden-lawn.
+        expected = {'index.html': 'detail-rear', 'work/index.html': 'garden-lawn', 'services/index.html': 'trade-panel',
+                    'pricing/index.html': 'garden-deck', 'about/index.html': 'garden-lawn'}
         for route, photo in expected.items():
             with self.subTest(route=route):
                 main = main_of(self.html[route])
@@ -1900,3 +1955,114 @@ class WorkArtDirectionTests(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class SecondCritiqueFixTests(unittest.TestCase):
+    """Night Shift Task 21: remaining fixes from docs/design/night-shift/critique/CRITIQUE2.md (demo stacked rows deferred)."""
+
+    @classmethod
+    def setUpClass(cls):
+        build()
+        cls.home_css = (OUT / 'assets/home.css').read_text()
+        cls.pages_css = (OUT / 'assets/pages.css').read_text()
+        cls.home = main_of((OUT / 'index.html').read_text())
+        cls.services = re.search(r'<section class="services"[^>]*>(.*?)</section>', cls.home, re.S).group(1)
+
+    def test_services_have_one_decorative_photo_panel(self):
+        panels = re.findall(r'<div class="svc-panel" aria-hidden="true">.*?</div>\s*<ul class="svc-list">', self.services, re.S)
+        self.assertEqual(len(panels), 1)
+        self.assertEqual(self.home.count('class="svc-panel"'), 1)
+        parser = ImageCollector()
+        parser.feed(panels[0])
+        names = [re.search(r'/images/([a-z-]+)-(?:800|1600)\.jpg$', attrs['src']).group(1) for attrs, _ in parser.images]
+        self.assertEqual(names, ['detail-wax', 'detail-dash', 'garden-wall'])  # New website, Redesign, Care plan
+        self.assertEqual(panels[0].count('<div class="svc-photo"><picture><source type="image/avif" '), 3)
+        for attrs, hidden in parser.images:
+            with self.subTest(src=attrs['src']):
+                self.assertTrue(hidden)
+                self.assertEqual((attrs.get('alt'), attrs.get('loading'), attrs.get('decoding')), ('', 'lazy', 'async'))
+                self.assertTrue(attrs.get('width') and attrs.get('height'))
+        rows = re.findall(r'<li class="svc">(.*?)</li>', self.services, re.S)
+        self.assertEqual(len(rows), 3)
+        for row in rows:
+            with self.subTest(row=row[:40]):
+                self.assertNotIn('<img', row)
+                self.assertRegex(row, r'^<h3><a href="/services/#[a-z]+">[^<]+</a></h3><p>')
+        # garden-walk is the pricing band's photo; as a page photo on Home it appears nowhere else. (The Greenline laptop
+        # mockup keeps it as that fictional site's own hero image, as on the Work page.)
+        pricing = re.search(r'<div class="pricing-media"[^>]*>(.*?)</div>', self.home, re.S).group(0)
+        mockups = re.findall(r'<div class="gl-photo">.*?</div>', self.home, re.S)
+        self.assertEqual(len(mockups), 1)
+        outside = self.home.replace(pricing, '').replace(mockups[0], '')
+        self.assertEqual(outside.count('garden-walk'), 0)
+        self.assertNotIn('garden-walk', self.services)
+        self.assertIn('garden-walk', pricing)
+
+    def test_services_panel_is_sticky_and_crossfades_opacity_only(self):
+        base = base_rules(self.home_css)
+        self.assertIn('grid-column:1/span 7', rules_for(base, '.svc-list')[0])
+        panel = rules_for(base, '.svc-panel')[0]
+        for needle in ('grid-column:8/-1', 'position:sticky', 'top:12vh', 'aspect-ratio:4/5', 'overflow:hidden'):
+            self.assertIn(needle, panel)
+        self.assertIn('align-items:start', rules_for(base, '.svc-grid')[0])  # the panel must not stretch, or it cannot stick
+        self.assertIn('position:absolute;inset:0', rules_for(base, '.svc-photo')[0])
+        # Without JS (no .is-live) the first photo is on top; afterwards the active one is. No hiding outside the guard.
+        self.assertEqual(rules_for(base, '.svc-panel:not(.is-live) .svc-photo:first-child'), ['z-index:1'])
+        self.assertEqual(rules_for(base, '.svc-photo.is-active'), ['z-index:1'])
+        self.assertNotIn('scale(.94)', self.home_css)
+        unguarded, guarded = without_blocks(self.home_css, MOTION_GUARD)
+        self.assertNotIn('.svc-panel.is-live', unguarded)
+        guarded = ''.join(guarded)
+        self.assertIn('.svc-panel.is-live .svc-photo{opacity:0;transition:opacity 500ms var(--ease) 500ms}', guarded)
+        self.assertIn('.svc-panel.is-live .svc-photo.is-active{opacity:1;transition-delay:0s}', guarded)
+        for rule in rules_for(guarded, '.svc-panel.is-live .svc-photo') + rules_for(guarded, '.svc-panel.is-live .svc-photo.is-active'):
+            self.assertNotRegex(rule, r'transform|scale')
+        # Up to 900px: one photo above the list, not sticky.
+        narrow = media_blocks(self.home_css, 'max-width:900px')
+        self.assertEqual(rules_for(narrow, '.svc-list'), ['grid-column:1/-1;grid-row:auto'])
+        small_panel = rules_for(narrow, '.svc-panel')[-1]
+        self.assertIn('position:relative', small_panel)
+        self.assertIn('top:auto', small_panel)
+        self.assertLess(self.services.index('svc-panel'), self.services.index('svc-list'))  # above the list in source order
+
+    def test_home_lists_have_no_dash_bullets(self):
+        self.assertFalse(rules_for(self.home_css, '.proj-points li::before'))
+        self.assertNotIn('padding:13px 0 13px 26px', self.home_css)
+        for list_html in re.findall(r'<ul class="proj-points">(.*?)</ul>', self.home, re.S):
+            self.assertNotRegex(visible_text(list_html), r'(?:^|\s)[—–-]\s')
+        self.assertNotRegex(self.home_css, r'content:\s*"[^"]*[—–-][^"]*"')
+
+    def test_demonstration_label_uses_a_comma_everywhere(self):
+        for route in SiteBuildTests.ROUTES + ['404.html']:
+            with self.subTest(route=route):
+                html = (OUT / route).read_text()
+                self.assertNotIn('Demonstration project — sample data', html)
+        self.assertIn('Demonstration project, sample data', (OUT / 'demo/index.html').read_text())
+        self.assertIn('Demonstration project, sample data', (OUT / 'work/index.html').read_text())
+
+    def test_demo_panel_overlaps_the_hero_on_large_tall_screens_only(self):
+        query = 'min-width:1081px) and (min-height:700px'
+        block = media_blocks(self.pages_css, query)
+        self.assertIn('margin-top:-18vh', rules_for(block, '.demo-shell')[0])
+        self.assertIn('position:relative;z-index:1', rules_for(block, '.demo-shell')[0])
+        # The hero gains the same room underneath, so the panel never covers its heading, intro or notice.
+        self.assertEqual(rules_for(block, '.demo-hero'), ['padding-bottom:calc(clamp(48px,6vw,88px) + 18vh)'])
+        self.assertEqual(rules_for(block, '.demo-app'), ['padding-top:0'])
+        self.assertNotIn('-18vh', base_rules(self.pages_css))
+        self.assertNotIn('-18vh', (OUT / 'assets/site.css').read_text())
+        self.assertEqual(self.pages_css.count('-18vh'), 1)
+        demo = main_of((OUT / 'demo/index.html').read_text())
+        self.assertIn('<section class="page-hero demo-hero"><div class="wrap demo-hero-in"><div class="demo-hero-copy">', demo)
+        self.assertIn('<section class="section alt demo-app"><div class="wrap demo-shell">', demo)
+        # The 404 page shares .page-hero but not the demo layout.
+        self.assertNotIn('demo-hero', (OUT / '404.html').read_text())
+
+    def test_closing_photos_and_removed_photos(self):
+        for route, photo in (('about/index.html', 'garden-lawn'), ('services/index.html', 'trade-panel')):
+            with self.subTest(route=route):
+                band = re.search(r'<div class="cta-band-media"[^>]*>(.*?)</div>', main_of((OUT / route).read_text()), re.S).group(1)
+                self.assertIn(f'/assets/images/{photo}-1600.jpg', band)
+        services = (OUT / 'services/index.html').read_text()
+        self.assertNotIn('barber-interior', services)
+        self.assertIn('.ab-closing .cta-band-media img{object-position:50% 70%}', self.pages_css)
+        self.assertNotIn('detail-headlight', (OUT / 'about/index.html').read_text())

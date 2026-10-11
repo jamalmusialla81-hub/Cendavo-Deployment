@@ -7,17 +7,23 @@
   const MOTION = '(prefers-reduced-motion: no-preference)';
   const MAX_PULL = 6; // magnetic button: never more than 6px from its place
 
-  // Services (homepage): the highlight follows the hovered or focused row and stays on the last one. The dimming of the
-  // other rows' photos is CSS inside the reduced-motion guard, and only applies once this has marked the list live.
+  // Services (homepage): the photo panel follows the hovered or focused row and stays on the last one. Row n shows photo n.
+  // Without this script the panel shows the first photo; the crossfade is CSS inside the reduced-motion guard.
   const rows = $$('.svc');
+  const panel = doc.querySelector('.svc-panel');
+  const photos = $$('.svc-photo');
   if (rows.length) {
-    const activate = active => rows.forEach(row => row.classList.toggle('is-active', row === active));
+    const activate = active => {
+      const index = rows.indexOf(active);
+      rows.forEach(row => row.classList.toggle('is-active', row === active));
+      photos.forEach((photo, at) => photo.classList.toggle('is-active', at === index));
+    };
     rows.forEach(row => {
       row.addEventListener('mouseenter', () => activate(row));
       row.addEventListener('focusin', () => activate(row));
     });
     activate(rows[0]);
-    rows[0].parentNode.classList.add('is-live');
+    if (panel) panel.classList.add('is-live');
   }
 
   const gsap = window.gsap;
