@@ -12,8 +12,7 @@ class SiteBuildTests(unittest.TestCase):
         build()
 
     def test_all_public_routes_are_built_with_navigation(self):
-        routes = ['index.html','services/index.html','pricing/index.html','demo/index.html','contact/index.html']
-        for route in routes:
+        for route in self.ROUTES:
             with self.subTest(route=route):
                 html = (OUT / route).read_text()
                 self.assertIn('CENDAVO', html)
@@ -24,18 +23,42 @@ class SiteBuildTests(unittest.TestCase):
 
     def test_demo_is_clearly_sample_only(self):
         demo = (OUT / 'demo/index.html').read_text()
-        pricing = (OUT / 'pricing/index.html').read_text()
         self.assertIn('Demo only', demo)
         self.assertIn('No message is sent automatically', demo)
-        self.assertIn('No paid plans or checkout', pricing)
-        self.assertIn('research hypotheses', pricing)
+        # Reframed as a demonstration project with sample data (not a product or workspace preview).
+        hero = demo.split('<main id="main" tabindex="-1">', 1)[1].split('</h1>', 1)[0]
+        self.assertIn('Demonstration project', hero)
+        self.assertIn('sample data', hero)
+
+    # Old SaaS/subscription framing that must not return on any page (owner decision 2026-10-11).
+    SAAS_WORDING = ('shared platform', 'focused admin tool', 'hypothes', 'subscri', 'a$', '/ month', 'per month',
+                    'business workspace', 'workspace', 'product demo', 'can i subscribe', 'saas', 'pilot')
+
+    def test_no_saas_or_subscription_wording(self):
+        for route in self.ROUTES:
+            html = (OUT / route).read_text()
+            main = html.split('<main id="main" tabindex="-1">', 1)[1].split('</main>', 1)[0].lower()
+            description = re.search(r'<meta name="description" content="([^"]*)"', html).group(1).lower()
+            for banned in self.SAAS_WORDING:
+                with self.subTest(route=route, banned=banned):
+                    self.assertNotIn(banned, main)
+                    self.assertNotIn(banned, description)
+
+    def test_pricing_is_a_fixed_quote(self):
+        html = (OUT / 'pricing/index.html').read_text()
+        main = html.split('<main id="main" tabindex="-1">', 1)[1].split('</main>', 1)[0]
+        self.assertIn('fixed quote', main.lower())
+        self.assertIn('href="/contact/"', main)
+        description = re.search(r'<meta name="description" content="([^"]*)"', html).group(1)
+        self.assertNotIn('hypothes', description.lower())
+        self.assertNotIn('pilot', description.lower())
 
     def test_security_headers_shipped(self):
         headers = (OUT / '_headers').read_text()
         for setting in ('Content-Security-Policy:', 'X-Content-Type-Options: nosniff', "connect-src 'self'", "object-src 'none'"):
             self.assertIn(setting, headers)
 
-    ROUTES = ['index.html','services/index.html','pricing/index.html','demo/index.html','contact/index.html']
+    ROUTES = ['index.html','work/index.html','services/index.html','pricing/index.html','demo/index.html','contact/index.html']
 
     def test_skip_link_and_main_target_on_every_page(self):
         for route in self.ROUTES:
@@ -145,6 +168,7 @@ class SiteBuildTests(unittest.TestCase):
     def test_sitemap_points_at_real_project(self):
         sitemap = (OUT / 'sitemap.xml').read_text()
         self.assertIn('https://cendavo-deployment.pages.dev/demo/', sitemap)
+        self.assertIn('https://cendavo-deployment.pages.dev/work/', sitemap)
         self.assertNotIn('https://cendavo.pages.dev', sitemap)
 
 
@@ -234,6 +258,7 @@ class DesignSystemTests(unittest.TestCase):
         build()
         cls.css = (OUT / 'assets/site.css').read_text()
         cls.home_css = (OUT / 'assets/home.css').read_text()
+        cls.pages_css = (OUT / 'assets/pages.css').read_text()
         cls.home = (OUT / 'index.html').read_text()
         cls.home_main = cls.home.split('<main id="main" tabindex="-1">', 1)[1].split('</main>', 1)[0]
         root = re.search(r':root\{(.*?)\}', cls.css, re.S).group(1)
@@ -302,7 +327,7 @@ class DesignSystemTests(unittest.TestCase):
                 self.assertEqual((OUT / route).read_text().count(preload), 1)
 
     def test_no_third_party_requests(self):
-        for css in (self.css, self.home_css):
+        for css in (self.css, self.home_css, self.pages_css):
             for banned in ('@import', 'http', 'fonts.googleapis'):
                 self.assertNotIn(banned, css)
         for route in self.ROUTES:
@@ -319,8 +344,8 @@ class DesignSystemTests(unittest.TestCase):
 
     def test_global_chrome(self):
         from scripts.build_site import NAV
-        self.assertEqual([label for label, _ in NAV], ['Home', 'Services', 'Pricing', 'Demo project', 'Contact'])
-        self.assertEqual([href for _, href in NAV], ['/', '/services/', '/pricing/', '/demo/', '/contact/'])
+        self.assertEqual([label for label, _ in NAV], ['Home', 'Work', 'Services', 'Pricing', 'Demo project', 'Contact'])
+        self.assertEqual([href for _, href in NAV], ['/', '/work/', '/services/', '/pricing/', '/demo/', '/contact/'])
         for route in self.ROUTES:
             with self.subTest(route=route):
                 html = (OUT / route).read_text()
@@ -499,9 +524,11 @@ class DesignSystemTests(unittest.TestCase):
                 html = (OUT / route).read_text()
                 self.assertEqual(html.count(tag), 1 if route == 'index.html' else 0)
                 self.assertEqual(html.count('<link rel="stylesheet" href="/assets/site.css">'), 1)
+                # Inner pages share one page stylesheet; the homepage never loads it.
+                self.assertEqual(html.count('<link rel="stylesheet" href="/assets/pages.css">'), 0 if route == 'index.html' else 1)
 
     def test_motion_is_guarded_and_compositor_only(self):
-        for name, css in (('site.css', self.css), ('home.css', self.home_css)):
+        for name, css in (('site.css', self.css), ('home.css', self.home_css), ('pages.css', self.pages_css)):
             unguarded, guarded = without_blocks(css, MOTION_GUARD)
             if name == 'site.css':
                 self.assertTrue(guarded)
@@ -516,7 +543,7 @@ class DesignSystemTests(unittest.TestCase):
 
     def test_reveal_states_come_from_javascript_only(self):
         # Content stays visible without JS, if GSAP fails, and with reduced motion: CSS never hides it.
-        for name, css in (('site.css', self.css), ('home.css', self.home_css)):
+        for name, css in (('site.css', self.css), ('home.css', self.home_css), ('pages.css', self.pages_css)):
             with self.subTest(css=name):
                 unguarded, _ = without_blocks(css, MOTION_GUARD)
                 for hook in ('data-rise', 'data-hero-fade'):
@@ -535,13 +562,14 @@ class DesignSystemTests(unittest.TestCase):
         self.assertIn('@media(max-width:640px){', self.css)
         self.assertLessEqual((OUT / 'assets/site.css').stat().st_size, 30 * 1024)
         self.assertLessEqual((OUT / 'assets/home.css').stat().st_size, 30 * 1024)
+        self.assertLessEqual((OUT / 'assets/pages.css').stat().st_size, 30 * 1024)
 
     def test_every_page_class_has_a_css_rule(self):
-        # Inner pages only load site.css; the homepage also loads home.css.
+        # The homepage loads site.css + home.css; inner pages load site.css + pages.css.
         pages = Path(__file__).resolve().parents[1] / 'pages'
         checked = 0
         for page in pages.glob('*.html'):
-            css = self.css + self.home_css if page.stem == 'index' else self.css
+            css = self.css + (self.home_css if page.stem == 'index' else self.pages_css)
             classes = set()
             for attribute in re.findall(r'class="([^"]*)"', page.read_text()):
                 classes.update(attribute.split())
@@ -550,6 +578,167 @@ class DesignSystemTests(unittest.TestCase):
                 with self.subTest(page=page.name, css_class=name):
                     self.assertRegex(css, rf'\.{re.escape(name)}(?![\w-])')
         self.assertTrue(checked)
+
+
+def main_of(html):
+    return html.split('<main id="main" tabindex="-1">', 1)[1].split('</main>', 1)[0]
+
+
+def visible_text(html):
+    return re.sub(r'\s+', ' ', re.sub(r'<[^>]+>', ' ', html))
+
+
+HEADERS = ("/*\n  X-Content-Type-Options: nosniff\n  Referrer-Policy: strict-origin-when-cross-origin\n  X-Frame-Options: DENY\n"
+           "  Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self'; font-src 'self'; img-src 'self' data:; "
+           "connect-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'\n")
+
+
+class InnerPageTests(unittest.TestCase):
+    """Work, Services, Pricing, Contact and Demo pages (Night Shift Task 9): static, honest, accessible."""
+    ROUTES = SiteBuildTests.ROUTES
+    INNER = [route for route in ROUTES if route != 'index.html']
+
+    @classmethod
+    def setUpClass(cls):
+        build()
+        cls.html = {route: (OUT / route).read_text() for route in cls.ROUTES}
+        cls.main = {route: main_of(html) for route, html in cls.html.items()}
+
+    def test_work_route_title_and_description(self):
+        html = self.html['work/index.html']
+        self.assertIn('<title>Work — Cendavo</title>', html)
+        self.assertIn('<a href="/work/" aria-current="page">Work</a>', html)
+        self.assertRegex(html, r'<meta name="description" content="[^"]*fictional[^"]*">')
+
+    def test_inner_pages_have_no_script_motion(self):
+        for route in self.INNER:
+            with self.subTest(route=route):
+                html = self.html[route].lower()
+                for banned in ('gsap', 'ns-boot', 'ns-pages', 'ns.js', 'home.js', 'scrolltrigger'):
+                    self.assertNotIn(banned, html)
+        for route in self.ROUTES:
+            with self.subTest(route=route):
+                for hook in ('data-ph', 'data-reveal', 'data-parallax', 'data-devices', 'data-quote'):
+                    self.assertNotIn(hook, self.html[route])
+                self.assertNotIn('Prototype', self.main[route])
+                self.assertNotIn('proto-note', self.html[route])
+
+    def test_images_on_every_route_are_local_sized_and_described(self):
+        for route in self.ROUTES:
+            parser = ImageCollector()
+            parser.feed(self.main[route])
+            for index, (attrs, hidden) in enumerate(parser.images):
+                with self.subTest(route=route, index=index, src=attrs.get('src')):
+                    for name in ('src', 'srcset', 'sizes', 'width', 'height', 'alt'):
+                        self.assertIn(name, attrs)
+                    self.assertEqual(attrs.get('decoding'), 'async')
+                    if index:
+                        self.assertEqual(attrs.get('loading'), 'lazy')
+                    if attrs.get('fetchpriority') == 'high':
+                        self.assertEqual(index, 0)
+                        self.assertNotIn('loading', attrs)
+                    if not attrs['alt'].strip():
+                        self.assertTrue(hidden, 'decorative images must sit inside an aria-hidden wrapper')
+                    candidates = dict(reversed(part.split()) for part in attrs['srcset'].split(','))
+                    self.assertEqual(set(candidates), {'800w', '1600w'})
+                    small, large = candidates['800w'], candidates['1600w']
+                    self.assertRegex(small, r'^/assets/images/[a-z-]+-800\.jpg$')
+                    self.assertEqual(large, small.replace('-800.jpg', '-1600.jpg'))
+                    self.assertIn(attrs['src'], (small, large))
+                    for url in (small, large):
+                        self.assertTrue((OUT / url.lstrip('/')).is_file(), url)
+                    width, height = jpeg_size(OUT / large.lstrip('/'))
+                    self.assertAlmostEqual(int(attrs['height']) / int(attrs['width']), height / width, delta=0.01 * height / width)
+        for route in self.ROUTES:
+            with self.subTest(route=route):
+                # This photo shows a third-party product logo.
+                self.assertNotIn('barber-tools', self.html[route])
+
+    def test_every_route_has_one_h1_and_no_skipped_levels(self):
+        for route in self.ROUTES:
+            with self.subTest(route=route):
+                main = self.main[route]
+                self.assertEqual(main.count('<h1'), 1)
+                levels = [int(n) for n in re.findall(r'<h([1-6])', main)]
+                self.assertEqual(levels[0], 1)
+                for previous, current in zip(levels, levels[1:]):
+                    self.assertLessEqual(current, previous + 1)
+                self.assertEqual(main.count('<details'), main.count('<summary>'))
+                for details in re.findall(r'<details[^>]*>(.*?)</details>', main, re.S):
+                    self.assertTrue(details.lstrip().startswith('<summary>'))
+
+    def test_work_page_lists_three_labelled_concepts(self):
+        main = self.main['work/index.html']
+        articles = re.findall(r'<article\b[^>]*>(.*?)</article>', main, re.S)
+        self.assertEqual(len(articles), 3)
+        for article, name in zip(articles, ('Harbourside Mobile Detailing', 'Greenline Landscapes', 'Fade &amp; Co')):
+            with self.subTest(project=name):
+                self.assertEqual(article.count(CONCEPT_LABEL), 1)
+                self.assertIn(f'>{name}</h2>', article)
+        self.assertEqual(main.count(CONCEPT_LABEL), 3)
+        self.assertIn('href="/demo/"', main)
+        self.assertIn('href="/contact/"', main)
+        self.assertIn('Demonstration project — sample data', main)
+        text = visible_text(main).lower()
+        for banned in ('testimonial', 'trusted by', 'award', '%', '$'):
+            with self.subTest(banned=banned):
+                self.assertNotIn(banned, text)
+        for number in re.findall(r'\(0\d\)\s*[\d ]+', text):
+            self.assertTrue(number.startswith('(02) 5550'))
+        for address in re.findall(r'\b[\w-]+(?:\.[\w-]+)+\b', text):
+            with self.subTest(address=address):
+                self.assertTrue(address.endswith('.example'))
+
+    def test_inner_pages_make_no_unconfirmed_operational_promises(self):
+        # The owner has not confirmed call length, timelines or staffing; say "a short free consultation" instead.
+        for route in self.INNER:
+            text = visible_text(self.main[route]).lower()
+            with self.subTest(route=route):
+                for banned in ('20-minute', 'twenty minutes', 'same person', 'a few weeks', 'in writing'):
+                    self.assertNotIn(banned, text)
+                self.assertNotRegex(text, r'\d+\s*(day|week|hour|minute)')
+        for route in ('services/index.html', 'pricing/index.html', 'contact/index.html'):
+            with self.subTest(route=route):
+                self.assertIn('free consultation', visible_text(self.main[route]))
+
+    def test_contact_page_keeps_the_enquiry_contract(self):
+        main = self.main['contact/index.html']
+        self.assertEqual(main.count('<form '), 1)
+        self.assertIn('<form data-enquiry class="form" method="post" novalidate>', main)
+        # Layout wrappers only: the service select sits in a styling wrapper, controls keep their hooks.
+        self.assertIn('<div class="select"><select id="enquiry-service" name="service" required aria-describedby="enquiry-service-error">', main)
+        self.assertIn('<p class="notice" id="enquiry-privacy">', main)
+        self.assertNotIn('@', main)
+        self.assertNotIn('<script', main)
+
+    def test_no_inline_scripts_or_styles_and_headers_unchanged(self):
+        for route in self.ROUTES:
+            with self.subTest(route=route):
+                html = self.html[route]
+                self.assertNotRegex(html, r'<script(?![^>]*\bsrc=)')
+                self.assertNotIn(' style="', html)
+                self.assertNotIn('<style', html)
+        self.assertEqual((OUT / '_headers').read_text(), HEADERS)
+
+    def test_digits_render_in_archivo_inside_body_text(self):
+        css = (OUT / 'assets/site.css').read_text()
+        faces = [(match.start(), match.group(1)) for match in re.finditer(r'@font-face\{([^}]*)\}', css)]
+        atkinson = [start for start, face in faces if 'atkinson-hyperlegible' in face]
+        digits = [(start, face) for start, face in faces if 'unicode-range' in face]
+        self.assertEqual(len(atkinson), 2)
+        self.assertTrue(digits)
+        weights = set()
+        for start, face in digits:
+            with self.subTest(face=face[:60]):
+                self.assertIn('font-family:"Atkinson Hyperlegible"', face)
+                self.assertIn('unicode-range:U+0030-0039', face)
+                self.assertIn('src:url("/assets/fonts/archivo-var-latin.woff2")', face)
+                self.assertIn('font-display:swap', face)
+                self.assertGreater(start, max(atkinson))  # later faces win for the characters they cover
+                weight = re.search(r'font-weight:(\d+)(?: (\d+))?', face)
+                low, high = int(weight.group(1)), int(weight.group(2) or weight.group(1))
+                weights.update(w for w in (400, 700) if low <= w <= high)
+        self.assertEqual(weights, {400, 700})
 
 
 if __name__ == '__main__':

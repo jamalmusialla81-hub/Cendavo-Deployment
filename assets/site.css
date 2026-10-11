@@ -4,6 +4,9 @@
 @font-face{font-family:"Archivo";src:url("/assets/fonts/archivo-var-latin.woff2") format("woff2");font-weight:100 900;font-stretch:62% 125%;font-display:swap}
 @font-face{font-family:"Atkinson Hyperlegible";src:url("/assets/fonts/atkinson-hyperlegible-regular-latin.woff2") format("woff2");font-weight:400;font-style:normal;font-display:swap}
 @font-face{font-family:"Atkinson Hyperlegible";src:url("/assets/fonts/atkinson-hyperlegible-bold-latin.woff2") format("woff2");font-weight:700;font-style:normal;font-display:swap}
+/* Digits only: Atkinson draws a slashed zero, so body-text numerals 0-9 come from Archivo. Declared after the Atkinson faces with the same weights, so these win for U+0030-0039. */
+@font-face{font-family:"Atkinson Hyperlegible";src:url("/assets/fonts/archivo-var-latin.woff2") format("woff2");font-weight:400;font-style:normal;unicode-range:U+0030-0039;font-display:swap}
+@font-face{font-family:"Atkinson Hyperlegible";src:url("/assets/fonts/archivo-var-latin.woff2") format("woff2");font-weight:700;font-style:normal;unicode-range:U+0030-0039;font-display:swap}
 :root{
 --ink:#0E0E0D;--ink-2:#171716;--bone:#EDEAE3;--bone-2:#E3DFD6;--paper:#F7F5F0;--stone:#A8A49B;--ink-soft:#4F4C46;--amber:#D9A441;--amber-hover:#E6B65A;--success:#1E6B47;--danger:#A3341F;
 --line:rgba(237,234,227,.14);--line-dark:rgba(14,14,13,.16);
@@ -86,7 +89,7 @@ p{margin-bottom:var(--space-4);max-width:var(--measure)}
 .faq details p{margin:0 0 var(--space-6);color:var(--stone)}
 .section .faq details p{color:var(--ink-soft)}
 
-/* Inner pages (content rewrite is Task 8; these inherit the tokens) */
+/* Inner-page base (page hero, banner, sections, demo layout). Page sections live in pages.css; .card, .grid-3, .split, .panel and .price are no longer used by any page. */
 .page-hero{padding:clamp(56px,8vw,120px) 0 clamp(48px,6vw,88px)}
 .page-hero h1{max-width:18ch}
 .banner{max-width:var(--measure);margin-top:var(--space-6);padding:var(--space-5) var(--space-6);border-left:3px solid var(--amber);background:var(--ink-2);color:var(--bone)}
