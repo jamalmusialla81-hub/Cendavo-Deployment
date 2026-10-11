@@ -851,12 +851,40 @@ class DesignSystemTests(unittest.TestCase):
                 self.assertGreaterEqual(minimum_px(re.search(r'font-size:([^;]+)', rule).group(1)), 17)
 
     def test_pricing_teaser_shows_the_quote_sheet_without_prices(self):
-        section = re.search(r'<section class="pricing bone"[^>]*>(.*?)</section>', self.home_main, re.S).group(1)
+        # Night Shift Task 18: the quote sheet is shown once, on /pricing/. The homepage teaser is a full-bleed photo band
+        # carrying the fixed-quote statement, without the sheet or a repeat of Pricing's "included" list.
+        section = re.search(r'<section class="pricing"[^>]*>(.*?)</section>', self.home_main, re.S).group(1)
         self.assertIn('<h2 id="pricing-title" data-rise>Fixed quote after a free consultation</h2>', section)
         self.assertIn('<a class="ulink strong" href="/contact/">Ask for a fixed quote</a>', section)
-        self.assertIn('<h3>Always included</h3>', section)
-        self.assertEqual(section.count('<li><span class="inc-t">'), 3)
-        paper = re.search(r'<div class="quote-paper" data-devices role="img" aria-label="([^"]+)">(.*?)</div></div>\n', section, re.S)
+        self.assertNotIn('quote-paper', self.home_main)
+        self.assertNotIn('Always included', self.home_main)
+        self.assertNotIn('inc-list', self.home_main)
+        # One decorative photo (barber-client, used nowhere else on the page), AVIF first, lazy, sized, hidden from AT.
+        media = re.search(r'<div class="pricing-media" aria-hidden="true" data-parallax>(.*?)</div>', section, re.S)
+        self.assertIsNotNone(media)
+        self.assertRegex(media.group(1), r'^<picture><source type="image/avif" srcset="/assets/images/barber-client-800\.avif 800w, '
+                                         r'/assets/images/barber-client-1600\.avif 1600w" [^>]*><img [^>]*></picture>$')
+        parser = ImageCollector()
+        parser.feed(section)
+        self.assertEqual(len(parser.images), 1)
+        attrs, hidden = parser.images[0]
+        self.assertIn('barber-client', attrs['src'])
+        self.assertEqual((attrs.get('alt'), attrs.get('loading')), ('', 'lazy'))
+        self.assertTrue(attrs.get('width') and attrs.get('height'))
+        self.assertTrue(hidden)
+        self.assertEqual(self.home_main.count('barber-client-800.jpg 800w'), 1)
+        # The statement sits on a dark scrim: at least .86 ink behind the left-hand copy, and a flat .84 where it spans
+        # the full width (900px and below).
+        scrim = rules_for(base_rules(self.home_css), '.pricing-media::after')[0]
+        stops = gradient_stops(scrim)
+        self.assertTrue(stops)
+        self.assertGreaterEqual(min(alpha for alpha, position in stops if position <= 50), 0.86)
+        self.assertEqual(rules_for(media_blocks(self.home_css, 'max-width:900px'), '.pricing-media::after'),
+                         ['background:rgba(14,14,13,.84)'])
+        self.assertIn('max-width:min(100%,720px)', rules_for(base_rules(self.home_css), '.pricing-copy')[0])
+        # The quote sheet itself is still on /pricing/, as a labelled illustration whose parts are hidden from AT.
+        pricing = main_of((OUT / 'pricing/index.html').read_text())
+        paper = re.search(r'<div class="quote-paper" data-devices role="img" aria-label="([^"]+)">(.*?)</div>\n<figcaption>', pricing, re.S)
         self.assertIsNotNone(paper)
         self.assertIn('Illustration', paper.group(1))
         children = re.findall(r'<(?:div|ul) class="quote-[a-z]+"([^>]*)>', paper.group(2))
@@ -864,7 +892,6 @@ class DesignSystemTests(unittest.TestCase):
         for attrs in children:
             with self.subTest(child=attrs):
                 self.assertIn('aria-hidden="true"', attrs)
-        self.assertLess(section.index('pricing-title'), section.index('quote-paper'))
         # The care plan and build prices are unconfirmed: no amount appears anywhere on the homepage.
         self.assertNotRegex(self.home_main, r'\$\s*\d')
         self.assertNotIn('A$', self.home_main)
@@ -1370,10 +1397,21 @@ class AboutPageTests(unittest.TestCase):
     def test_sections_appear_in_order(self):
         self.assertEqual(self.main.count('<h1'), 1)
         h2s = [visible_text(h).strip() for h in re.findall(r'<h2[^>]*>(.*?)</h2>', self.main, re.S)]
-        self.assertEqual(h2s[:3], ['How we think', 'What you can expect', 'How we build'])
-        self.assertEqual(len(h2s), 4)  # the fourth is the closing call to action
+        # Night Shift Task 18: "What you can expect" repeated Services and Pricing; it is now one line in "How we build"
+        # that links to Pricing's full list.
+        self.assertEqual(h2s[:2], ['How we think', 'How we build'])
+        self.assertEqual(len(h2s), 3)  # the third is the closing call to action
         think = self.main.split('id="ab-think-title"', 1)[1].split('<h2', 1)[0]
         self.assertTrue(3 <= think.count('<h3') <= 4)
+        self.assertNotIn('ab-expect-title', self.source)
+        self.assertNotIn('class="exp"', self.source)
+        # "How we build" is one typographic band: four large statements, no card grid and no photo.
+        build = re.search(r'<section class="ab-build" aria-labelledby="ab-build-title">(.*?)</section>', self.main, re.S).group(1)
+        self.assertNotIn('inc-grid', build)
+        self.assertNotIn('<img', build)
+        self.assertEqual(re.search(r'<ul class="ab-build-list">(.*?)</ul>', build, re.S).group(1).count('<li>'), 4)
+        promise = re.search(r'<p class="ab-promise">(.*?)</p>', build, re.S).group(1)
+        self.assertIn('<a class="ulink strong" href="/pricing/">What every project includes</a>', promise)
         closing = self.main.rsplit('<section', 1)[1]
         self.assertIn('href="/contact/">Request a free consultation</a>', closing)
 
@@ -1562,6 +1600,98 @@ class DesignCritiqueFixTests(unittest.TestCase):
         self.assertTrue(hidden)
         self.assertTrue(all(int(query) >= 640 for query in hidden))
         self.assertNotIn('.ct-photo{display:none}', base_rules(self.pages_css))
+
+
+class RepetitionTests(unittest.TestCase):
+    """Night Shift Task 18: fewer repeated devices across pages (footer, closing photos, pricing steps, list markers)."""
+
+    @classmethod
+    def setUpClass(cls):
+        build()
+        cls.routes = SiteBuildTests.ROUTES + ['404.html']
+        cls.html = {route: (OUT / route).read_text() for route in cls.routes}
+        cls.css = (OUT / 'assets/site.css').read_text()
+        cls.pages_css = (OUT / 'assets/pages.css').read_text()
+        cls.home_css = (OUT / 'assets/home.css').read_text()
+
+    def test_footer_signature_replaces_the_repeated_button(self):
+        for route in self.routes:
+            with self.subTest(route=route):
+                footer = self.html[route].split('<footer class="footer">', 1)[1].split('</footer>', 1)[0]
+                self.assertNotIn('class="button', footer)
+                # The wordmark is decorative: one aria-hidden frame, after the legal lines, holding only the word.
+                self.assertEqual(footer.count('footer-sign'), 1)
+                self.assertTrue(footer.endswith('<div class="footer-sign" aria-hidden="true"><span class="footer-word">CENDAVO</span></div>'))
+                self.assertLess(footer.index('class="footer-bottom"'), footer.index('footer-sign'))
+                # The text logo is still the one accessible name in the footer.
+                self.assertEqual(visible_text(footer.split('footer-sign', 1)[0]).count('CENDAVO'), 1)
+                self.assertIn('Sydney, Australia.', footer)
+        rule = rules_for(base_rules(self.css), '.footer-sign')
+        self.assertEqual(len(rule), 1)
+        rule = rule[0]
+        self.assertIn('overflow:hidden', rule)  # crops the letters and never widens the page on a phone
+        self.assertIn('white-space:nowrap', rule)
+        self.assertIn('var(--font-display)', rule)  # Archivo, already preloaded: no new font download
+        self.assertIn('font-stretch:125%', rule)
+        height = float(re.search(r'height:([\d.]+)em', rule).group(1))
+        line = float(re.search(r'/([\d.]+) var\(--font-display\)', rule).group(1))
+        self.assertLess(height, line)  # shorter than the line box, so the bottom of the word is cut off
+        # Low contrast on purpose: it is a texture, not text anyone needs to read.
+        colour = re.search(r'(?<![-\w])color:(#[0-9A-Fa-f]{6})', rule).group(1)
+        self.assertLess(contrast(colour, '#0E0E0D'), 1.5)
+
+    def test_closing_photo_differs_per_page(self):
+        expected = {'index.html': 'detail-rear', 'work/index.html': 'garden-lawn', 'services/index.html': 'barber-interior',
+                    'pricing/index.html': 'garden-deck', 'about/index.html': 'detail-headlight'}
+        for route, photo in expected.items():
+            with self.subTest(route=route):
+                main = main_of(self.html[route])
+                band = re.search(r'<div class="(?:cta-)?band-media" aria-hidden="true" data-parallax>(.*?)</div>', main, re.S)
+                self.assertIsNotNone(band)
+                self.assertEqual(set(re.findall(r'/assets/images/([a-z-]+)-(?:800|1600)\.(?:jpg|avif)', band.group(1))), {photo})
+                self.assertTrue(main.rstrip().endswith('</section>'))
+                self.assertGreater(main.index(band.group(0)), main.rindex('<section'))  # it is the page's last section
+        for route in ('contact/index.html', 'demo/index.html', '404.html'):
+            with self.subTest(route=route):
+                self.assertNotIn('cta-band', self.html[route])
+        for route in self.routes:
+            with self.subTest(route=route):
+                self.assertNotIn('barber-tools', self.html[route])
+
+    def test_pricing_steps_sit_on_one_timeline(self):
+        main = main_of(self.html['pricing/index.html'])
+        steps = re.search(r'<ol class="pr-steps">(.*?)</ol>', main, re.S).group(1)
+        items = re.findall(r'<li class="pr-step">(.*?)</li>', steps, re.S)
+        self.assertEqual(len(items), 3)
+        for number, item in enumerate(items, 1):
+            with self.subTest(step=number):
+                self.assertIn(f'<span class="pr-step-n" aria-hidden="true">{number}</span><h3>', item)
+        base = base_rules(self.pages_css)
+        line = rules_for(base, '.pr-steps::before')
+        self.assertEqual(len(line), 1)
+        self.assertIn('height:1px', line[0])
+        self.assertIn('left:0;right:0', line[0])
+        self.assertIn('grid-template-columns:repeat(3,minmax(0,1fr))', rules_for(base, '.pr-steps')[-1])
+        # No card per step: no background, border or shadow on the items themselves.
+        for rule in rules_for(base, '.pr-step'):
+            with self.subTest(rule=rule):
+                self.assertNotRegex(rule, r'(?<![-\w])(?:background|border|box-shadow)(?:-[a-z]+)?:')
+        # Small screens (900px and below, so every phone): one column, the rule turns vertical down the left.
+        narrow = media_blocks(self.pages_css, 'max-width:900px')
+        self.assertIn('grid-template-columns:1fr', rules_for(narrow, '.pr-steps')[0])
+        vertical = rules_for(narrow, '.pr-steps::before')[0]
+        self.assertIn('width:1px', vertical)
+        self.assertIn('top:0;bottom:0', vertical)
+
+    def test_list_markers_are_small_squares_not_dashes(self):
+        rule = rules_for(base_rules(self.pages_css), '.tick li::before')[0]
+        self.assertIn('width:6px', rule)
+        self.assertIn('height:6px', rule)
+        self.assertIn('background:var(--amber)', rule)
+        for name, css in (('site.css', self.css), ('pages.css', self.pages_css), ('home.css', self.home_css)):
+            with self.subTest(css=name):
+                self.assertNotRegex(css, r'content:\s*"[^"]*[—–-][^"]*"')
+                self.assertNotIn('\\2014', css)
 
 
 if __name__ == '__main__':

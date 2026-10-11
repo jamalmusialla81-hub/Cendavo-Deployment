@@ -15,7 +15,7 @@
 .pg-label{margin:0 0 var(--space-6);padding-bottom:14px;border-bottom:1px solid var(--bone);color:var(--stone);font:600 1rem/1.3 var(--font-display);font-stretch:104%;letter-spacing:0}
 .bone .pg-label{color:var(--ink-soft);border-bottom-color:var(--ink)}
 .btn-row{display:flex;flex-wrap:wrap;gap:var(--space-3);margin-top:var(--space-8)}
-.sv-chapters ul,.tick,.care-cycle,.pr-steps,.inc-grid,.aff,.ct-steps,.exp,.cs-list,.wk-demo-list{list-style:none;margin:0;padding:0}
+.sv-chapters ul,.tick,.ab-build-list,.care-cycle,.pr-steps,.inc-grid,.aff,.ct-steps,.exp,.cs-list,.wk-demo-list{list-style:none;margin:0;padding:0}
 .spec{margin:clamp(40px,5vw,64px) 0 0;border-top:1px solid var(--bone)}
 .spec-row{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,2fr);gap:var(--space-2) var(--space-6);padding:22px 0;border-bottom:1px solid var(--line)}
 .spec dt{font:650 1rem/1.4 var(--font-display);font-stretch:104%}
@@ -23,9 +23,9 @@
 .bone .spec{border-top-color:var(--ink)}
 .bone .spec-row{border-bottom-color:var(--line-dark)}
 .bone .spec dd{color:var(--ink-soft)}
-.tick li{position:relative;padding-left:24px}
+.tick li{position:relative;padding-left:22px}
 .tick li+li{margin-top:6px}
-.tick li::before{content:"";position:absolute;left:0;top:.74em;width:12px;height:2px;background:var(--amber)}
+.tick li::before{content:"";position:absolute;left:0;top:.62em;width:6px;height:6px;background:var(--amber)}
 .bone .tick li::before{background:var(--ink)}
 
 /* Photo-backed closing call to action */
@@ -79,10 +79,12 @@
 .pr-hero-copy{grid-column:1/span 6}
 .quote{grid-column:8/-1}
 .quote figcaption{margin-top:26px;color:var(--stone);font-size:.88rem}
-.pr-steps{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));column-gap:clamp(20px,3vw,48px);margin-top:clamp(48px,6vw,88px)}
-.pr-step{padding-top:22px;border-top:1px solid var(--ink)}
-.pr-step-n{display:block;font:800 clamp(4rem,9vw,8.5rem)/.82 var(--font-display);font-stretch:80%;letter-spacing:-.03em}
-.pr-step h3{margin-top:clamp(24px,3vw,40px);font-weight:720;font-stretch:92%}
+/* "How the price is set": one 1px rule with three points on it and the labels under each point (vertical on phones). */
+.pr-steps{position:relative;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));column-gap:clamp(20px,3vw,48px);margin-top:clamp(48px,6vw,88px)}
+.pr-steps::before{content:"";position:absolute;left:0;right:0;top:21px;height:1px;background:var(--ink)}
+.pr-step{position:relative}
+.pr-step-n{display:grid;place-items:center;width:44px;height:44px;border-radius:50%;background:var(--ink);color:var(--bone);font:700 1rem/1 var(--font-display);font-stretch:104%}
+.pr-step h3{margin-top:clamp(24px,3vw,36px);font-weight:720;font-stretch:92%}
 .pr-step p{margin-top:14px;font-size:1rem}
 .pr-inc-head{grid-column:1/span 4}
 .pr-inc-head p{color:var(--stone)}
@@ -222,15 +224,21 @@
 .wk-demo-list li{padding:26px 0 28px;border-bottom:1px solid var(--line-dark)}
 .bone .wk-demo-list span,.bone .inc-grid span,.bone .exp span{color:var(--ink-soft)}
 
-/* About (reuses the Work hero, the Services chapter photo, Contact's .exp grid and Pricing's includes block) */
+/* About (reuses the Work hero and the Services chapter photo). "How we build" is a full-width typographic band:
+   four statements set large in one stack, no card grid and no photo. */
 .ab-list{list-style:none;margin:clamp(40px,5vw,64px) 0 0;padding:0;border-top:1px solid var(--bone)}
 .ab-list li{padding:26px 0 28px;border-bottom:1px solid var(--line)}
 .ab-list h3{font-weight:720;font-stretch:92%}
 .ab-list p{margin-top:10px;max-width:52ch;color:var(--stone)}
-.ab-head{grid-column:1/span 4}
-.ab-head p{margin-top:var(--space-5)}
-.bone .exp{border-top-color:var(--ink)}
-.bone .exp li{border-bottom-color:var(--line-dark)}
+.ab-build{padding-block:var(--section-lg);background:var(--ink-2);border-top:1px solid var(--line)}
+.ab-build-head{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:flex-end;gap:var(--space-6) var(--col-gap)}
+.ab-build-head h2{margin:0}
+.ab-build-head p{margin:0;max-width:40ch;color:var(--stone)}
+.ab-build-list{margin-top:clamp(48px,6vw,88px);border-top:1px solid var(--bone)}
+.ab-build-list li{display:grid;grid-template-columns:minmax(0,7fr) minmax(0,5fr);column-gap:var(--col-gap);align-items:baseline;padding:clamp(24px,3vw,40px) 0;border-bottom:1px solid var(--line)}
+.ab-build-list b{font:800 clamp(2rem,4.6vw,4.5rem)/.95 var(--font-display);font-stretch:84%;letter-spacing:-.025em}
+.ab-build-list span{max-width:44ch;color:var(--stone)}
+.ab-promise{margin:clamp(40px,5vw,64px) 0 0;max-width:62ch;color:#D6D2CA;font-size:clamp(1.0625rem,.5vw + .95rem,1.25rem)}
 
 /* Demonstration project page */
 .demo-side h2{font-size:1.25rem;font-weight:650;font-stretch:100%;line-height:1.1;letter-spacing:-.01em}
@@ -258,7 +266,11 @@
 .care-photo{aspect-ratio:4/3;margin-top:40px}
 .chap-body,.faq-list,.inc-grid,.exp,.wk-demo-list,.cs-does{margin-top:48px}
 .quote{margin-top:64px}
-.pr-steps{grid-template-columns:1fr;row-gap:48px}
+.pr-steps{grid-template-columns:1fr;row-gap:40px}
+.pr-steps::before{left:21px;right:auto;top:0;bottom:0;width:1px;height:auto}
+.pr-step{padding-left:72px}
+.pr-step-n{position:absolute;left:0;top:0}
+.pr-step h3{margin-top:8px}
 .pr-inc-photo{aspect-ratio:16/10}
 .pr-aff-head p{margin-top:20px}
 .aff-row{grid-template-columns:88px minmax(0,1fr);grid-template-rows:auto;row-gap:16px;align-items:center}
@@ -294,7 +306,8 @@
 }
 @media(max-width:640px){
 .wk-index{padding-inline:16px}
-.spec-row,.care-cycle,.inc-grid,.exp,.field-row{grid-template-columns:1fr}
+.spec-row,.care-cycle,.inc-grid,.exp,.field-row,.ab-build-list li{grid-template-columns:1fr}
+.ab-build-list span{margin-top:12px}
 .form-foot .button{justify-self:stretch}
 .scale{grid-template-columns:1fr 1fr;row-gap:8px}
 .scale i{grid-column:1/-1;grid-row:1}

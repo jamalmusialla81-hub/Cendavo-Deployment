@@ -79,6 +79,11 @@ p{margin-bottom:var(--space-4);max-width:var(--measure)}
 .footer-links{display:flex;flex-wrap:wrap;gap:0 var(--space-6)}
 .footer-bottom{display:flex;flex-wrap:wrap;justify-content:space-between;gap:8px 32px;margin-top:var(--space-12);padding:28px 0 36px;border-top:1px solid var(--line);color:var(--stone);font-size:.9rem}
 .footer-bottom p{margin:0;font-size:inherit}
+/* Signature: decorative wordmark (aria-hidden in the markup), in the already-loaded Archivo at its widest. The frame is
+   shorter than the line, so the bottom of the letters is cropped by the page edge; overflow:hidden also stops it ever
+   widening the page on narrow screens. */
+.footer-sign{overflow:hidden;height:.6em;font:800 clamp(3.5rem,15.5vw,24rem)/.8 var(--font-display);font-stretch:125%;letter-spacing:-.02em;text-align:center;white-space:nowrap;color:#262521;user-select:none}
+.footer-word{display:block}
 
 /* FAQ (native details) */
 .faq{max-width:50rem}

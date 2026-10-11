@@ -1,6 +1,6 @@
 /* Cendavo homepage: hero, concept projects, before/after comparison and sections.
-   Loaded only on / (like home.js), so inner pages do not download it. Tokens come from site.css; the device and
-   quote mockups come from kit.css. */
+   Loaded only on / (like home.js), so inner pages do not download it. Tokens come from site.css; the device
+   mockups come from kit.css (the quote sheet there is used only on /pricing/). */
 .actions{display:flex;flex-wrap:wrap;gap:12px;margin-top:32px}
 /* Homepage: hero */
 .hero{position:relative;isolation:isolate;min-height:max(calc(100svh - 77px),640px);display:flex;align-items:flex-end}
@@ -21,7 +21,7 @@
 
 /* Homepage: sections */
 .statement{padding-block:clamp(96px,10vw,160px)}
-.statement-grid,.ba-grid,.who-head,.process-grid,.pricing-grid,.questions-grid,.proj-in{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));column-gap:var(--col-gap)}
+.statement-grid,.ba-grid,.who-head,.process-grid,.questions-grid,.proj-in{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));column-gap:var(--col-gap)}
 .statement h2{grid-column:1/span 11;margin:0;font-size:clamp(2.1rem,4.6vw,4.6rem);text-wrap:pretty}
 .statement-body{grid-column:7/span 5;grid-row:2;align-self:start;margin-top:clamp(40px,5vw,72px)}
 .statement-photo{grid-column:1/span 5;grid-row:2;margin-top:clamp(40px,5vw,72px);aspect-ratio:4/5;overflow:hidden;background:var(--bone-2)}
@@ -57,7 +57,7 @@
 .ba{padding-block:var(--section-lg)}
 .ba-grid{align-items:center}
 .ba-copy{grid-column:1/span 4}
-.services,.process,.pricing{padding-block:var(--section-lg)}
+.services,.process{padding-block:var(--section-lg)}
 .services-head{display:flex;justify-content:space-between;align-items:flex-end;gap:24px;margin-bottom:clamp(40px,5vw,72px)}
 .services-head h2,.who-head h2,.process-head h2,.pricing-copy h2,.questions-head h2{margin:0}
 .svc-list{list-style:none;margin:0;padding:0;border-top:1px solid var(--line)}
@@ -89,18 +89,15 @@
 .step-body{min-width:0}
 .step h3{margin:0 0 12px;font-size:1.75rem;font-weight:760;font-stretch:88%;letter-spacing:-.02em}
 .step p{margin:0;max-width:40ch;color:#D6D2CA;font-size:clamp(1.0625rem,.3vw + 1rem,1.1875rem)}
-/* Pricing teaser: copy and the always-included list on the left; the quote sheet on a dark desk on the right. */
-.pricing-grid{align-items:start}
-.pricing-copy{grid-column:1/span 5}
-.pricing-copy p{margin:24px 0;max-width:46ch}
-.pricing-inc{grid-column:1/span 5;grid-row:2;margin-top:clamp(40px,5vw,64px)}
-.pricing-inc h3{margin:0;padding-bottom:14px;border-bottom:1px solid var(--ink);font-size:1rem;font-weight:600;font-stretch:104%;color:var(--ink-soft)}
-.inc-list{list-style:none;margin:0;padding:0}
-.inc-list li{display:grid;gap:6px;padding:22px 0;border-bottom:1px solid var(--line-dark)}
-.inc-t{font:720 clamp(1.4rem,2vw,1.8rem)/1.05 var(--font-display);font-stretch:92%;letter-spacing:-.01em}
-.inc-d{color:var(--ink-soft);font-size:1rem}
-.pricing-desk{grid-column:7/-1;grid-row:1/span 2;align-self:stretch;display:grid;place-items:center;padding:clamp(40px,6vw,96px) clamp(24px,5vw,80px);background:var(--ink)}
-.pricing-desk .quote-paper{width:100%;max-width:460px}
+/* Pricing teaser: one full-bleed photo band carrying the fixed-quote statement (the quote sheet lives only on /pricing/).
+   The scrim holds at least .86 ink behind the copy on wide screens and .84 over the whole photo up to 900px, where the copy spans the full width. */
+.pricing{position:relative;isolation:isolate;overflow:hidden;padding-block:clamp(120px,16vw,220px)}
+.pricing-media{position:absolute;inset:0;z-index:-1;overflow:hidden;background:var(--ink-2)}
+.pricing-media img{width:100%;height:100%;object-fit:cover;object-position:70% 40%}
+.pricing-media::after{content:"";position:absolute;inset:0;background:linear-gradient(90deg,rgba(14,14,13,.9) 0%,rgba(14,14,13,.86) 50%,rgba(14,14,13,.4) 100%)}
+.pricing-copy{max-width:min(100%,720px)}
+.pricing-copy h2{font-size:clamp(2.6rem,5.6vw,5.4rem);font-weight:800;font-stretch:84%;line-height:.95;letter-spacing:-.025em}
+.pricing-copy p{margin:28px 0;max-width:46ch;color:#D6D2CA;font-size:clamp(1.0625rem,.5vw + .95rem,1.25rem)}
 /* Questions: heading, intro and contact link on the left; the accordion across the right. */
 .questions-grid{align-items:start}
 .questions-head{grid-column:1/span 4}
@@ -216,7 +213,7 @@
 .hero-device .phone{--pw:112px}
 .hero-cap{display:none}
 .statement-photo{aspect-ratio:4/3}
-.statement h2,.statement-body,.statement-photo,.ba-copy,.compare,.who-head h2,.who-head p,.process-head,.steps,.pricing-copy,.pricing-inc,.pricing-desk,.questions-head,.questions-list{grid-column:1/-1;grid-row:auto}
+.statement h2,.statement-body,.statement-photo,.ba-copy,.compare,.who-head h2,.who-head p,.process-head,.steps,.questions-head,.questions-list{grid-column:1/-1;grid-row:auto}
 .compare{margin-top:40px}
 .who-head p{margin-top:20px}
 .who-row{grid-template-columns:repeat(2,minmax(0,1fr));row-gap:28px;padding-inline:var(--gut)}
@@ -227,9 +224,8 @@
 .process-photo{aspect-ratio:16/10}
 .steps{margin-top:56px}
 .step{grid-template-columns:48px minmax(0,1fr)}
-.pricing-desk{margin-top:48px}
-.pricing-inc{margin-top:56px}
 .questions-list{margin-top:40px}
+.pricing-media::after{background:rgba(14,14,13,.84)}
 .svc{grid-template-columns:minmax(0,1fr) 96px;align-items:start}
 .svc img{aspect-ratio:4/5}
 }
