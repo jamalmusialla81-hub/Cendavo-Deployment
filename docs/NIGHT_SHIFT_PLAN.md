@@ -125,3 +125,14 @@ Source: `docs/design/night-shift/critique/CRITIQUE2.md` item 3 ("the single chan
 - Reduce total page height to about 7,500 px at 1440 without dropping content (tighten padding, remove duplicated meta).
 - Keep the project index at the top, the demo card and the closing CTA. Images via the build's <picture>/AVIF; lazy-load below the fold; motion hooks optional (reduced-motion safe).
 Same test rules; **never `cd` in Bash**.
+
+## Task 21 — remaining second-round critique fixes (profile `site`)
+Source: `docs/design/night-shift/critique/CRITIQUE2.md` items 1, 2, 4, 5, 6 and the quick templated fixes. Do these, nothing else:
+1. **Home "What we do"**: replace the three small per-row photos with a 7/5 grid — rows on the left, one sticky 4:5 photo panel on the right that crossfades (opacity only) to the active (hovered/focused) row's photo; remove the `scale(.94)` on inactive rows (it misaligns edges). Photos: New website `detail-wax`, Redesign `detail-dash`, Care plan `garden-wall` (stop using `garden-walk` here; it is already the pricing band). Without JS / reduced motion: show the first photo statically and keep all rows readable. Mobile: no sticky panel; a single photo above the list.
+2. **About hero**: move the intro paragraph directly under the H1 and fill the right side with three offset 4:5 photos (`barber-shave`, `garden-wall`, `detail-wax`), decorative alt="" where they add no information, lazy-loaded except the first.
+3. **Demo hero**: pull the live app panel up so it overlaps the hero (`margin-top` negative around -18vh on desktop only) so the hero is not half empty; mobile unchanged.
+4. **Demo table on mobile**: below 640 px render each request as a stacked block (name, service, date, status badges, action control) instead of a horizontally scrolling table; keep the table markup/semantics for assistive tech or use an accessible list — demo tests must still pass.
+5. **Home pinned projects**: derive the counter index by rounding scroll progress so it always matches the visible project; tighten text fade windows so a title is never a grey ghost; wipe the media with `clip-path` instead of a crossfade. Reduced-motion fallback unchanged.
+6. **Contact**: remove the thin `detail-headlight` sliver under the steps on desktop; fold "What to expect from us" into one short line under the submit button. About's closing CTA photo → `garden-lawn`; Services' closing CTA photo → `trade-panel` (Services should not open and close on barbershop photos).
+7. **Templated details**: replace the spaced em dash in "Demonstration project — sample data" with a comma ("Demonstration project, sample data"); remove the dash bullets on Home lists (plain spacing or the same small marker used elsewhere, one device site-wide). Keep the concept label text exactly "Concept project · fictional business".
+Never use `barber-tools`. Keep accessibility, CSP, enquiry wiring, tests; same test rules; **never `cd` in Bash**.
