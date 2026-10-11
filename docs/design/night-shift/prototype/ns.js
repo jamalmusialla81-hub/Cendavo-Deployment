@@ -9,7 +9,8 @@
 
   /* ---------- Header: solid on scroll ---------- */
   var header = $('.site-header');
-  function onScroll() { if (header) header.classList.toggle('is-solid', window.scrollY > 24); }
+  var solidAlways = header && header.hasAttribute('data-solid');
+  function onScroll() { if (header) header.classList.toggle('is-solid', solidAlways || window.scrollY > 24); }
   window.addEventListener('scroll', onScroll, { passive: true });
   onScroll();
 
@@ -97,9 +98,9 @@
   mm.add('(prefers-reduced-motion: reduce)', function () { endIntro(); railTo(1); });
 
   mm.add('(prefers-reduced-motion: no-preference)', function () {
-    /* --- Hero --- */
+    /* --- Hero (homepage only; inner pages animate their own heads in ns-pages.js) --- */
     var hero = gsap.timeline({ paused: true, defaults: { ease: 'power4.out' } });
-    hero.from('.hero-h .ln > span', { yPercent: 108, duration: 1.1, stagger: .08 }, 0)
+    if ($('.hero-h')) hero.from('.hero-h .ln > span', { yPercent: 108, duration: 1.1, stagger: .08 }, 0)
         .fromTo('.hero-photo', { clipPath: 'inset(0 0 0 100%)' }, { clipPath: 'inset(0 0 0 0%)', duration: 1.4, ease: 'expo.inOut', clearProps: 'clipPath' }, 0)
         .from('.hero-photo img', { scale: 1.08, duration: 2, ease: 'power3.out' }, 0)
         .from('[data-hero-fade]', { y: 18, autoAlpha: 0, duration: .9, stagger: .1 }, .45)

@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en-AU">
+<html lang="en-AU" data-intro>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -10,16 +10,7 @@
 <link rel="preload" href="../fonts/Archivo-Variable.ttf" as="font" type="font/ttf" crossorigin>
 <link rel="preload" href="../images/detail-darkroom.jpg" as="image" fetchpriority="high">
 <link rel="stylesheet" href="ns.css">
-<script>
-/* Tiny boot flag: motion class + first-visit intro. Content stays visible if anything below fails (CSS failsafes). */
-(function (d) {
-  var c = d.documentElement.classList; c.add('js');
-  var still = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
-  if (still) return;
-  c.add('ns-motion');
-  try { if (!sessionStorage.getItem('ns-intro')) c.add('ns-intro'); } catch (e) {}
-})(document);
-</script>
+<script src="ns-boot.js"></script>
 </head>
 <body>
 <a class="skip" href="#main">Skip to content</a>

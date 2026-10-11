@@ -21,3 +21,13 @@ Rendered screenshots at 1440/768/390, keyboard pass, reduced-motion pass, enquir
 - Do not name helper parameters or functions `skip` in test code (e.g. use `exclude`); the guard pattern-matches `skip(`.
 - When old assertions about the previous design are removed, replace each accessibility guarantee with an equivalent new assertion (skip link, `<main id="main">`, reduced-motion rule, Escape closes the menu, `aria-expanded`). Attempt 1 did this correctly; keep it.
 - The supervisor kept attempt 1's patch for reference outside the repo.
+
+## Task 9 — inner pages (supersedes "Task 8 — inner pages" above; Forge task ids shifted after the Task 7 retry)
+Reference prototype: `docs/design/night-shift/prototype/` now also contains `work.html`, `services.html`, `pricing.html`, `contact.html`, `ns-pages.css`, `ns-pages.js`, `ns-boot.js` and screenshots `pages-*-d-top.jpg`. Build these pages into the site (`pages/work.html` as a new route `/work/` added to `NAV`/titles/descriptions in `scripts/build_site.py`, and `pages/services.html`, `pages/pricing.html`, `pages/contact.html`, plus the demo page reframed as "Demonstration project — sample data"). Apply everything in the Task 8 list above (remove all SaaS wording).
+
+Supervisor review notes for Task 9:
+- Contact: keep the production form markup and `assets/enquiry.js` behaviour exactly (ids, `data-enquiry`, `aria-describedby`, `.field-error[data-error-for]`, honeypot, status region, 429 retry, idempotency). Only layout wrappers and classes may change. Existing enquiry tests must keep passing unchanged.
+- Numerals: Atkinson Hyperlegible draws a slashed zero ("2Ø-minute"). Add an `@font-face` for the body family that maps digits only (`unicode-range: U+0030-0039`) to the local Archivo file, declared so digits render in Archivo inside body text.
+- Services hero: replace `barber-tools` (it shows a third-party product logo) with an unbranded photo, e.g. `barber-chair` or `garden-wall`.
+- Reuse the shared design system from Task 8; do not fork styles per page beyond a page stylesheet.
+- Same test rules as the Task 7 notes (no new skip decorators; no helpers named `skip`; replace any removed accessibility assertion).
