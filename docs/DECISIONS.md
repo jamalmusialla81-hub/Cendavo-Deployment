@@ -41,3 +41,12 @@
 **Trade-off:** Recovery spends more Claude usage per failure, and the boundary filter is deliberately broad, so some harmless infrastructure fixes will still wait for approval.
 
 **Integration with the local runner (2026-10-11):** Forge's debugger-gated unit-test repair stays the first layer; the Supervisor only acts on what Forge cannot repair itself. Local protections are kept: `product_repair_only`, claude.ai Max-only authentication with `--restricted`, explicit `--approve-provider-network`, and the `forge_sandbox` profile. Maintenance worktrees live outside the project and the maintainer is denied the live checkout.
+
+## 006 — Autonomous Developer v2
+
+**Decision:** Let Forge build complete applications. Each task runs in its own Git worktree outside the project and is delivered by fast-forward after review. Writable agents get a development shell inside Claude Code's OS sandbox, and permissions follow a per-task profile (`app`, `site`, `docs`) instead of one fixed assets/pages rule. Explicitly configured MCP tools, configurable turn and repair limits, a persisted Builder session and streamed progress complete the change. Reviewers report structured findings, so the auditor can no longer demand manual or out-of-scope work.
+
+**Kept:** Claude Max subscription only; no secrets, Forge state or live checkout reachable by agents; isolated maintenance and rollback; independent security review and sandboxed checks before commit; owner approval for pushing, deploying, spending, contacting customers, control-plane changes and new MCP servers.
+
+**Trade-off:** Agents now execute their own code during development, before the security review. The OS sandbox (no home, no secrets, workspace-only writes, registry-only network) is the containment for that, and package installs from public registries are a supply-chain exposure that the security review must scrutinise. Narrow profiles cannot pre-deny files that do not exist yet; Forge's post-call guard catches those and stops the task.
+
