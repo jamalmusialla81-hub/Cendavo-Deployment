@@ -225,6 +225,20 @@ class CompatibilityCheckTests(unittest.TestCase):
         self.assertFalse(result['ok'])
         self.assertIn('chmod', result['detail'])
 
+    def test_denials_are_not_vacuous_when_python_cannot_start(self):
+        """Regression: a sandbox in which the interpreter cannot start must fail, not look like 'everything denied'."""
+        class Broken:
+            name = 'broken'
+            def available(self):
+                return True, 'broken'
+            def command(self, argv, root, tmp):
+                return [sys.executable, '-c', 'import sys; sys.exit(1)']
+        with patch.object(fp, 'checks_sandbox', return_value=Broken()):
+            result = fp.check_checks_sandbox('linux')
+        self.assertFalse(result['ok'])
+        self.assertIn('could not start', result['detail'])
+        self.assertIn('secret unreadable', result['detail'])
+
     def test_linux_agent_sandbox_needs_bubblewrap_and_socat(self):
         with patch.object(fp.shutil, 'which', side_effect=lambda n: None if n == 'socat' else '/usr/bin/' + n):
             result = fp.check_agent_sandbox('wsl2')

@@ -216,9 +216,16 @@ def check_filesystem(root, kind):
     return _check('filesystem', not problems, '; '.join(problems) or 'POSIX permissions honoured' + note)
 
 
+PROBE_STARTED = 'forge-probe-started'
+
+
 def _run_probe(backend, root, tmp, code):
-    argv = backend.command([sys.executable, '-c', code], root, tmp)
-    env = dict(os.environ, TMPDIR=str(tmp), HOME=str(tmp), PYTHONDONTWRITEBYTECODE='1')
+    """Run `code` with the same `python3` and PATH as Forge's checks stage (not whichever interpreter runs Forge)."""
+    path = '/Library/Developer/CommandLineTools/usr/bin' + os.pathsep + os.environ.get('PATH', '')
+    env = dict(os.environ, TMPDIR=str(tmp), HOME=str(tmp), PYTHONDONTWRITEBYTECODE='1', PATH=path)
+    env.pop('PYTHONPATH', None)
+    started = f"import sys; sys.stdout.write({PROBE_STARTED!r} + chr(10)); sys.stdout.flush()\n"
+    argv = backend.command(['python3', '-c', started + code], root, tmp)
     return subprocess.run(argv, cwd=root, env=env, capture_output=True, text=True, timeout=60, preexec_fn=cap_open_files)
 
 
@@ -250,8 +257,13 @@ def check_checks_sandbox(kind):
                           if f.is_file()), None)
         if home_file:  # contents of files in the home directory must not be readable
             expectations['home files unreadable'] = (f"open({str(home_file)!r}).read(1)", False)
-        failures = [label for label, (code, allowed) in expectations.items()
-                    if (_run_probe(backend, root, tmp, code).returncode == 0) != allowed]
+        failures = []
+        for label, (code, allowed) in expectations.items():
+            result = _run_probe(backend, root, tmp, code)
+            if PROBE_STARTED not in result.stdout:
+                failures.append(f'{label} (python3 could not start in the sandbox: {result.stderr.strip()[-160:]})')
+            elif (result.returncode == 0) != allowed:
+                failures.append(label)
         failures += ['outside file created'] if outside.exists() else []
     return _check('checks sandbox', not failures,
                   f'{backend.name}: ' + (('FAILED: ' + ', '.join(failures)) if failures else 'project writable; outside, secrets, '
