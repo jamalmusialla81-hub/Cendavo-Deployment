@@ -13,7 +13,6 @@ from __future__ import annotations
 import argparse
 import math
 from contextlib import contextmanager
-import fcntl
 import hashlib
 import json
 import os
@@ -25,17 +24,24 @@ import subprocess
 import sys
 import time
 import platform
-import resource
 import tempfile
 import uuid
 from dataclasses import dataclass
 import re
 from datetime import datetime, timezone
 
+try:  # POSIX only; on native Windows main() explains that Forge runs inside WSL2.
+    import fcntl
+    import resource
+except ImportError:  # pragma: no cover - native Windows
+    fcntl = resource = None
+
 if __package__:
     from .forge_sandbox import build_profile
+    from . import forge_platform
 else:
     from forge_sandbox import build_profile
+    import forge_platform
 
 ROOT = Path(__file__).resolve().parents[1]
 STATE = ROOT / '.cendavo-run'
@@ -61,8 +67,8 @@ FRONTEND_PATHS = ('assets/', 'pages/')
 # --- Control plane: never writable by the Builder in any profile --------------------------------------------
 # Forge's own enforcement, its tests, agent definitions, CI, project instructions and configuration.
 CONTROL_PREFIXES = ('.git/', '.cendavo-run/', '.cendavo-tools/', '.github/', '.claude/', '.forge-cache/')
-CONTROL_FILES = ('scripts/forge.py', 'scripts/forge_sandbox.py', 'scripts/supervisor.py', 'scripts/supervise.sh',
-                 'scripts/overnight.sh', 'forge.config.json', 'CLAUDE.md', 'AGENTS.md', '.gitignore', '.mcp.json', '.git',
+CONTROL_FILES = ('scripts/forge.py', 'scripts/forge_sandbox.py', 'scripts/forge_platform.py', 'scripts/supervisor.py', 'scripts/supervise.sh',
+                 'scripts/overnight.sh', 'scripts/verify_wsl.sh', 'scripts/verify_agent_sandbox.py', 'forge.config.json', 'CLAUDE.md', 'AGENTS.md', '.gitignore', '.mcp.json', '.git',
                  'tests/test_forge.py', 'tests/test_forge_sandbox.py', 'tests/test_supervisor.py')
 # Secret-bearing names: unreadable to agents and never writable.
 SECRET_NAME = re.compile(r'(^|/)(\.env([.][^/]*)?|\.?secrets?([.][^/]*)?|\.?credentials?([.][^/]*)?|auth\.json|token\.json'
@@ -551,6 +557,9 @@ def check_tools():
         load_config()
     except (OSError, RuntimeError, ValueError) as exc:
         return f'Agent definitions or {CONFIG_NAME} invalid: {exc}'
+    failed = forge_platform.failures(forge_platform.doctor(ROOT, STATE))
+    if failed:
+        return 'Host is not compatible with Forge\'s sandbox: ' + '; '.join(f'{f["check"]}: {f["detail"]}' for f in failed) + ' (run `forge.py doctor`)'
     return check_subscription_auth()
 
 
@@ -623,6 +632,7 @@ def hit_limit(text):
 
 SANDBOX_OPEN_FILES = 4096
 HEARTBEAT_SECONDS = 60
+SANDBOX_LAUNCHERS = ('sandbox-exec', 'bwrap')
 
 
 def cap_open_files():
@@ -674,7 +684,7 @@ def run_command(argv, stdin, task_id, name, deadline, timeout=1800, sandbox_tmp=
         raise RuntimeError('Refusing a Claude invocation with paid-fallback or budget flags')
     env = subscription_env() if argv[0] == claude_bin() else dict(os.environ)
     env['PATH'] = str(LOCAL_BIN) + os.pathsep + env.get('PATH', '')
-    if argv[0] == 'sandbox-exec':
+    if argv[0] in SANDBOX_LAUNCHERS:
         if sandbox_tmp is None:
             raise ValueError('Sandboxed commands require a private temporary directory')
         for key in ('TMPDIR', 'TMP', 'TEMP', 'XDG_CACHE_HOME'):
@@ -698,7 +708,7 @@ def run_command(argv, stdin, task_id, name, deadline, timeout=1800, sandbox_tmp=
         log.flush()
         offset, pending = log.tell(), ''
         proc = subprocess.Popen(argv, cwd=cwd or ROOT, stdin=subprocess.PIPE, stdout=log, stderr=subprocess.STDOUT, text=True, env=env, start_new_session=True,
-                                preexec_fn=cap_open_files if argv[0] == 'sandbox-exec' else None)
+                                preexec_fn=cap_open_files if argv[0] in SANDBOX_LAUNCHERS else None)
         ACTIVE.write_text(json.dumps({'pid':proc.pid,'name':name,'task_id':task_id,'started_at':now()}))
         ACTIVE.chmod(0o600)
         started = last_beat = time.monotonic()
@@ -744,7 +754,7 @@ def run_command(argv, stdin, task_id, name, deadline, timeout=1800, sandbox_tmp=
         log.write(f'\nexit: {proc.returncode}\n')
     if proc.returncode:
         tail = output[-3000:]
-        if argv[0] != 'sandbox-exec' and hit_limit(tail):
+        if argv[0] not in SANDBOX_LAUNCHERS and hit_limit(tail):
             raise RateLimited(f'{name} reached a provider limit; see {path}')
         raise StageFailure(f'{name} exited {proc.returncode}; see {path}', name, path, output)
     return output
@@ -1206,14 +1216,16 @@ def test_stages():
 
 def tests(task_id, deadline, root=None):
     """Run the configured deterministic checks sandboxed to `root` (a task workspace, the live checkout or a maintenance worktree)."""
-    if platform.system() != 'Darwin' or not shutil.which('sandbox-exec'):
-        raise RuntimeError('Isolated test execution requires macOS sandbox-exec on this host')
+    backend = forge_platform.checks_sandbox()
+    available, detail = backend.available() if backend else (False, forge_platform.unsupported_reason(forge_platform.detect()))
+    if not available:
+        # Never fall back to running agent-written code unsandboxed.
+        raise RuntimeError(f'Isolated test execution requires a verified OS sandbox (macOS sandbox-exec or Linux bubblewrap): {detail}')
     root = Path(root or tree())
     with tempfile.TemporaryDirectory(prefix='cendavo-sandbox-') as temporary:
         tmp = Path(temporary).resolve()
-        profile = build_profile(root, tmp)
         for name, argv in load_config()['checks']:
-            run_command(['sandbox-exec','-p',profile,*argv], '', task_id, name, deadline, timeout=600, sandbox_tmp=tmp, cwd=root)
+            run_command(backend.command(argv, root, tmp), '', task_id, name, deadline, timeout=600, sandbox_tmp=tmp, cwd=root)
 
 
 def changed_names(cwd=None):
@@ -1533,12 +1545,111 @@ def summary(conn):
     return report
 
 
+REPORT_NAME = re.compile(r'^(\d{4})-(.+?)(?:-(\d{6,}))?\.json$')
+
+
+def inspect_state(task_id=None, events=50, progress_lines=50):
+    """Read-only JSON snapshot of Forge for supervisors such as JARVIS: no writes, no migrations, no locks taken."""
+    out = {'interface': 1, 'platform': forge_platform.detect(), 'root': str(ROOT), 'state_dir': str(STATE),
+           'branch': git('branch', '--show-current', cwd=ROOT, check=False).stdout.strip(),
+           'head': git('rev-parse', 'HEAD', cwd=ROOT, check=False).stdout.strip(),
+           'stop_requested': STOP.exists(), 'runner_active': _runner_active(), 'active_child': _active_child(),
+           'tasks': [], 'events': [], 'progress': []}
+    if DB.exists():
+        uri = DB.resolve().as_uri() + '?mode=ro'
+        if not Path(str(DB) + '-wal').exists():
+            uri += '&immutable=1'  # no writer connected: never create -wal/-shm files in Forge's state
+        conn = sqlite3.connect(uri, uri=True, timeout=2)
+        conn.row_factory = sqlite3.Row
+        try:
+            columns = {r[1] for r in conn.execute('PRAGMA table_info(tasks)')}
+            profile = 'profile' if 'profile' in columns else 'NULL AS profile'
+            out['tasks'] = [dict(r) for r in conn.execute(
+                f'SELECT id, priority, title, state, attempts, error, created_at, updated_at, {profile} FROM tasks ORDER BY id')]
+            where, args = ('WHERE task_id=?', (task_id,)) if task_id else ('', ())
+            out['events'] = [dict(r) for r in conn.execute(
+                f'SELECT * FROM (SELECT id, task_id, at, kind, detail FROM events {where} ORDER BY id DESC LIMIT ?) ORDER BY id',
+                (*args, max(1, min(events, 2000))))]
+        finally:
+            conn.close()
+    try:
+        lines = (STATE / 'progress.jsonl').read_text(errors='replace').splitlines()[-max(0, min(progress_lines, 2000)):]
+        out['progress'] = [json.loads(l) for l in lines if l.startswith('{')]
+    except (OSError, ValueError):
+        pass
+    if task_id:
+        out['task'] = _inspect_task(task_id, out)
+    return out
+
+
+def _runner_active():
+    lock = STATE / 'run.lock'
+    if not lock.exists() or fcntl is None:
+        return False
+    with lock.open('r') as handle:
+        try:
+            fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            return True
+        fcntl.flock(handle, fcntl.LOCK_UN)
+    return False
+
+
+def _active_child():
+    try:
+        data = json.loads(ACTIVE.read_text())
+    except (OSError, ValueError):
+        return None
+    pid = data.get('pid') if isinstance(data, dict) else None
+    alive = False
+    if isinstance(pid, int) and pid > 0:
+        try:
+            os.kill(pid, 0)
+            alive = True
+        except ProcessLookupError:
+            alive = False
+        except PermissionError:
+            alive = True
+    return {**{k: data.get(k) for k in ('pid', 'name', 'task_id', 'started_at')}, 'alive': alive}
+
+
+def _inspect_task(task_id, snapshot):
+    row = next((t for t in snapshot['tasks'] if t['id'] == task_id), None)
+    reports = []
+    for path in sorted(REPORTS.glob(f'{task_id:04d}-*.json'), key=lambda p: p.stat().st_mtime):
+        match = REPORT_NAME.match(path.name)
+        if not match or path.is_symlink() or path.stat().st_size > 2_000_000:
+            continue
+        try:
+            data = json.loads(path.read_text())
+        except (OSError, ValueError):
+            continue
+        reports.append({'stage': match.group(2), 'agent': data.get('agent'), 'at': data.get('at'),
+                        'result': str(data.get('result', ''))[:20000], 'usage': data.get('usage')})
+    followups = STATE / 'followups' / f'task-{task_id:04d}.md'
+    try:
+        cp = json.loads(checkpoint_path(task_id).read_text())
+    except (OSError, ValueError):
+        cp = None
+    kinds = {e['kind']: e['detail'] for e in snapshot['events'] if e['task_id'] == task_id}
+    ws = task_workspace(task_id)
+    return {'row': row, 'reports': reports,
+            'followups': followups.read_text() if followups.exists() else None,
+            'workspace': {'path': str(ws), 'exists': ws.exists(), 'branch': task_branch(task_id)},
+            'checkpoint': None if cp is None else {'baseline': cp.get('baseline'), 'stages': sorted(cp.get('stages', {})),
+                                                  'committed': cp.get('committed')},
+            'commit': kinds.get('checkpoint'), 'delivered': kinds.get('delivered')}
+
+
 def main():
     signal.signal(signal.SIGTERM, lambda _signum, _frame: (_ for _ in ()).throw(KeyboardInterrupt()))
     parser = argparse.ArgumentParser(description='Cendavo Forge local overnight runner')
     sub = parser.add_subparsers(dest='command',required=True)
     sub.add_parser('init')
     sub.add_parser('status')
+    sub.add_parser('doctor', help='check that this host can sandbox Forge (macOS, Linux or WSL2)')
+    insp = sub.add_parser('inspect', help='read-only JSON snapshot for supervisors such as JARVIS')
+    insp.add_argument('--task', type=int); insp.add_argument('--events', type=int, default=50); insp.add_argument('--progress', type=int, default=50)
     sub.add_parser('stop')
     sub.add_parser('resume')
     add = sub.add_parser('add');add.add_argument('title');add.add_argument('--priority',type=int,default=5)
@@ -1547,6 +1658,17 @@ def main():
     run = sub.add_parser('run');run.add_argument('--hours',type=float,default=8);run.add_argument('--max-tasks',type=int,default=10)
     run.add_argument('--approve-provider-network', action='store_true', help='explicitly approve Claude model connections for this run')
     args = parser.parse_args()
+    kind = forge_platform.detect()
+    if kind not in ('macos', 'linux', 'wsl2'):
+        print(forge_platform.unsupported_reason(kind), file=sys.stderr)
+        return 2
+    if args.command == 'doctor':
+        results = forge_platform.doctor(ROOT, STATE, kind)
+        print(json.dumps({'platform': kind, 'checks': results, 'ok': not forge_platform.failures(results)}, indent=2))
+        return 1 if forge_platform.failures(results) else 0
+    if args.command == 'inspect':
+        print(json.dumps(inspect_state(args.task, args.events, args.progress), indent=2, default=str))
+        return 0
     conn = ensure_state()
     if args.command == 'init':
         if not conn.execute('SELECT 1 FROM tasks LIMIT 1').fetchone():

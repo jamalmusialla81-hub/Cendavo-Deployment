@@ -48,7 +48,7 @@ IMPORT_FAIL = re.compile(r'Failed to import test module: ([\w.]+)')
 # Paths a maintenance patch may change without the owner's approval.
 SAFE_PREFIXES = ('scripts/', 'tests/', 'docs/')
 # Always need approval: the supervisor itself, agent definitions, CI, project instructions, ignore rules, dependencies.
-APPROVAL_PATHS = ('scripts/supervisor.py', 'scripts/overnight.sh', 'scripts/supervise.sh', 'scripts/forge_sandbox.py',
+APPROVAL_PATHS = ('scripts/supervisor.py', 'scripts/overnight.sh', 'scripts/supervise.sh', 'scripts/forge_sandbox.py', 'scripts/forge_platform.py', 'scripts/verify_wsl.sh', 'scripts/verify_agent_sandbox.py',
                   'forge.config.json', '.mcp.json', '.claude/', '.github/', 'AGENTS.md', 'CLAUDE.md', '.gitignore', 'requirements.txt')
 # Changed lines in non-test code that touch security boundaries, credentials, sandbox or permission policy,
 # product-repair containment, or the checkpoint proof that lets validated stages be reused.
@@ -57,7 +57,7 @@ BOUNDARY = re.compile(
     r'restricted|forceLoginMethod|plugin|SKILL_AGENTS|REPAIR_MODE|repair_guard|product_repair_only|maintenance_isolation|'
     r'maintenance_root|SecurityFailure|MaintenanceRequired|fingerprint|stage_done|mark_stage|checkpoint|verdict|'
     r'CONTROL_|SECRET_|CONSEQUENTIAL_BASH|PROFILES|Profile\(|writable|agent_guard|guard_snapshot|write_denials|workspace|'
-    r'mcp|allowedDomains|registr|max_turns|limits|deliver|ff-only|'
+    r'mcp|allowedDomains|registr|max_turns|limits|deliver|ff-only|bwrap|unshare|ro-bind|forge_platform|doctor|'
     r'allowed_changes|protected|PROTECTED|APPROVAL_PATHS|SAFE_PREFIXES|BOUNDARY|'
     r'api[_-]?key|token|secret|credential|password|\bauth|oauth|'
     r'permission|allowedTools|disallowedTools|--tools|dontAsk|bypass|WRITABLE_AGENTS|REQUIRED_AGENTS|'
@@ -184,7 +184,7 @@ def classify(exc, task_id):
         return Failure(SECURITY, task_id, 'builder', msg)
     if 'not validated' in lower or 'uncommitted changes' in lower:
         return Failure(HUMAN, task_id, 'checkpoint', msg)
-    if any(t in lower for t in ('requires macos', 'missing required cli', 'not authenticated', 'manual stop',
+    if any(t in lower for t in ('requires macos', 'isolated test execution requires', 'not compatible with forge', 'missing required cli', 'not authenticated', 'manual stop',
                                 'maximum runtime', 'timed out', 'left a child process', 'too large for an independent review',
                                 'requires a logged-in', 'could not verify cli authentication', 'stopped before checkpoint')):
         return Failure(ENVIRONMENT, task_id, 'environment', msg)

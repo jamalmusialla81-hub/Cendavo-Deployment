@@ -50,3 +50,9 @@
 
 **Trade-off:** Agents now execute their own code during development, before the security review. The OS sandbox (no home, no secrets, workspace-only writes, registry-only network) is the containment for that, and package installs from public registries are a supply-chain exposure that the security review must scrutinise. Narrow profiles cannot pre-deny files that do not exist yet; Forge's post-call guard catches those and stops the task.
 
+## 007 — Linux/WSL2 execution backend
+
+**Decision:** Forge runs on macOS (unchanged Seatbelt profile) and on Linux, including WSL2 on Windows, where the checks stage uses a bubblewrap profile with the same boundaries and agents use Claude Code's bubblewrap sandbox. Native Windows and WSL1 are refused. `forge.py doctor` verifies a host, preflight refuses incompatible hosts, and there is no unsandboxed fallback. `forge.py inspect` gives JARVIS a read-only JSON view that works across the Windows/WSL2 boundary, because SQLite in WAL mode must not be read over the `\\wsl$` share.
+
+**Status:** verified on macOS; Linux/WSL2 behaviour is covered by tests that only run on Linux and must pass on a real Windows 11 + WSL2 host before Windows support is declared complete.
+

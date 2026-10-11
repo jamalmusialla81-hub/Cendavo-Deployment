@@ -116,7 +116,8 @@ class ForgeQueueTests(IsolatedAgentTests):
             self.assertNotIn('codex', argv[0])
             return subprocess.CompletedProcess(argv, 0, '{"loggedIn":true,"authMethod":"claude.ai","apiProvider":"firstParty","subscriptionType":"max"}', '')
         with patch.object(forge.shutil, 'which', return_value='/usr/bin/tool'), patch.object(forge.subprocess, 'run', side_effect=fake_run), \
-                patch.object(forge, 'LOCAL_BIN', Path('/nonexistent-cendavo-bin')), patch.object(forge, 'AGENT_DIR', Path(forge.__file__).resolve().parents[1] / '.claude' / 'agents'):
+                patch.object(forge, 'LOCAL_BIN', Path('/nonexistent-cendavo-bin')), patch.object(forge, 'AGENT_DIR', Path(forge.__file__).resolve().parents[1] / '.claude' / 'agents'), \
+                patch.object(forge.forge_platform, 'doctor', return_value=[]):  # host compatibility has its own tests
             self.assertIsNone(forge.check_tools())
 
     def test_frontend_agents_discover_and_can_use_local_design_skills(self):
