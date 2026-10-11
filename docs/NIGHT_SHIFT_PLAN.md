@@ -89,3 +89,16 @@ Use existing photos (not `barber-tools`), `<picture>` with AVIF like other pages
 
 ## Task 16 — header fit after adding About (profile `site`)
 Supervisor screenshot at 1081 px (ee61f79): "Demo project" wraps onto two lines and the header CTA "Request a free consultation" wraps too. As Task 15 allowed: remove "Demo project" from the **header** navigation only (keep it in the footer navigation and the Work page's demonstration card), and prevent nav labels and the header CTA from wrapping (`white-space:nowrap`) so the desktop header is a single clean row from 1081 px up; the mobile menu keeps all links including the demo. Update nav tests accordingly (header has Home, Work, Services, Pricing, About, Contact + CTA; footer and mobile menu still include the demo link). No other changes. **Never `cd` in Bash.**
+
+## Task 17 — fixes from the independent design critique (profile `site`)
+Source: `docs/design/night-shift/critique/CRITIQUE.md` (independent creative-director review of 912b17f, verified by the supervisor). Do these, nothing else:
+1. **/work/ project index**: the four tiles and captions sit flush to the left edge and the 4th caption is clipped at 1440. Put the row inside the standard side gutter (or a contained 4-column grid); mobile: 2 columns inside a 16 px gutter; no clipping at 360–1920.
+2. **/work/ Harbourside cover (`detail-mono`)**: white title/meta over blown-out white spray fails contrast. Use `object-position: 70% 50%` plus a left-side dark scrim behind the text (or swap to `detail-splash`); verify ≥4.5:1 for the meta text at 390 and 1440.
+3. **Home pinned projects**: mid-crossfade both mockups show at ~50% and the text disappears for a screen of scroll; the Greenline laptop overflows the right edge. Shorten the crossfade, keep one project's text always readable (cross-fade text faster, at most a brief overlap), and constrain mockups `max-width: min(58vw, 820px)`; reduced-motion stacked fallback unchanged.
+4. **Home statement/intro band**: align the photo and text tops, use a 4:5 crop, tighten the section padding to about `clamp(96px,10vw,160px)`.
+5. **Home process numerals** compete with step headings: numerals smaller (about 20–24 px, stone colour, amber for the first), step headings ~28 px.
+6. **Mobile home hero**: the photo takes ~420 px before the headline. On ≤ 640 px overlay the headline/sub/CTA on the darkened photo (scrim) so the H1 and primary CTA are above the fold at 390×844; keep the phone mockup or drop it on mobile if it crowds.
+7. **Services list on home**: remove the active-row `translateX` (opacity/scale change only).
+8. **Contact on mobile**: hide the awkward headlight crop photo at ≤ 640 px.
+9. **Concept label**: show "Concept project · fictional business" once per project, directly under each project title (not repeated above and below); it must remain on every concept project.
+Do not use `barber-tools`. Keep accessibility, CSP, enquiry wiring, tests; same test rules; **never `cd` in Bash**.
