@@ -1,6 +1,7 @@
 import json
 import os
 import sqlite3
+import sys
 import subprocess
 import tempfile
 import time
@@ -8,6 +9,30 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 from scripts import forge
+
+
+# Every test in this module runs against throwaway Forge state and a throwaway local CLI directory. The real
+# .cendavo-run and .cendavo-tools are unreadable inside Forge's test sandbox, and tests must never depend on
+# or modify live queue state.
+_REAL_STATE = forge.STATE
+_REAL_LOCAL_BIN = forge.LOCAL_BIN
+_STATE_PATCH = None
+_STATE_TMP = None
+
+
+def setUpModule():
+    global _STATE_PATCH, _STATE_TMP
+    _STATE_TMP = tempfile.TemporaryDirectory()
+    state = Path(_STATE_TMP.name) / 'forge-state'
+    _STATE_PATCH = patch.multiple(forge, STATE=state, DB=state / 'queue.sqlite3', REPORTS=state / 'reports', LOGS=state / 'logs',
+                                  STOP=state / 'STOP', ACTIVE=state / 'active-child.json', AGENTS_FILE=state / 'agents.json',
+                                  LOCAL_BIN=Path(_STATE_TMP.name) / 'tools-bin')
+    _STATE_PATCH.start()
+
+
+def tearDownModule():
+    _STATE_PATCH.stop()
+    _STATE_TMP.cleanup()
 
 
 class IsolatedAgentTests(unittest.TestCase):
@@ -609,6 +634,60 @@ class RunnerStopTests(unittest.TestCase):
         calls, states = self.run_main(ValueError('boom'))
         self.assertEqual(calls, 1)
         self.assertEqual(states[2], 'queued')
+
+
+class SandboxSpawnTests(unittest.TestCase):
+    def test_sandboxed_children_get_a_bounded_open_file_limit(self):
+        """Regression: an inherited ~1M descriptor limit made each spawn inside the sandbox ~0.14s and timed out the test stage."""
+        code = 'import resource; print(resource.getrlimit(resource.RLIMIT_NOFILE)[0])'
+        out = subprocess.run([sys.executable, '-c', code], capture_output=True, text=True, preexec_fn=forge.cap_open_files)
+        self.assertLessEqual(int(out.stdout), forge.SANDBOX_OPEN_FILES)
+        self.assertGreater(int(out.stdout), 0)
+
+    def test_run_command_applies_the_cap_only_to_sandboxed_commands(self):
+        seen = {}
+
+        class Stop(Exception):
+            pass
+
+        def fake_popen(argv, **kwargs):
+            seen[argv[0]] = kwargs.get('preexec_fn')
+            raise Stop
+        forge.LOGS.mkdir(parents=True, exist_ok=True)
+        with patch.object(forge.subprocess, 'Popen', side_effect=fake_popen):
+            for argv, tmp in ((['sandbox-exec', '-p', 'x', 'true'], forge.STATE), (['git', 'status'], None)):
+                with self.assertRaises(Stop):
+                    forge.run_command(argv, '', 1, 'probe', time.monotonic() + 600, sandbox_tmp=tmp)
+        self.assertIs(seen['sandbox-exec'], forge.cap_open_files)
+        self.assertIsNone(seen['git'])
+
+class TestStateIsolationTests(unittest.TestCase):
+    def test_module_never_uses_real_forge_state_or_local_cli(self):
+        self.assertNotEqual(forge.STATE, _REAL_STATE)
+        for name in ('STATE', 'DB', 'REPORTS', 'LOGS', 'STOP', 'ACTIVE', 'AGENTS_FILE', 'LOCAL_BIN'):
+            path = str(getattr(forge, name))
+            self.assertNotIn(str(_REAL_STATE), path, name)
+            self.assertNotIn(str(_REAL_LOCAL_BIN.parents[1]), path, name)
+
+    def test_suite_passes_when_real_state_is_unreadable(self):
+        """Regression for the sandboxed unit-test stage: run this module with the real state path made inaccessible."""
+        if os.environ.get('CENDAVO_ISOLATION_CHILD'):
+            self.skipTest('inner run')
+        with tempfile.TemporaryDirectory() as tmp:
+            blocked = Path(tmp) / 'blocked'
+            blocked.mkdir(mode=0)
+            env = dict(os.environ, CENDAVO_ISOLATION_CHILD='1', PYTHONDONTWRITEBYTECODE='1')
+            code = ('import sys,unittest;from pathlib import Path;from scripts import forge;'
+                    f'forge.STATE=Path({str(blocked / ".cendavo-run")!r});'
+                    f'forge.LOCAL_BIN=Path({str(blocked / ".cendavo-tools" / "bin")!r});'
+                    'r=unittest.main(module="tests.test_forge",argv=["x"],exit=False).result;'
+                    'sys.exit(0 if r.wasSuccessful() else 1)')
+            try:
+                run = subprocess.run([sys.executable, '-c', code], cwd=Path(forge.__file__).resolve().parents[1],
+                                     env=env, capture_output=True, text=True, timeout=120)
+            finally:
+                blocked.chmod(0o700)
+            self.assertEqual(run.returncode, 0, run.stderr[-2000:])
 
 
 if __name__ == '__main__':

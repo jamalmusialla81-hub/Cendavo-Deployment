@@ -8,6 +8,7 @@ import sys
 import tempfile
 import unittest
 
+from scripts import forge
 from scripts.forge_sandbox import build_profile
 
 
@@ -32,10 +33,10 @@ class ForgeSandboxTests(unittest.TestCase):
                         PYTHONDONTWRITEBYTECODE='1')
         self.env['PATH'] = '/Library/Developer/CommandLineTools/usr/bin' + os.pathsep + self.env.get('PATH', '')
 
-    def run_sandbox(self, *argv):
+    def run_sandbox(self, *argv, timeout=20):
         return subprocess.run(['sandbox-exec', '-p', self.profile, *argv],
                               cwd=self.root, env=self.env, text=True,
-                              capture_output=True, timeout=20)
+                              capture_output=True, timeout=timeout)
 
     def python(self, code, path):
         return self.run_sandbox(sys.executable, '-c', code, str(path))
@@ -117,6 +118,32 @@ class ForgeSandboxTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn('/opt/homebrew/Cellar/', result.stdout)
 
+
+    def test_forge_and_supervisor_tests_pass_inside_sandbox_without_protected_paths(self):
+        """Regression: the automated unit-test stage must not need .cendavo-run, .cendavo-tools or the real .git."""
+        source = Path(__file__).resolve().parents[1]
+        shutil.copytree(source / 'scripts', self.root / 'scripts', ignore=shutil.ignore_patterns('__pycache__'))
+        shutil.copytree(source / '.claude' / 'agents', self.root / '.claude' / 'agents')
+        (self.root / 'tests').mkdir()
+        for name in ('__init__.py', 'test_forge.py', 'test_supervisor.py'):
+            if (source / 'tests' / name).exists():
+                shutil.copy(source / 'tests' / name, self.root / 'tests' / name)
+        sentinels = {}
+        for name in ('.cendavo-run/queue.sqlite3', '.cendavo-tools/node_modules/.bin/claude', '.git/config'):
+            path = self.root / name
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text('sentinel')
+            sentinels[path] = path.stat().st_mtime_ns
+        env = dict(self.env, CENDAVO_SANDBOXED='1', XDG_CACHE_HOME=str(self.temporary))
+        env.pop('PYTHONPATH', None)
+        python3 = shutil.which('python3', path=env['PATH'])
+        result = subprocess.run(['sandbox-exec', '-p', self.profile, python3, '-m', 'unittest', 'discover', '-s', 'tests'],
+                                cwd=self.root, env=env, text=True, capture_output=True, timeout=300,
+                                preexec_fn=forge.cap_open_files)
+        self.assertEqual(result.returncode, 0, result.stderr[-3000:])
+        for path, mtime in sentinels.items():
+            self.assertEqual((path.read_text(), path.stat().st_mtime_ns), ('sentinel', mtime), path)
+        self.assertEqual(sorted(p.name for p in (self.root / '.cendavo-run').iterdir()), ['queue.sqlite3'])
 
 if __name__ == '__main__':
     unittest.main()

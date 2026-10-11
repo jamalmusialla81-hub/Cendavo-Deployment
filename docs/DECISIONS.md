@@ -32,3 +32,12 @@
 
 **Trade-off:** Reviewer calls still consume Claude allowance; the saving is Codex quota only. A Claude reviewer shares model-family blind spots with the Builder, so deterministic tests and the protected-file checks stay mandatory.
 
+## 005 — Forge Supervisor
+
+**Decision:** Add `scripts/supervisor.py` to classify Forge failures and recover from ordinary ones automatically: Builder repairs for product failures, and an isolated-worktree Claude maintainer for infrastructure failures. A deterministic patch policy, sandboxed tests and an independent Claude security review gate every maintenance patch. Changes to security boundaries, credentials, sandbox permissions, protected-file policy or the supervisor itself require the owner's approval.
+
+**Billing:** Claude Code runs on the Claude subscription only. Billing-routing environment variables are stripped and budget/fallback flags are refused. Usage limits stop the run; there is no paid fallback.
+
+**Trade-off:** Recovery spends more Claude usage per failure, and the boundary filter is deliberately broad, so some harmless infrastructure fixes will still wait for approval.
+
+**Integration with the local runner (2026-10-11):** Forge's debugger-gated unit-test repair stays the first layer; the Supervisor only acts on what Forge cannot repair itself. Local protections are kept: `product_repair_only`, claude.ai Max-only authentication with `--restricted`, explicit `--approve-provider-network`, and the `forge_sandbox` profile. Maintenance worktrees live outside the project and the maintainer is denied the live checkout.

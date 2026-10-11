@@ -15,6 +15,10 @@ Reviewer sessions are separate `claude -p` calls with `--no-session-persistence`
 
 **Stops.** The run halts on a provider usage limit (the attempt is not counted), a security `BLOCK` or exhausted security cycles (task becomes `blocked`), or any unexpected error. Nothing is retried automatically; inspect, then `resume`. Reports, command logs and a persistent SQLite queue live in `.cendavo-run/` and are ignored by Git. Checkpoint commits are local; the runner never pushes, deploys, sends email or purchases anything. The host computer must remain awake and online. This runner currently requires macOS `sandbox-exec` for executing agent-edited tests; other hosts pause rather than running them unsandboxed.
 
+## Supervised runs
+
+`CENDAVO_APPROVE_PROVIDER_NETWORK=yes ./scripts/supervise.sh` wraps this pipeline with automatic recovery: product failures are repaired by the Builder, infrastructure failures are fixed in an isolated maintenance worktree and integrated only after policy, test and independent security checks (security-boundary changes wait for approval). See [SUPERVISOR.md](SUPERVISOR.md).
+
 ## Requirements and setup
 
 Claude Code has been installed in `.cendavo-tools/` for this checkout. Alternatively, install it from [Anthropic's official instructions](https://code.claude.com/docs/en/setup). Sign in to Claude Code with your Claude subscription (`.cendavo-tools/node_modules/.bin/claude auth login`) Check `claude auth status`. The runner accepts Claude's `claude.ai` or `oauth_token` authentication; it does not use API keys. Optionally install the `insane-web-design` plugin; Forge warns if it is missing and frontend tasks then run without it. An `ANTHROPIC_API_KEY` in your shell is removed from agent subprocesses to avoid accidentally choosing API billing. Provider usage limits remain in force. There is no promise of eight hours of uninterrupted model access.
