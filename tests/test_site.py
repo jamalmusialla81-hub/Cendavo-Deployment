@@ -399,6 +399,21 @@ class DesignSystemTests(unittest.TestCase):
         self.assertIn('<title>Cendavo — Website design for Sydney’s local service businesses</title>', self.home)
         self.assertRegex(self.home, r'<meta name="description" content="[^"]*websites for local service businesses in Sydney')
 
+    def test_dark_first_frame_without_changing_form_controls(self):
+        # Night Shift Task 25: the browser paints its dark canvas (not white) before site.css arrives, while
+        # native form controls on bone/paper sections keep their light rendering.
+        for route in self.ROUTES + ['404.html']:
+            with self.subTest(route=route):
+                html = (OUT / route).read_text()
+                head = html.split('</head>', 1)[0]
+                self.assertEqual(html.count('<meta name="color-scheme" content="dark">'), 1)
+                self.assertEqual(html.count('<meta name="theme-color" content="#0E0E0D">'), 1)
+                self.assertIn('<meta name="color-scheme" content="dark">', head)
+                self.assertLess(head.index('<meta name="color-scheme" content="dark">'),
+                                head.index('<link rel="stylesheet" href="/assets/site.css">'))
+        self.assertIn('input,select,textarea{color-scheme:light}', self.css)
+        self.assertNotRegex(self.css, r'(?:^|[;{}\s])color-scheme:dark')
+
     def test_mobile_menu_collapses_only_with_javascript(self):
         self.assertIn("document.documentElement.classList.add('js')", (OUT / 'assets/site.js').read_text())
         self.assertIn('.js .nav-links{display:none}', self.css)

@@ -24,6 +24,7 @@ html{scroll-padding-top:90px;-webkit-text-size-adjust:100%;text-size-adjust:100%
 body{margin:0;background:var(--ink);color:var(--bone);font:400 var(--text-body)/1.55 var(--font-text);-webkit-font-smoothing:antialiased;overflow-x:clip}
 a{color:inherit}
 button,input,select,textarea{font:inherit;color:inherit}
+input,select,textarea{color-scheme:light}
 button{cursor:pointer}
 img,svg{display:block;max-width:100%}
 img{height:auto}
