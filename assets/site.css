@@ -170,6 +170,11 @@ main:focus{outline:none;box-shadow:none}
 [hidden]{display:none!important}
 
 /* Responsive */
+/* Desktop header: one row. Demo project stays in the footer and the mobile menu; no-wrap is desktop-only so mobile labels and the full-width button can still wrap. */
+@media(min-width:1081px){
+.nav-links .nav-optional{display:none}
+.nav-links a,.nav>.button{white-space:nowrap}
+}
 @media(max-width:1080px){
 .nav{flex-wrap:wrap;gap:var(--space-3) var(--space-4)}
 .nav-links{order:3;width:100%;flex-wrap:wrap;padding-bottom:var(--space-3)}

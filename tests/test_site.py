@@ -404,6 +404,36 @@ class DesignSystemTests(unittest.TestCase):
         self.assertNotRegex(self.css, r'(?<!\.js )\.nav-links\{[^}]*display:none')
         self.assertIn('.js .menu{display:inline-flex}', self.css)
 
+    def test_desktop_header_drops_demo_but_menu_and_footer_keep_it(self):
+        # Night Shift Task 16: Demo project leaves the desktop header row (CSS at 1081px+) but stays in the
+        # mobile menu (the same nav) and the footer; header labels and the CTA do not wrap on desktop.
+        from scripts.build_site import NAV
+        expected = [href for _, href in NAV]
+        for route in self.ROUTES + ['404.html']:
+            with self.subTest(route=route):
+                html = (OUT / route).read_text()
+                header = re.search(r'<nav class="nav-links" id="site-nav"[^>]*>(.*?)</nav>', html).group(1)
+                footer = re.search(r'<nav class="footer-links"[^>]*>(.*?)</nav>', html).group(1)
+                header_links = re.findall(r'<a([^>]*)>', header)
+                self.assertEqual([re.search(r'href="([^"]+)"', a).group(1) for a in header_links], expected)
+                optional = [re.search(r'href="([^"]+)"', a).group(1) for a in header_links if 'nav-optional' in a]
+                self.assertEqual(optional, ['/demo/'])
+                self.assertEqual(re.findall(r'<a href="([^"]+)"', footer), expected)
+                self.assertNotIn('nav-optional', footer)
+                self.assertNotIn('class=', footer)
+        demo = (OUT / 'demo/index.html').read_text()
+        self.assertIn('<a class="nav-optional" href="/demo/" aria-current="page">Demo project</a>', demo)
+        self.assertIn('<a href="/demo/" aria-current="page">Demo project</a>', demo.split('<footer', 1)[1])
+        desktop = re.search(r'@media\(min-width:1081px\)\{(.*?)\n\}', self.css, re.S)
+        self.assertIsNotNone(desktop)
+        self.assertIn('.nav-links .nav-optional{display:none}', desktop.group(1))
+        self.assertIn('.nav-links a,.nav>.button{white-space:nowrap}', desktop.group(1))
+        outside = self.css.replace(desktop.group(0), '')
+        self.assertNotIn('nav-optional', outside)  # nothing hides Demo in the mobile menu
+        for rule in re.findall(r'([^{}]+)\{[^{}]*white-space:nowrap', outside):
+            with self.subTest(rule=rule.strip()):
+                self.assertNotRegex(rule, r'\.nav-links a|\.nav>\.button')
+
     def test_homepage_structure(self):
         main = self.home_main
         self.assertEqual(main.count('<h1'), 1)
