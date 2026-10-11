@@ -1694,7 +1694,10 @@ def main():
         print(f'Task {args.task_id} workspace discarded; the live checkout was not changed.')
     elif args.command == 'stop':
         STOP.write_text(f'Stopped manually at {now()}\n')
-        print(f'Stop requested. Active command will finish or time out; runner will not start another task. {STOP}')
+        # run_command polls STOP every second and terminates the active agent's process group; the task is left
+        # 'interrupted' with its checkpoint, so `resume` can continue it. Say so: this is an immediate stop, not a drain.
+        print(f'Stop requested. The active agent or check is terminated within a few seconds and its task is left interrupted '
+              f'(checkpoint kept; continue with `forge.py resume`). No further task starts. {STOP}')
     elif args.command == 'resume':
         if ACTIVE.exists():
             print(f'Inspect possible orphan process before resume: {ACTIVE}',file=sys.stderr)

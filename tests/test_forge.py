@@ -1,5 +1,7 @@
 import json
 import os
+import contextlib
+import io
 import sqlite3
 import sys
 import subprocess
@@ -1016,6 +1018,23 @@ class SandboxSpawnTests(unittest.TestCase):
         finally:
             forge.STOP.unlink(missing_ok=True)
         self.assertFalse(forge.ACTIVE.exists())
+
+    def test_stop_command_describes_the_immediate_stop_it_performs(self):
+        """Regression (2026-10-11 supervised trial): `stop` claimed the active command would finish, but run_command
+        terminates it within about a second. The message must match the behaviour above."""
+        with tempfile.TemporaryDirectory() as tmp:
+            state = Path(tmp)
+            with patch.multiple(forge, STATE=state, DB=state/'queue.sqlite3', REPORTS=state/'reports', LOGS=state/'logs',
+                                STOP=state/'STOP', ACTIVE=state/'active-child.json'):
+                forge.ensure_state().close()
+                out = io.StringIO()
+                with patch('sys.argv', ['forge.py', 'stop']), contextlib.redirect_stdout(out):
+                    forge.main()
+                self.assertTrue((state/'STOP').exists())
+        message = out.getvalue()
+        self.assertIn('terminated', message)
+        self.assertIn('resume', message)
+        self.assertNotIn('will finish', message)
 
     @unittest.skipIf(os.environ.get('CENDAVO_SANDBOXED'), 'signals to process groups are restricted inside the checks sandbox')
     def test_terminate_group_treats_a_zombie_only_group_as_gone(self):
