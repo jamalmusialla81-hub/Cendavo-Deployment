@@ -53,14 +53,14 @@ function media(query, env) {
   }));
 }
 function makeGsap(env) {
-  const log = { queries: [], timelines: [], tweens: [], sets: [], quick: [], plugins: 0, batches: 0, varsSeen: [] };
+  const log = { queries: [], timelines: [], tweens: [], sets: [], setNames: [], creates: [], quick: [], plugins: 0, batches: 0, varsSeen: [] };
   const count = targets => (Array.isArray(targets) ? targets.length : 1);
+  const nameOf = targets => (Array.isArray(targets) ? targets : [targets]).map(t => (t && t.name) || null);
   const record = (owner, kind, targets, vars, position) => {
     log.varsSeen.push(vars);
     const at = position === undefined ? owner.cursor : position;
     const end = at + (vars.duration === undefined ? 0.5 : vars.duration) + (vars.stagger || 0) * (count(targets) - 1);
-    const names = (Array.isArray(targets) ? targets : [targets]).map(t => (t && t.name) || null);
-    const tween = { kind, at, end, n: count(targets), names, vars };
+    const tween = { kind, at, end, n: count(targets), names: nameOf(targets), vars };
     owner.tweens.push(tween);
     owner.cursor = end;
     return tween;
@@ -73,7 +73,7 @@ function makeGsap(env) {
         scrollTrigger: vars && vars.scrollTrigger ? { start: 1000, end: 1000 + 2 * env.height } : undefined,
         from(t, v, p) { record(tl, 'from', t, v, p); return tl; },
         to(t, v, p) { record(tl, 'to', t, v, p); return tl; },
-        fromTo(t, a, v, p) { log.varsSeen.push(a); record(tl, 'fromTo', t, v, p); return tl; },
+        fromTo(t, a, v, p) { log.varsSeen.push(a); record(tl, 'fromTo', t, v, p).from = a; return tl; },
         add(fn, p) { tl.callbacks.push({ fn, at: p }); tl.cursor = Math.max(tl.cursor, p); return tl; },
         addLabel(name, p) { tl.labels[name] = p; return tl; },
         play(at) { tl.played.push(at); return tl; },
@@ -85,13 +85,14 @@ function makeGsap(env) {
       log.timelines.push(tl);
       return tl;
     },
-    from(t, v) { log.varsSeen.push(v); log.tweens.push({ kind: 'from', vars: v }); },
-    fromTo(t, a, v) { log.varsSeen.push(a, v); log.tweens.push({ kind: 'fromTo', vars: v }); },
-    to(state, v) { log.varsSeen.push(v); log.tweens.push({ kind: 'to', vars: v }); if ('v' in v) { state.v = v.v; v.onUpdate(); } return { kill() {} }; },
-    set(t, v) { log.varsSeen.push(v); log.sets.push(v); },
+    from(t, v) { log.varsSeen.push(v); log.tweens.push({ kind: 'from', vars: v, names: nameOf(t) }); },
+    fromTo(t, a, v) { log.varsSeen.push(a, v); log.tweens.push({ kind: 'fromTo', vars: v, from: a, names: nameOf(t) }); },
+    to(state, v) { log.varsSeen.push(v); log.tweens.push({ kind: 'to', vars: v, names: nameOf(state) }); if ('v' in v) { state.v = v.v; v.onUpdate(); } return { kill() {} }; },
+    set(t, v) { log.varsSeen.push(v); log.sets.push(v); log.setNames.push(...nameOf(t)); },
+    killTweensOf() {},
     quickTo(target, prop) { return value => log.quick.push([prop, value]); },
   };
-  const ScrollTrigger = { batch() { log.batches++; } };
+  const ScrollTrigger = { batch() { log.batches++; }, create(v) { log.creates.push(v); } };
   return { gsap, ScrollTrigger, log };
 }
 function makeWindow(env, extra) {
@@ -125,10 +126,11 @@ function run(env) {
   figure.parts = { '[data-compare-controls]': [controls] };
   const intro = element('intro', { '.intro-mark path': many('arc', 3), '.intro-word > span': many('word', 1) });
   const photo = element('photo', { img: many('img', 1) });
-  const projects = [0, 1, 2].map(i => element('proj' + i, { '.proj-copy > *': many('copy', 4), '.proj-devices': many('devices', 1), '.proj-media': many('media', 1), '.proj-media img': many('mimg', 1) }));
+  const projects = [0, 1, 2].map(i => element('proj' + i, { '.proj-mask > *': many('copy', 3), '.proj-devices': many('devices', 1), '.proj-media': many('media', 1), '.proj-media img': many('mimg', 1) }));
   const counter = element('counter'), bar = element('bar');
-  const stage = element('stage', { '.proj': projects, '.work-count-n': [counter], '.work-count-bar i': [bar] });
-  const root = element('html'); root.classList = classList(env.introClass ? ['js', 'motion', 'ns-intro'] : ['js']);
+  const stage = element('stage', { '.proj': projects, '.work-count-n': [counter], '.work-count-bar i': [bar], '.work-exit': [element('exit')] });
+  // Classes motion-boot.js would have set: .ph-wait (openings held by CSS) and, on a first visit, .ns-intro.
+  const root = element('html'); root.classList = classList(['js'].concat(env.introClass || env.wait ? ['motion'] : [], env.introClass ? ['ns-intro'] : [], env.wait ? ['ph-wait'] : []));
   const parts = { '[data-compare]': [figure], '.intro': env.noPanel ? [] : [intro], '.hero-h .ln > span': many('line', 4), '.hero-photo': [photo],
     '[data-hero-fade]': many('fade', 2), '.hero-device': many('device', 1), '[data-work]': [stage], '.proj': projects };
   const doc = { documentElement: root, querySelector: s => (parts[s] || [])[0] || null, querySelectorAll: s => parts[s] || [] };
@@ -151,6 +153,8 @@ function run(env) {
     out.heroEnd = hero ? hero.duration() : null;
     out.heroPlayed = hero ? hero.played.slice() : null;
     out.heroOpacityOnly = hero ? hero.tweens.every(t => !('autoAlpha' in t.vars) && !('visibility' in t.vars)) : null;
+    out.openingKinds = [hero, introTl].filter(Boolean).flatMap(tl => tl.tweens.map(t => t.kind));
+    out.introWipeAt = introTl ? introTl.tweens.find(t => t.names[0] === 'intro').at : null;
     out.autoAlpha = log.varsSeen.some(v => v && ('autoAlpha' in v || 'visibility' in v));
     out.snap = log.varsSeen.some(v => v && v.scrollTrigger && 'snap' in v.scrollTrigger);
     out.pinned = stage.classList.contains('is-pinned');
@@ -169,7 +173,9 @@ function run(env) {
       out.pinDuration = pin.duration();
       out.counterSamples = [0, 0.2, 0.3, 0.6, 0.8, 1].map(progress => [progress, counterAt(progress)]);
       out.pinScrollUpdate = 'onUpdate' in pin.vars.scrollTrigger;
-      out.pinTweens = pin.tweens.map(t => ({ at: t.at, end: t.end, n: t.n, names: t.names, opacity: t.vars.opacity }));
+      const value = v => (typeof v === 'function' ? v(0, null) : v);
+      out.pinTweens = pin.tweens.map(t => ({ at: t.at, end: t.end, n: t.n, names: t.names, opacity: t.vars.opacity, fromOpacity: t.from && t.from.opacity,
+        yPercent: t.vars.yPercent, fromYPercent: t.from && t.from.yPercent, y: value(t.vars.y), fromY: t.from && value(t.from.y), clipPath: t.vars.clipPath }));
       out.pinLabels = pin.labels;
     }
     if (env.skipWith) {
@@ -188,13 +194,14 @@ function run(env) {
 }
 const desktop = { width: 1440, height: 900, fine: true, reduce: false };
 console.log(JSON.stringify({
-  plain: run({ ...desktop, introClass: true }),
-  first: run({ ...desktop, gsap: true, introClass: true, now: 120, skipWith: 'keydown' }),
-  pointer: run({ ...desktop, gsap: true, introClass: true, now: 120, skipWith: 'pointerdown' }),
-  late: run({ ...desktop, gsap: true, introClass: true, now: 1500 }),
-  noIntro: run({ ...desktop, gsap: true, introClass: false }),
+  plain: run({ ...desktop, introClass: true, wait: true }),
+  first: run({ ...desktop, gsap: true, introClass: true, wait: true, now: 120, skipWith: 'keydown' }),
+  pointer: run({ ...desktop, gsap: true, introClass: true, wait: true, now: 120, skipWith: 'pointerdown' }),
+  late: run({ ...desktop, gsap: true, introClass: true, wait: true, now: 1500 }),
+  noIntro: run({ ...desktop, gsap: true, introClass: false, wait: true }),
+  released: run({ ...desktop, gsap: true, introClass: false, wait: false }),
   reduced: run({ ...desktop, gsap: true, introClass: true, reduce: true }),
-  phone: run({ width: 390, height: 844, fine: false, reduce: false, gsap: true, introClass: false }),
+  phone: run({ width: 390, height: 844, fine: false, reduce: false, gsap: true, introClass: false, wait: true }),
 }));
 """
 
@@ -232,25 +239,48 @@ MOTION_SCRIPT = HARNESS + r"""
 const source = fs.readFileSync(process.argv[1], 'utf8');
 function run(env) {
   const list = element('list');
-  const rows = many('svc', 3).map(row => { row.parentNode = list; return row; });
+  const heads = many('head', 3);
+  const rows = many('svc', 3).map((row, at) => { row.parentNode = list; row.parts = { h3: [heads[at]] }; return row; });
+  // Scroll-reveal targets below the fold, plus one of each already on screen (which must be left alone).
+  const below = (name, count) => many(name, count).map(item => { item.getBoundingClientRect = () => ({ left: 0, top: 2000, width: 100, height: 100 }); return item; });
+  const root = element('html'); root.classList = classList(env.reduce ? ['js'] : ['js', 'motion', 'ph-wait']);
   const panel = element('panel');
   const photos = many('photo', 3);
   const button = element('go');
   const summary = element('summary'); summary.tagName = 'SUMMARY';
   const answer = element('answer'); answer.tagName = 'P';
   const details = element('details'); details.children = [summary, answer];
-  const parts = { '.svc': rows, '.svc-panel': [panel], '.svc-photo': photos, '.button.go': [button], details: [details], '[data-rise]': many('rise', 2), '[data-reveal]': many('reveal', 2),
-    '[data-parallax]': [element('frame', { img: many('pimg', 1) })], '[data-ph]': [element('head', { h1: many('h1', 1), '[data-ph-fade]': many('phf', 2), '[data-ph-media]': [element('phm', { img: many('phmimg', 1) })] })],
-    '[data-devices]': many('dev', 1) };
-  const doc = { querySelectorAll: s => parts[s] || [], querySelector: s => (parts[s] || [])[0] || null };
+  const parts = { '.svc': rows, '.svc-panel': [panel], '.svc-photo': photos, '.button.go': [button], details: [details],
+    '[data-rise]': below('rise', 2).concat(element('riseOnScreen')), '[data-reveal]': below('reveal', 2).concat(element('revealOnScreen')),
+    '[data-parallax]': [element('frame', { img: many('pimg', 1) })], '[data-ph]': [element('head', { 'h1 .ln > span': many('line', 2), '[data-ph-fade]': many('phf', 2), '[data-ph-media]': many('phm', 3) })],
+    '[data-devices]': below('dev', 1).concat(element('devOnScreen')) };
+  const doc = { documentElement: root, querySelectorAll: s => parts[s] || [], querySelector: s => (parts[s] || [])[0] || null };
   const { win } = makeWindow(env);
   let log = null;
   if (env.gsap) { const stub = makeGsap(env); win.gsap = stub.gsap; win.ScrollTrigger = stub.ScrollTrigger; log = stub.log; }
   vm.runInNewContext(source, { window: win, document: doc });
   const shown = () => photos.map(p => p.classList.contains('is-active'));
-  const out = { live: panel.classList.contains('is-live'), active: rows.map(r => r.classList.contains('is-active')), photos: shown() };
+  const out = { live: panel.classList.contains('is-live'), wipe: panel.classList.contains('is-wipe'), wait: root.classList.contains('ph-wait'),
+    active: rows.map(r => r.classList.contains('is-active')), photos: shown() };
+  const wipes = () => (log ? log.tweens.filter(t => t.from && t.from.clipPath === 'inset(100% 0 0 0)' && t.names[0].startsWith('photo')).map(t => t.names[0]) : []);
+  const dims = () => (log ? log.tweens.filter(t => t.kind === 'to' && t.names[0] === 'head0').map(t => [0, 1, 2].map(at => t.vars.opacity(at))) : []);
+  if (log) {
+    const opening = log.timelines.flatMap(tl => tl.tweens);
+    out.openingKinds = opening.map(t => t.kind);
+    out.openingNames = opening.map(t => t.names[0]);
+    out.lineFrom = (opening.find(t => t.names[0] === 'line0') || {}).from || null;
+    out.mediaStagger = (opening.find(t => t.names[0] === 'phm0') || {}).vars?.stagger || 0;
+    out.setNames = log.setNames.slice();
+    out.revealNames = log.tweens.filter(t => t.kind === 'from').flatMap(t => t.names);
+    out.creates = log.creates.length;
+    out.initialDim = log.sets.filter(v => typeof v.opacity === 'function').map(v => [0, 1, 2].map(at => v.opacity(at)));
+  }
   rows[2].listeners.mouseenter[0](); out.afterHover = rows.map(r => r.classList.contains('is-active')); out.photosAfterHover = shown();
   rows[1].listeners.focusin[0](); out.afterFocus = rows.map(r => r.classList.contains('is-active')); out.photosAfterFocus = shown();
+  out.prevAfterFocus = photos.map(p => p.classList.contains('is-prev'));
+  out.wipes = wipes();
+  out.dims = dims();
+  if (log && log.creates.length) { log.creates[2].onToggle({ isActive: true }); out.afterScroll = rows.map(r => r.classList.contains('is-active')); }
   if (log) {
     out.queries = log.queries;
     out.batches = log.batches;
@@ -486,6 +516,7 @@ class DemoScriptTests(unittest.TestCase):
         self.assertEqual(plain['click'], {'pos': '100%', 'before': 'false', 'after': 'true', 'text': 'After only', 'value': '100'})
         # Without GSAP the intro ends at once and is remembered for the session; no skip listeners are left behind.
         self.assertNotIn('ns-intro', plain['classes'])
+        self.assertNotIn('ph-wait', plain['classes'])  # Task 23: without GSAP the CSS hold on the hero is released at once
         self.assertEqual(plain['flag'], '1')
         self.assertEqual(plain['skipListeners'], {'keydown': [], 'pointerdown': [], 'wheel': [], 'touchstart': []})
         # With GSAP the buttons glide via a tween but end in the same state.
@@ -514,7 +545,10 @@ class DemoScriptTests(unittest.TestCase):
         r = self.node_json(HOME_SCRIPT, HOME)
         first = r['first']
         self.assertIsNotNone(first['introEnd'])
-        self.assertLessEqual(first['introEnd'], 1.8)
+        # Night Shift Task 23: a shorter intro, so the headline reads by about 1.7 s.
+        self.assertLessEqual(first['introEnd'], 1.4)
+        self.assertLessEqual(first['introWipeAt'], 0.8)
+        self.assertLessEqual(first['heroAt'][0], 1.0)
         self.assertLessEqual(first['heroEnd'], 1.2)
         self.assertTrue(first['heroOpacityOnly'])
         # The hero starts while the panel is still wiping away, before the intro ends.
@@ -530,6 +564,20 @@ class DemoScriptTests(unittest.TestCase):
                 self.assertNotIn('ns-intro', r[name]['classes'])
         # Scripts that arrive late skip the intro instead of starting one the 2.5 s failsafe would cut off.
         self.assertEqual(r['late']['skipListeners'], {'keydown': [], 'pointerdown': [], 'wheel': [], 'touchstart': []})
+
+    def test_home_hero_takes_over_the_css_hold_without_a_flash(self):
+        # Night Shift Task 23: the hero and intro use fromTo (start states applied at once, matching the CSS held under
+        # .ph-wait), then home.js removes .ph-wait. If the 2.5 s failsafe already removed it, the hero is not hidden again.
+        r = self.node_json(HOME_SCRIPT, HOME)
+        for name in ('first', 'late', 'noIntro', 'phone'):
+            with self.subTest(case=name):
+                self.assertNotIn('ph-wait', r[name]['classes'])
+                self.assertTrue(r[name]['openingKinds'])
+                self.assertNotIn('from', r[name]['openingKinds'])
+        released = r['released']
+        self.assertIsNone(released['heroEnd'])
+        self.assertIsNone(released['heroPlayed'])
+        self.assertNotIn('ph-wait', released['classes'])
 
     def test_home_intro_is_skipped_by_any_input_without_swallowing_it(self):
         r = self.node_json(HOME_SCRIPT, HOME)
@@ -551,7 +599,7 @@ class DemoScriptTests(unittest.TestCase):
         r = self.node_json(HOME_SCRIPT, HOME)
         first = r['first']
         self.assertTrue(first['pinned'])
-        self.assertEqual(first['pinEnd'], '+=' + str(900 * 2))  # two viewport heights at most
+        self.assertEqual(first['pinEnd'], '+=' + str(int(900 * 2.5)))  # two and a half viewport heights at most (Task 23)
         self.assertIsInstance(first['pinScrub'], (int, float))
         self.assertEqual(first['focusListeners'], 1)
         # Focus inside the third project scrolls to where that project is fully shown, within the pinned range.
@@ -567,15 +615,21 @@ class DemoScriptTests(unittest.TestCase):
 
     def test_home_projects_swap_text_quickly_and_never_show_two_device_sets(self):
         # Night Shift Task 17 (design critique): one project's text is always readable and the devices hand over back to back.
+        # Task 23: no opacity at all (no grey ghosts): copy moves through its masks, devices travel a full viewport.
         r = self.node_json(HOME_SCRIPT, HOME)
         tweens = r['first']['pinTweens']
-        text = [t for t in tweens if t['n'] == 4]  # each project's four copy elements
+        text = [t for t in tweens if t['n'] == 3]  # each project's three copy masks
         devices = [t for t in tweens if (t['names'][0] or '').startswith('devices')]
         self.assertEqual(len(text), 4)
         self.assertEqual(len(devices), 4)
-        for name, group in (('text', text), ('devices', devices)):
-            with self.subTest(group=name):
-                self.assertEqual([t['opacity'] for t in group], [0, 1, 0, 1])  # outgoing, then incoming, per transition
+        for tween in tweens:
+            with self.subTest(tween=tween['names'][0], at=tween['at']):
+                self.assertIsNone(tween.get('opacity'))
+                self.assertIsNone(tween.get('fromOpacity'))
+        # Outgoing copy leaves up out of its mask; incoming copy rises in from below it.
+        self.assertEqual([(t.get('fromYPercent'), t.get('yPercent')) for t in text], [(None, -110), (110, 0), (None, -110), (110, 0)])
+        # Outgoing devices leave a full viewport up; incoming ones arrive from a full viewport below (always off-frame).
+        self.assertEqual([(t.get('fromY'), t.get('y')) for t in devices], [(None, -900), (900, 0), (None, -900), (900, 0)])
         labels = r['first']['pinLabels']
         for index in (1, 2):
             text_out, text_in = text[2 * index - 2:2 * index]
@@ -597,7 +651,7 @@ class DemoScriptTests(unittest.TestCase):
         r = self.node_json(HOME_SCRIPT, HOME)
         first = r['first']
         self.assertFalse(first['pinScrollUpdate'])  # scroll progress runs ahead of the scrubbed timeline, so it is not used
-        text = [t for t in first['pinTweens'] if t['n'] == 4]
+        text = [t for t in first['pinTweens'] if t['n'] == 3]
         swaps = [(text[i]['end'] + text[i + 1]['at']) / 2 for i in (0, 2)]
         samples = first['counterSamples']
         self.assertEqual([p for p, _ in samples], [0, 0.2, 0.3, 0.6, 0.8, 1])
@@ -614,6 +668,17 @@ class DemoScriptTests(unittest.TestCase):
                 self.assertGreaterEqual(swap, text_in['at'] - 1e-9)  # the new title has started to appear
                 self.assertLessEqual(swap, text_out['end'] + 1e-9)  # and the old one is on its way out
 
+    def test_home_pin_release_layer_rises_after_the_last_project(self):
+        # Night Shift Task 23: a decorative bone layer rises over the lower stage after the last project's label, so focus
+        # never lands under it and the release meets the bone section that follows.
+        r = self.node_json(HOME_SCRIPT, HOME)
+        first = r['first']
+        exits = [t for t in first['pinTweens'] if t['names'] == ['exit']]
+        self.assertEqual(len(exits), 1)
+        self.assertGreaterEqual(exits[0]['at'], first['pinLabels']['p2'])
+        self.assertTrue(exits[0].get('clipPath', '').startswith('inset('))
+        self.assertAlmostEqual(exits[0]['end'], first['pinDuration'])
+
     def test_motion_boot_only_starts_the_intro_on_a_first_plain_visit(self):
         r = self.node_json(BOOT_SCRIPT, BOOT)
         for name, result in r.items():
@@ -621,17 +686,24 @@ class DemoScriptTests(unittest.TestCase):
                 self.assertIsNone(result['error'])
                 self.assertIn('js', result['classes'])
         first = r['first']
-        self.assertEqual(first['classes'], ['js', 'motion', 'ns-intro'])
-        self.assertEqual(len(first['timers']), 1)
-        self.assertLessEqual(first['timers'][0], 2500)
-        self.assertEqual(first['afterTimers'], ['js', 'motion'])  # the failsafe removes the panel
+        self.assertEqual(first['classes'], ['js', 'motion', 'ns-intro', 'ph-wait'])
+        self.assertEqual(len(first['timers']), 2)
+        for delay in first['timers']:
+            self.assertLessEqual(delay, 2500)
+        self.assertEqual(first['afterTimers'], ['js', 'motion'])  # the failsafes remove the panel and the opening hold
         self.assertEqual(first['flag'], '1')
-        self.assertEqual(r['reduced']['classes'], ['js'])
-        self.assertEqual(r['noMatchMedia']['classes'], ['js'])
+        # Reduced motion or no matchMedia: nothing is held hidden and no timer is needed.
+        for name in ('reduced', 'noMatchMedia'):
+            with self.subTest(case=name):
+                self.assertEqual(r[name]['classes'], ['js'])
+                self.assertEqual(r[name]['timers'], [])
+        # No intro: the opening hold is still set, with its own failsafe.
         for name in ('hash', 'seen', 'throws', 'inner'):
             with self.subTest(case=name):
-                self.assertEqual(r[name]['classes'], ['js', 'motion'])
-                self.assertEqual(r[name]['timers'], [])
+                self.assertEqual(r[name]['classes'], ['js', 'motion', 'ph-wait'])
+                self.assertEqual(len(r[name]['timers']), 1)
+                self.assertLessEqual(r[name]['timers'][0], 2500)
+                self.assertEqual(r[name]['afterTimers'], ['js', 'motion'])
         for name in ('reduced', 'hash', 'inner'):
             with self.subTest(case=name):
                 self.assertIsNone(r[name]['flag'])
@@ -666,6 +738,51 @@ class DemoScriptTests(unittest.TestCase):
         self.assertEqual(r['reduced']['pull'], [])
         self.assertEqual(r['reduced']['batches'], 0)
         self.assertEqual(r['reduced']['faq']['tweens'], 0)
+
+    def test_motion_js_openings_take_over_the_css_hold_without_a_flash(self):
+        # Night Shift Task 23: inner-page openings use fromTo (headline lines rise via yPercent through their masks, head
+        # photos un-mask in turn), then .ph-wait is removed, also when GSAP is missing. Reveals skip what is already on screen.
+        r = self.node_json(MOTION_SCRIPT, MOTION)
+        for name in ('plain', 'desktop', 'touch', 'reduced'):
+            with self.subTest(case=name):
+                self.assertFalse(r[name]['wait'])
+        for name in ('desktop', 'touch'):
+            with self.subTest(case=name):
+                result = r[name]
+                self.assertTrue(result['openingKinds'])
+                self.assertEqual(set(result['openingKinds']), {'fromTo'})
+                self.assertIn('line0', result['openingNames'])
+                self.assertEqual(result['lineFrom'], {'yPercent': 108})
+                self.assertGreater(result['mediaStagger'], 0)
+                hidden = result['setNames'] + result['revealNames']
+                for name_on_screen in ('riseOnScreen', 'revealOnScreen', 'devOnScreen'):
+                    self.assertNotIn(name_on_screen, hidden)
+                for name_below in ('rise0', 'reveal0', 'dev0'):
+                    self.assertIn(name_below, hidden)
+        self.assertEqual(r['reduced']['openingKinds'], [])
+
+    def test_motion_js_services_rows_wipe_dim_and_follow_scroll(self):
+        # Night Shift Task 23: with GSAP motion the photo swap is a clip-path wipe (the outgoing photo waits beneath as
+        # .is-prev), inactive headings dim with opacity, and on large screens each row activates as it crosses mid-viewport.
+        r = self.node_json(MOTION_SCRIPT, MOTION)
+        desktop = r['desktop']
+        self.assertTrue(desktop['wipe'])
+        self.assertEqual(desktop['wipes'], ['photo2', 'photo1'])  # hover row 3, then focus row 2
+        self.assertEqual(desktop['prevAfterFocus'], [False, False, True])
+        dim = desktop['initialDim'][0][1]
+        self.assertLess(dim, 1)
+        self.assertEqual(desktop['initialDim'], [[1, dim, dim]])
+        self.assertEqual(desktop['dims'][-1], [dim, 1, dim])
+        self.assertEqual(desktop['creates'], 3)
+        self.assertEqual(desktop['afterScroll'], [False, False, True])
+        # Touch: hover and focus still wipe, but no scroll activation. Reduced motion or no GSAP: CSS swap only, no dimming.
+        self.assertEqual(r['touch']['creates'], 0)
+        self.assertEqual(r['touch']['wipes'], ['photo2', 'photo1'])
+        for name in ('plain', 'reduced'):
+            with self.subTest(case=name):
+                self.assertFalse(r[name]['wipe'])
+                self.assertEqual(r[name]['wipes'], [])
+                self.assertEqual(r[name]['dims'], [])
 
     def test_demo_js_makes_no_network_requests(self):
         js = DEMO.read_text(encoding='utf-8')

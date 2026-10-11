@@ -655,7 +655,7 @@ class DesignSystemTests(unittest.TestCase):
         self.assertEqual(js.count('pin:'), 1)
         viewports = re.search(r'const PIN_VIEWPORTS = (\d+(?:\.\d+)?);', js)
         self.assertIsNotNone(viewports)
-        self.assertLessEqual(float(viewports.group(1)), 2)
+        self.assertLessEqual(float(viewports.group(1)), 2.5)  # Night Shift Task 23 raised the cap from 2 to 2.5
         self.assertIn('window.innerHeight * PIN_VIEWPORTS', js)
         self.assertIn("const PIN_QUERY = MOTION + ' and (min-width: 1081px) and (min-height: 620px)';", js)
         self.assertIn('mm.add(PIN_QUERY,', js)
@@ -782,11 +782,24 @@ class DesignSystemTests(unittest.TestCase):
         # Content stays visible without JS, if GSAP fails, and with reduced motion: CSS never hides it.
         for name, css in (('site.css', self.css), ('home.css', self.home_css), ('pages.css', self.pages_css), ('kit.css', self.kit_css)):
             with self.subTest(css=name):
-                unguarded, _ = without_blocks(css, MOTION_GUARD)
+                unguarded, guarded = without_blocks(css, MOTION_GUARD)
+                guarded = re.sub(r'/\*.*?\*/', '', ''.join(guarded), flags=re.S)
                 for hook in ('data-rise', 'data-hero-fade') + MOTION_HOOKS:
                     self.assertNotIn(hook, css)
                 self.assertNotRegex(unguarded, r'opacity:0(?![.\d])')
                 self.assertNotIn('visibility:hidden', unguarded)
+                # Night Shift Task 23: the one exception is the page openings' start states, guarded and only while
+                # motion-boot.js holds .ph-wait. Any guarded rule that hides content (opacity:0, an off-mask transform or a
+                # closed clip-path) is either such a .ph-wait rule or the existing Services photo crossfade.
+                self.assertNotIn('.ph-wait', re.sub(r'/\*.*?\*/', '', unguarded, flags=re.S))
+                for selectors, body in re.findall(r'([^{}]+)\{([^{}]*)\}', guarded):
+                    hides = re.search(r'opacity:0(?![.\d])|translateY\(1\d\d%\)|clip-path:inset\([^)]*100%', body)
+                    if hides:
+                        with self.subTest(css=name, selectors=selectors.strip()[:60]):
+                            # Top-level selectors only: commas inside :is(...) do not split a selector.
+                            parts = [part.strip() for part in re.sub(r'\([^()]*\)', '()', selectors).split(',')]
+                            self.assertTrue(all(part.startswith('.ph-wait ') for part in parts)
+                                            or parts == ['.svc-panel.is-live .svc-photo'], selectors)
 
     def test_layout_basics(self):
         for selector, css in (('.button{', self.css), ('.menu{', self.css), ('.compare-button{', self.home_css)):
@@ -1515,7 +1528,10 @@ class AboutPageTests(unittest.TestCase):
         self.assertEqual(scripts, ['/assets/motion-boot.js', '/assets/site.js', '/assets/vendor/gsap/gsap.min.js',
                                    '/assets/vendor/gsap/ScrollTrigger.min.js', '/assets/motion.js'])
         self.assertNotIn('data-intro', self.html)
-        self.assertNotIn(' data-ph', self.main)  # no page-opening animation: the headline is visible from first paint
+        # Night Shift Task 23: About opens like Work, Services and Pricing (headline line masks, staggered photo reveal).
+        self.assertEqual(self.main.count(' data-ph '), 1)
+        self.assertEqual(self.main.count(' data-ph-media>'), 3)
+        self.assertNotIn('data-ph-fade', self.main)  # the intro paragraph is never held back
         self.assertIn('data-rise', self.main)
         for hook in re.findall(r'data-(?:rise|reveal|parallax)(=?)', self.main):
             self.assertEqual(hook, '')
@@ -1975,7 +1991,7 @@ class SecondCritiqueFixTests(unittest.TestCase):
         parser = ImageCollector()
         parser.feed(panels[0])
         names = [re.search(r'/images/([a-z-]+)-(?:800|1600)\.jpg$', attrs['src']).group(1) for attrs, _ in parser.images]
-        self.assertEqual(names, ['detail-wax', 'detail-dash', 'garden-wall'])  # New website, Redesign, Care plan
+        self.assertEqual(names, ['detail-wax', 'detail-dash', 'garden-deck'])  # New website, Redesign, Care plan (Task 23)
         self.assertEqual(panels[0].count('<div class="svc-photo"><picture><source type="image/avif" '), 3)
         for attrs, hidden in parser.images:
             with self.subTest(src=attrs['src']):
@@ -2066,3 +2082,147 @@ class SecondCritiqueFixTests(unittest.TestCase):
         self.assertNotIn('barber-interior', services)
         self.assertIn('.ab-closing .cta-band-media img{object-position:50% 70%}', self.pages_css)
         self.assertNotIn('detail-headlight', (OUT / 'about/index.html').read_text())
+
+
+class MotionQualityTests(unittest.TestCase):
+    """Night Shift Task 23 (docs/NIGHT_SHIFT_PLAN.md): no flash of content before page openings, line-mask openings on the
+    inner motion pages, pinned projects without opacity ghosting, scroll-driven "What we do" rows and a pin release layer."""
+    INNER = {'work/index.html': 'Three made-up businesses. Built as if they were real.',
+             'services/index.html': 'Built new. Rebuilt properly. Looked after.',
+             'pricing/index.html': 'Fixed quote after a free consultation.',
+             'about/index.html': 'A small Sydney studio for local service businesses.'}
+
+    @classmethod
+    def setUpClass(cls):
+        build()
+        cls.css = (OUT / 'assets/site.css').read_text()
+        cls.home_css = (OUT / 'assets/home.css').read_text()
+        cls.pages_css = (OUT / 'assets/pages.css').read_text()
+        cls.motion = (OUT / 'assets/motion.js').read_text()
+        cls.home_js = (OUT / 'assets/home.js').read_text()
+        cls.boot = (OUT / 'assets/motion-boot.js').read_text()
+        cls.home = main_of((OUT / 'index.html').read_text())
+
+    def guarded(self, css):
+        return re.sub(r'/\*.*?\*/', '', ''.join(without_blocks(css, MOTION_GUARD)[1]), flags=re.S)
+
+    def test_boot_holds_openings_only_with_motion_and_always_lets_go(self):
+        self.assertLess(self.boot.index("c.add('motion')"), self.boot.index("c.add('ph-wait')"))
+        self.assertLess(self.boot.index("matchMedia('(prefers-reduced-motion: reduce)').matches) return;"), self.boot.index("c.add('ph-wait')"))
+        delay = re.search(r"setTimeout\(function \(\) \{ c\.remove\('ph-wait'\); \}, (\d+)\)", self.boot)
+        self.assertIsNotNone(delay)
+        self.assertLessEqual(int(delay.group(1)), 2500)
+        # The hold is set before the intro checks, so pages without an intro get it too.
+        self.assertLess(self.boot.index("c.add('ph-wait')"), self.boot.index("hasAttribute('data-intro')"))
+        # Both scripts let go: motion.js also when GSAP is missing, home.js once its hero states are applied.
+        self.assertIn("const release = () => root.classList.remove('ph-wait');", self.motion)
+        self.assertIn('if (!gsap || !ScrollTrigger) { release(); return; }', self.motion)
+        self.assertIn("root.classList.remove('ph-wait');", self.home_js)
+        # home.js also releases the hold when GSAP is missing (motion.js leaves the homepage hero to home.js).
+        no_gsap = self.home_js.index('if (!gsap || !ScrollTrigger) { endIntro(); return; }')
+        self.assertIn("if (!gsap || !ScrollTrigger) root.classList.remove('ph-wait');", self.home_js[no_gsap - 120:no_gsap])
+
+    def test_inner_headlines_rise_through_line_masks_with_unchanged_text(self):
+        for route, text in self.INNER.items():
+            with self.subTest(route=route):
+                main = main_of((OUT / route).read_text())
+                h1 = re.search(r'<h1 [^>]*>(.*?)</h1>', main, re.S).group(1)
+                # Every line is a mask holding one span; nothing else sits in the heading.
+                self.assertRegex(h1, r'^<span class="ln"><span>[^<]+</span></span>(?: <span class="ln"><span>[^<]+</span></span>)+$')
+                self.assertEqual(re.sub(r'\s+', ' ', re.sub(r'<[^>]+>', '', h1)).strip(), text)
+                head = re.search(r'<section [^>]*data-ph [^>]*>.*?</section>', main, re.S)
+                self.assertIsNotNone(head)
+                self.assertIn('<h1', head.group(0))
+        for route in STATIC_ROUTES:
+            with self.subTest(route=route):
+                self.assertNotIn('class="ln"', (OUT / route).read_text())
+        self.assertIn('.ln{display:block;overflow:hidden;', self.pages_css)
+        # The opening animates the line spans' yPercent, never the heading's opacity.
+        opening = self.motion.split("$$('[data-ph]')", 1)[1].split('const rises', 1)[0]
+        self.assertIn("$$('h1 .ln > span', head)", opening)
+        self.assertIn('{ yPercent: 108 }', opening)
+        self.assertNotIn('.from(', opening)
+        self.assertNotIn("$$('h1', head)", opening)
+
+    def test_css_hold_matches_the_opening_elements(self):
+        guarded = self.guarded(self.pages_css)
+        held = {'.ph-wait :is(.wk-hero,.sv-hero,.pr-hero,.ab-hero) .ln>span': 'transform:translateY(108%)',
+                '.ph-wait :is(.wk-hero-sub,.sv-hero .pg-sub,.sv-chapters,.pr-hero .pg-sub,.pr-hero .btn-row)': 'opacity:0;transform:translateY(18px)',
+                '.ph-wait :is(.sv-hero-media,.ab-photo)': 'clip-path:inset(0 0 0 100%)'}
+        for selector, body in held.items():
+            with self.subTest(selector=selector):
+                self.assertIn(selector + '{' + body + '}', guarded)
+        # Every element the opening animates is covered by those selectors (and nothing else is held).
+        fade_classes = {'wk-hero-sub', 'pg-sub', 'sv-chapters', 'btn-row'}
+        for route in self.INNER:
+            main = main_of((OUT / route).read_text())
+            head = re.search(r'<section class="([a-z-]+)" data-ph [^>]*>(.*?)</section>', main, re.S)
+            with self.subTest(route=route):
+                self.assertIn(head.group(1), ('wk-hero', 'sv-hero', 'pr-hero', 'ab-hero'))
+                for classes in re.findall(r'class="([^"]+)" data-ph-fade', head.group(2)):
+                    self.assertTrue(set(classes.split()) & fade_classes, classes)
+                for classes in re.findall(r'class="([^"]+)" data-ph-media', head.group(2)):
+                    self.assertIn(classes, ('sv-hero-media', 'ab-photo'))
+        # The homepage hero and intro are held the same way and opened with fromTo, never from.
+        home = self.guarded(self.home_css)
+        for rule in ('.ph-wait .hero-h .ln>span{transform:translateY(108%)}', '.ph-wait .hero-photo{clip-path:inset(0 0 0 100%)}',
+                     '.ph-wait :is(.hero-sub,.hero .actions){opacity:0;transform:translateY(18px)}',
+                     '.ph-wait .hero-device{opacity:0;transform:translateY(70px)}', '.ph-wait .intro-mark path{opacity:0}',
+                     '.ph-wait .intro-word>span{transform:translateY(110%)}'):
+            with self.subTest(rule=rule):
+                self.assertIn(rule, home)
+        hero = self.home_js.split('const heroTimeline', 1)[1].split("mm.add('(prefers-reduced-motion: reduce)'", 1)[0]
+        self.assertNotIn('.from(', hero)
+        self.assertIn('class="hero-sub" data-hero-fade', self.home)
+        self.assertIn('class="actions" data-hero-fade', self.home)
+
+    def test_pinned_projects_move_through_masks_without_opacity(self):
+        pin = self.home_js.split('mm.add(PIN_QUERY,', 1)[1].split('mm.add(STACK_QUERY,', 1)[0]
+        self.assertNotIn('opacity', pin)
+        self.assertIn("$$('.proj-mask > *', current)", pin)
+        self.assertIn('const away = () => window.innerHeight;', pin)
+        self.assertEqual(self.home_js.count('pin: true'), 1)
+        self.assertIn("stage.addEventListener('focusin', onFocus)", pin)
+        self.assertIn('if (counter) counter.textContent = String(index + 1);', pin)
+        # The masks are in the markup: three per project (title and label together, description, points).
+        articles = re.findall(r'<article class="proj [^"]*"[^>]*>(.*?)</article>', self.home, re.S)
+        self.assertEqual(len(articles), 3)
+        for article in articles:
+            copy = re.search(r'<div class="proj-copy">(.*?)\n</div>\n<div class="proj-devices', article, re.S).group(1)
+            with self.subTest(article=article[:50]):
+                self.assertEqual(copy.count('<div class="proj-mask">'), 3)
+                self.assertRegex(copy, r'^\s*<div class="proj-mask"><div>\s*<h3 [^>]*>[^<]+</h3>\s*<p class="proj-label">')
+        self.assertIn('.work-stage.is-pinned .proj-mask{overflow:hidden}', self.home_css)
+        self.assertNotIn('.proj-mask{overflow', base_rules(self.home_css).replace('.work-stage.is-pinned .proj-mask{overflow', ''))
+
+    def test_pin_release_layer_is_decorative_and_never_catches_clicks(self):
+        stage = re.search(r'<div class="work-stage" data-work>(.*?)<div class="work-count"', self.home, re.S).group(1)
+        self.assertTrue(stage.rstrip().endswith('<div class="work-exit" aria-hidden="true"></div>'))
+        self.assertIn('.work-exit{display:none}', self.home_css)
+        rule = rules_for(self.home_css, '.work-stage.is-pinned .work-exit')[0]
+        for needle in ('position:absolute', 'pointer-events:none', 'background:var(--bone)', 'clip-path:inset(100% 0 0 0)'):
+            self.assertIn(needle, rule)
+        # The layer starts after the last project's label, so focus scrolls never land under it.
+        pin = self.home_js.split('mm.add(PIN_QUERY,', 1)[1]
+        self.assertLess(pin.index(".addLabel('p' + index"), pin.index('tl.fromTo(exit'))
+
+    def test_services_rows_follow_scroll_wipe_and_dim_accessibly(self):
+        large = self.motion.split("mm.add(MOTION + ' and (min-width: 1081px)'", 1)[1].split('mm.add(', 1)[0]
+        self.assertIn("ScrollTrigger.create({ trigger: row, start: 'top center', end: 'bottom center'", large)
+        self.assertIn("row.addEventListener('mouseenter'", self.motion)
+        self.assertIn("row.addEventListener('focusin'", self.motion)
+        self.assertIn("{ clipPath: 'inset(100% 0 0 0)' }, { clipPath: 'inset(0% 0 0 0)'", self.motion)
+        guarded = self.guarded(self.home_css)
+        for rule in ('.svc-panel.is-wipe .svc-photo{opacity:1}', '.svc-panel.is-wipe .svc-photo.is-prev{z-index:1}',
+                     '.svc-panel.is-wipe .svc-photo.is-active{z-index:2}'):
+            self.assertIn(rule, guarded)
+        self.assertNotIn('is-wipe', re.sub(r'/\*.*?\*/', '', base_rules(self.home_css), flags=re.S))
+        # Inactive headings: bone at DIM opacity over the ink page must still clear 3:1 (large bold text).
+        dim = float(re.search(r'const DIM = ([\d.]+);', self.motion).group(1))
+        tokens = dict(re.findall(r'(--[\w-]+):([^;]+)', re.search(r':root\{(.*?)\}', self.css, re.S).group(1)))
+        bone, ink = tokens['--bone'].strip(), tokens['--ink'].strip()
+        self.assertIn('body{margin:0;background:var(--ink);color:var(--bone);', self.css)
+        mix = '#' + ''.join(f'{round(dim * int(bone[i:i + 2], 16) + (1 - dim) * int(ink[i:i + 2], 16)):02X}' for i in (1, 3, 5))
+        self.assertGreaterEqual(contrast(mix, ink), 3)
+        self.assertLess(dim, 1)
+        self.assertIn('<div class="svc-panel" aria-hidden="true">', self.home)

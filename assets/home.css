@@ -66,8 +66,8 @@
 .svc h3{margin:0 0 12px;font-weight:760;font-stretch:88%;font-size:clamp(2.1rem,5.4vw,5rem);line-height:.95;letter-spacing:-.022em}
 .svc p{margin:0;color:var(--stone);max-width:46ch}
 /* One decorative photo panel beside the rows (aria-hidden). The photos are stacked; the one on top shows. Without JS that is the
-   first; motion.js marks the photo matching the hovered or focused row .is-active. The swap itself needs no motion: the opacity
-   crossfade is added only inside the reduced-motion guard at the end of this file. */
+   first; motion.js marks the active row's photo .is-active. The swap needs no motion: with GSAP it is a clip-path wipe (.is-wipe),
+   without it an opacity crossfade, both only inside the reduced-motion guard at the end of this file. */
 .svc-panel{grid-column:8/-1;grid-row:1;position:sticky;top:12vh;aspect-ratio:4/5;overflow:hidden;background:var(--ink-2)}
 .svc-photo{position:absolute;inset:0}
 .svc-photo img{width:100%;height:100%;object-fit:cover}
@@ -191,6 +191,11 @@
 .work-head .skip-proj{margin-left:24px}
 .work-stage{position:relative}
 .work-count{display:none}
+.work-exit{display:none}
+/* Pinned: each copy block is a mask its text moves through (never a fade), and a decorative bone layer rises over the last
+   project as the pin ends, so the release meets the bone section after it. home.js drives both. */
+.work-stage.is-pinned .proj-mask{overflow:hidden}
+.work-stage.is-pinned .work-exit{position:absolute;inset:0;z-index:5;display:block;background:var(--bone);pointer-events:none;clip-path:inset(100% 0 0 0)}
 .work-stage.is-pinned{height:100svh;overflow:hidden}
 .work-stage.is-pinned .proj{position:absolute;inset:0;min-height:0;padding-block:100px 56px;border:0}
 .work-stage.is-pinned .proj:nth-of-type(2){z-index:2}
@@ -266,11 +271,23 @@
 .compare-stage{aspect-ratio:4/5}
 }
 
-/* Motion: only for people who have not asked for reduced motion. Transform and opacity only.
+/* Motion: only for people who have not asked for reduced motion. Transitions on transform and opacity only.
    The intro panel shows only on a first visit per session; clicks pass through it. */
 @media(prefers-reduced-motion:no-preference){
 .ns-intro .intro{position:fixed;inset:0;z-index:120;display:grid;place-items:center;background:var(--ink);color:var(--bone)}
 /* Services panel crossfade: the incoming photo fades in on top; the outgoing one waits under it, then fades out. */
 .svc-panel.is-live .svc-photo{opacity:0;transition:opacity 500ms var(--ease) 500ms}
 .svc-panel.is-live .svc-photo.is-active{opacity:1;transition-delay:0s}
+/* With GSAP (.is-wipe): no crossfade; the incoming photo wipes up over the outgoing one, which waits beneath it. */
+.svc-panel.is-wipe .svc-photo{opacity:1}
+.svc-panel.is-wipe .svc-photo.is-prev{z-index:1}
+.svc-panel.is-wipe .svc-photo.is-active{z-index:2}
+/* Hero start states, only while motion-boot.js holds .ph-wait: home.js takes them over with GSAP and removes the class (a
+   2.5 s timer removes it whatever happens), so the hero never paints, vanishes and replays on a repeat visit. */
+.ph-wait .hero-h .ln>span{transform:translateY(108%)}
+.ph-wait .hero-photo{clip-path:inset(0 0 0 100%)}
+.ph-wait :is(.hero-sub,.hero .actions){opacity:0;transform:translateY(18px)}
+.ph-wait .hero-device{opacity:0;transform:translateY(70px)}
+.ph-wait .intro-mark path{opacity:0}
+.ph-wait .intro-word>span{transform:translateY(110%)}
 }

@@ -1,11 +1,15 @@
 /* Cendavo inner pages (work, services, pricing, about, contact, demo, and the 404 page). Loaded after site.css on every page except the homepage.
-   Nothing is hidden by CSS. On Work, Services, Pricing and About, motion.js adds GSAP reveals through data attributes in the
-   page markup, setting initial states from JS only; Contact and Demo stay static. The only CSS movement
+   Nothing is hidden by CSS except the page openings' start states, and only while motion-boot.js holds .ph-wait (see the
+   guarded block at the end). On Work, Services, Pricing and About, motion.js adds GSAP reveals through data attributes in the
+   page markup; Contact and Demo stay static. The only CSS movement
    is the hover/focus feedback in the guarded block at the end. Tokens, buttons, form fields, FAQ and focus rings come from site.css;
    the device and quote mockups on Work and Pricing come from kit.css. */
 
 /* Shared */
 .pg-h{font-size:clamp(2.75rem,7vw,7rem);font-weight:800;font-stretch:84%;line-height:.93;letter-spacing:-.025em;max-width:16ch}
+/* Headline lines (Work, Services, Pricing, About): each line is a mask its text rises through in the opening. */
+.ln{display:block;overflow:hidden;padding-bottom:.06em;margin-bottom:-.06em}
+.ln>span{display:block}
 .pg-sub{margin-top:var(--space-6);max-width:40ch;color:var(--stone);font-size:clamp(1.0625rem,.5vw + .95rem,1.25rem)}
 .bone .pg-sub{color:var(--ink-soft)}
 .pg-sec{padding-block:var(--section-lg)}
@@ -361,8 +365,13 @@
 .scale span:last-child{text-align:right}
 }
 
-/* Motion: hover and focus feedback only, transform only, for people who have not asked for reduced motion. */
+/* Motion, for people who have not asked for reduced motion: hover and focus feedback (transform only), and the page openings'
+   start states. Those apply only while motion-boot.js holds .ph-wait on <html> (removed by motion.js once GSAP has taken over
+   the same states, and by a 2.5 s timer whatever happens), so an opening never paints, vanishes and replays. */
 @media(prefers-reduced-motion:no-preference){
+.ph-wait :is(.wk-hero,.sv-hero,.pr-hero,.ab-hero) .ln>span{transform:translateY(108%)}
+.ph-wait :is(.wk-hero-sub,.sv-hero .pg-sub,.sv-chapters,.pr-hero .pg-sub,.pr-hero .btn-row){opacity:0;transform:translateY(18px)}
+.ph-wait :is(.sv-hero-media,.ab-photo){clip-path:inset(0 0 0 100%)}
 .wk-tile-img img{transition:transform 900ms var(--ease)}
 .wk-tile a:hover .wk-tile-img img,.wk-tile a:focus-visible .wk-tile-img img{transform:scale(1)}
 }

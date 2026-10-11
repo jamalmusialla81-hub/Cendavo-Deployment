@@ -1,17 +1,16 @@
-// Homepage behaviour: before/after comparison, first-visit intro, hero choreography and the concept-project sequence.
-// Progressive enhancement throughout: without this script (or without GSAP) every word and photo is visible, the intro
-// panel is never shown and the comparison shows both states split at 50%. Shared reveals live in motion.js.
+// Homepage: before/after comparison, first-visit intro, hero and concept-project sequence. Without this script (or GSAP)
+// everything is visible, the intro never shows and the comparison sits at 50%. Shared reveals live in motion.js.
 (() => {
   const doc = document;
   const root = doc.documentElement;
   const $$ = (selector, scope) => Array.from((scope || doc).querySelectorAll(selector));
   const still = () => window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
   const INTRO_FLAG = 'cendavo-intro';
-  // Start the 1.75 s intro only if it can finish before motion-boot.js's 2.5 s failsafe removes the panel.
+  // Start the 1.35 s intro only if it can finish before motion-boot.js's 2.5 s failsafe removes the panel.
   const INTRO_LATEST_START_MS = 700;
   const SKIP_EVENTS = ['keydown', 'pointerdown', 'wheel', 'touchstart'];
-  // The pinned project sequence: large screens only, and never longer than two viewport heights of scrolling.
-  const PIN_VIEWPORTS = 2;
+  // The pinned project sequence: large screens only, at most 2.5 viewport heights of scrolling.
+  const PIN_VIEWPORTS = 2.5;
   const MOTION = '(prefers-reduced-motion: no-preference)';
   const PIN_QUERY = MOTION + ' and (min-width: 1081px) and (min-height: 620px)';
   const STACK_QUERY = MOTION + ' and (max-width: 1080px), ' + MOTION + ' and (max-height: 619px)';
@@ -51,7 +50,7 @@
     update();
   }
 
-  // Intro bookkeeping. The skip handler never cancels the event: the key, click or scroll still does what it would have.
+  // The intro skip never cancels the event: the key, click or scroll still does what it would.
   let onSkip = null;
   const endIntro = () => {
     root.classList.remove('ns-intro');
@@ -60,39 +59,38 @@
     onSkip = null;
   };
 
-  // Motion: GSAP is optional. Initial states are set from JS only, inside the reduced-motion guard, and only
-  // transform, opacity and clip-path are animated. Content is faded with opacity (never visibility), so it stays
-  // readable by assistive technology and clickable throughout.
+  // GSAP is optional; motion stays inside the reduced-motion guard and animates transform, opacity and clip-path only.
   const gsap = window.gsap;
   const ScrollTrigger = window.ScrollTrigger;
+  if (!gsap || !ScrollTrigger) root.classList.remove('ph-wait'); // no GSAP: show the hero at once
   if (!gsap || !ScrollTrigger) { endIntro(); return; }
   gsap.registerPlugin(ScrollTrigger);
   const mm = gsap.matchMedia();
 
-  // Hero: headline lines rise through their masks, the photo un-masks and settles, copy and phone follow. 1.2 s in total.
+  // Hero (1.2 s): lines rise through masks, the photo un-masks, copy and phone follow. fromTo applies the CSS .ph-wait states.
   const heroTimeline = () => {
     const tl = gsap.timeline({ paused: true, defaults: { ease: 'power4.out' } });
     const lines = $$('.hero-h .ln > span');
     const photo = $$('.hero-photo');
     const fades = $$('[data-hero-fade]');
     const device = $$('.hero-device');
-    if (lines.length) tl.from(lines, { yPercent: 108, duration: 0.8, stagger: 0.08 }, 0);
+    if (lines.length) tl.fromTo(lines, { yPercent: 108 }, { yPercent: 0, duration: 0.8, stagger: 0.08 }, 0);
     if (photo.length) {
       tl.fromTo(photo, { clipPath: 'inset(0 0 0 100%)' }, { clipPath: 'inset(0 0 0 0%)', duration: 1, ease: 'expo.inOut', clearProps: 'clipPath' }, 0)
-        .from($$('img', photo[0]), { scale: 1.08, duration: 1.2, ease: 'power3.out' }, 0);
+        .fromTo($$('img', photo[0]), { scale: 1.08 }, { scale: 1, duration: 1.2, ease: 'power3.out' }, 0);
     }
-    if (fades.length) tl.from(fades, { y: 18, opacity: 0, duration: 0.6, stagger: 0.1 }, 0.35);
-    if (device.length) tl.from(device, { y: 70, opacity: 0, duration: 0.75, ease: 'power3.out' }, 0.4);
+    if (fades.length) tl.fromTo(fades, { y: 18, opacity: 0 }, { y: 0, opacity: 1, duration: 0.6, stagger: 0.1 }, 0.35);
+    if (device.length) tl.fromTo(device, { y: 70, opacity: 0 }, { y: 0, opacity: 1, duration: 0.75, ease: 'power3.out' }, 0.4);
     return tl;
   };
 
-  // Intro: the C-mark assembles from its three arcs, the wordmark resolves, the panel wipes up. Ends by 1.75 s.
+  // Intro: the C-mark assembles, the wordmark resolves, the panel wipes up by 1.35 s; the hero starts at 0.95 s.
   const playIntro = (panel, hero) => {
     const tl = gsap.timeline({ onComplete: endIntro });
-    tl.from($$('.intro-mark path', panel), { rotation: index => [-70, 60, -60][index % 3], svgOrigin: '100 100', opacity: 0, duration: 0.7, stagger: 0.1, ease: 'power4.out' }, 0.05)
-      .from($$('.intro-word > span', panel), { yPercent: 110, duration: 0.55, ease: 'power4.out' }, 0.45)
-      .fromTo(panel, { clipPath: 'inset(0 0 0% 0)' }, { clipPath: 'inset(0 0 100% 0)', duration: 0.7, ease: 'power4.inOut' }, 1.05)
-      .add(() => hero.play(0), 1.3);
+    tl.fromTo($$('.intro-mark path', panel), { rotation: index => [-70, 60, -60][index % 3], svgOrigin: '100 100', opacity: 0 }, { rotation: 0, svgOrigin: '100 100', opacity: 1, duration: 0.55, stagger: 0.08, ease: 'power4.out' }, 0.05)
+      .fromTo($$('.intro-word > span', panel), { yPercent: 110 }, { yPercent: 0, duration: 0.45, ease: 'power4.out' }, 0.3)
+      .fromTo(panel, { clipPath: 'inset(0 0 0% 0)' }, { clipPath: 'inset(0 0 100% 0)', duration: 0.6, ease: 'power4.inOut' }, 0.75)
+      .add(() => hero.play(0), 0.95);
     onSkip = () => {
       tl.progress(1);
       hero.progress(1);
@@ -103,20 +101,25 @@
   };
 
   mm.add('(prefers-reduced-motion: reduce)', endIntro);
+  // The hero opens only under the intro or while CSS holds it; after the 2.5 s failsafe it stays shown.
   mm.add(MOTION, () => {
-    const hero = heroTimeline();
     const panel = doc.querySelector('.intro');
     const onTime = !window.performance || window.performance.now() <= INTRO_LATEST_START_MS;
-    if (panel && onTime && root.classList.contains('ns-intro')) playIntro(panel, hero);
-    else {
-      endIntro();
-      hero.play(0);
-    }
+    const intro = panel && onTime && root.classList.contains('ns-intro');
+    if (intro || root.classList.contains('ph-wait')) {
+      const hero = heroTimeline();
+      if (intro) playIntro(panel, hero);
+      else {
+        endIntro();
+        hero.play(0);
+      }
+    } else endIntro();
+    root.classList.remove('ph-wait');
     return endIntro;
   });
 
-  // Concept projects, large screens: one capped pinned sequence. Each photo wipes up, the caption swaps quickly mid-wipe
-  // and the devices hand over and rise into place; a 1-3 counter tracks the project. The visitor's scroll is never moved for them.
+  // Concept projects, large screens: one capped pin. Photos wipe up; copy swaps through masks and devices travel a viewport,
+  // back to back, so nothing ghosts (no opacity). A 1-3 counter follows; a bone layer rises at the end. Scroll is never moved.
   mm.add(PIN_QUERY, () => {
     const stage = doc.querySelector('[data-work]');
     const projects = stage ? $$('.proj', stage) : [];
@@ -124,6 +127,8 @@
     if (count < 2) return undefined;
     const counter = stage.querySelector('.work-count-n');
     const bar = stage.querySelector('.work-count-bar i');
+    const exit = stage.querySelector('.work-exit');
+    const away = () => window.innerHeight; // the stage is one viewport tall, so this is always off-frame
     let shown = 0;
     const show = index => {
       if (index === shown) return;
@@ -133,9 +138,7 @@
     };
     stage.classList.add('is-pinned');
     if (bar) gsap.set(bar, { scaleX: 1 / count, transformOrigin: '0 50%' });
-    // Timeline times at which each project's text takes over (the middle of its text swap). The counter follows the
-    // timeline's own playhead, which is what is on screen (scrub smoothing lets the scroll position run ahead of it),
-    // and changes together with the title rather than at equal slices of the scroll.
+    // Times at which each project's text takes over; the counter follows the timeline's playhead (what is on screen).
     const swaps = [];
     const tl = gsap.timeline({
       defaults: { ease: 'power3.inOut' },
@@ -150,26 +153,25 @@
       const previous = projects[index - 1];
       const current = projects[index];
       const at = (index - 1) * 1.2;
-      const copy = $$('.proj-copy > *', current);
-      const outgoing = $$('.proj-copy > *', previous);
+      const copy = $$('.proj-mask > *', current);
+      const outgoing = $$('.proj-mask > *', previous);
       const devices = $$('.proj-devices', current);
       gsap.set($$('.proj-media', current), { clipPath: 'inset(100% 0 0 0)' });
-      gsap.set(copy, { opacity: 0, y: 16 });
-      gsap.set(devices, { opacity: 0, y: 140, rotation: 2.5, transformOrigin: '50% 100%' });
-      // One quick text swap mid-wipe (each side 0.18 units, a 0.02 overlap) so one project's text is always on screen,
-      // and the devices hand over back to back, so two laptops never share the frame.
-      tl.to(outgoing, { opacity: 0, y: -16, stagger: 0.02, duration: 0.12, ease: 'power2.in' }, at + 0.3)
-        .to($$('.proj-devices', previous), { opacity: 0, y: -110, duration: 0.35, ease: 'power2.in' }, at + 0.05)
+      gsap.set(devices, { transformOrigin: '50% 100%' });
+      tl.to(outgoing, { yPercent: -110, stagger: 0.03, duration: 0.18, ease: 'power2.in' }, at + 0.25)
+        .to($$('.proj-devices', previous), { y: () => -away(), duration: 0.35, ease: 'power2.in' }, at + 0.05)
         .to($$('.proj-media', current), { clipPath: 'inset(0% 0 0 0)', duration: 0.8 }, at + 0.1)
         .fromTo($$('.proj-media img', current), { scale: 1.1 }, { scale: 1, duration: 0.9, ease: 'power2.out' }, at + 0.1)
-        .to(copy, { opacity: 1, y: 0, stagger: 0.02, duration: 0.12, ease: 'power2.out' }, at + 0.46)
-        .to(devices, { opacity: 1, y: 0, rotation: 0, duration: 0.55, ease: 'power3.out' }, at + 0.4)
+        .fromTo(copy, { yPercent: 110 }, { yPercent: 0, stagger: 0.03, duration: 0.18, ease: 'power2.out' }, at + 0.47)
+        .fromTo(devices, { y: away, rotation: 2.5 }, { y: 0, rotation: 0, duration: 0.5, ease: 'power3.out' }, at + 0.4)
         .addLabel('p' + index, at + 1);
-      const outEnd = at + 0.3 + 0.12 + 0.02 * Math.max(0, outgoing.length - 1);
-      swaps.push((outEnd + at + 0.46) / 2);
+      const outEnd = at + 0.25 + 0.18 + 0.03 * Math.max(0, outgoing.length - 1);
+      swaps.push((outEnd + at + 0.47) / 2);
     }
+    // Hold, then the bone layer rises over the lower stage so the release meets the bone section (after the last label).
     tl.to({}, { duration: 0.3 });
-    // Keyboard focus entering a project scrolls the page to the point where that project is fully shown.
+    if (exit) tl.fromTo(exit, { clipPath: 'inset(100% 0 0 0)' }, { clipPath: 'inset(60% 0 0 0)', duration: 0.3, ease: 'none' });
+    // Keyboard focus entering a project scrolls to where it is fully shown.
     const onFocus = event => {
       const index = projects.findIndex(project => project.contains(event.target));
       const trigger = tl.scrollTrigger;
