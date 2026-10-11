@@ -600,28 +600,37 @@ def check_subscription_auth():
     return None
 
 
-def terminate_group(pgid):
+def _group_gone(pgid, leader=None):
+    """True when no process of the group can still run.
+
+    The leader is reaped first. macOS reports EPERM (not ESRCH) for a group whose members have all exited but are not yet
+    reaped (zombies); once the leader has exited, that means nothing in the group can run any more.
+    """
+    if leader is not None:
+        leader.poll()
+    try:
+        os.killpg(pgid, 0)
+    except ProcessLookupError:
+        return True
+    except PermissionError:
+        return leader is not None and leader.returncode is not None
+    return False
+
+
+def terminate_group(pgid, leader=None):
     """Reap every process in a command group, including surviving descendants."""
-    try:
-        os.killpg(pgid, signal.SIGTERM)
-    except ProcessLookupError:
-        return True
-    for _ in range(20):
+    for sig in (signal.SIGTERM, signal.SIGKILL):
         try:
-            os.killpg(pgid, 0)
+            os.killpg(pgid, sig)
         except ProcessLookupError:
             return True
-        time.sleep(0.1)
-    try:
-        os.killpg(pgid, signal.SIGKILL)
-    except ProcessLookupError:
-        return True
-    for _ in range(20):
-        try:
-            os.killpg(pgid, 0)
-        except ProcessLookupError:
-            return True
-        time.sleep(0.1)
+        except PermissionError:
+            if _group_gone(pgid, leader):
+                return True
+        for _ in range(20):
+            if _group_gone(pgid, leader):
+                return True
+            time.sleep(0.1)
     return False
 
 
@@ -736,13 +745,10 @@ def run_command(argv, stdin, task_id, name, deadline, timeout=1800, sandbox_tmp=
         except KeyboardInterrupt:
             raise
         finally:
-            group_cleaned = terminate_group(proc.pid)
+            group_cleaned = terminate_group(proc.pid, proc)
             proc.wait()
             if not group_cleaned:
-                try:
-                    os.killpg(proc.pid, 0)
-                except ProcessLookupError:
-                    group_cleaned = True
+                group_cleaned = _group_gone(proc.pid, proc)
             if group_cleaned:
                 ACTIVE.unlink(missing_ok=True)
         if not group_cleaned:

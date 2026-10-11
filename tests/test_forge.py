@@ -4,6 +4,7 @@ import sqlite3
 import sys
 import subprocess
 import tempfile
+import threading
 import time
 import unittest
 from pathlib import Path
@@ -991,6 +992,31 @@ class SandboxSpawnTests(unittest.TestCase):
                     forge.run_command(argv, '', 1, 'probe', time.monotonic() + 600, sandbox_tmp=tmp)
         self.assertIs(seen['sandbox-exec'], forge.cap_open_files)
         self.assertIsNone(seen['git'])
+
+    def test_stop_during_a_running_command_cleans_up_on_macos_and_linux(self):
+        """Regression (found by JARVIS integration): on macOS a zombie-only process group answers EPERM, which escaped
+        terminate_group and left the orphan marker behind, so `resume` refused."""
+        forge.STATE.mkdir(parents=True, exist_ok=True)
+        forge.LOGS.mkdir(parents=True, exist_ok=True)
+        def stop_soon():
+            time.sleep(1.5)
+            forge.STOP.write_text('stop')
+        threading.Thread(target=stop_soon, daemon=True).start()
+        try:
+            with self.assertRaisesRegex(RuntimeError, 'stopped or timed out'):
+                forge.run_command([sys.executable, '-c', 'import time; time.sleep(60)'], '', 1, 'builder', time.monotonic() + 600)
+        finally:
+            forge.STOP.unlink(missing_ok=True)
+        self.assertFalse(forge.ACTIVE.exists())
+
+    @unittest.skipIf(os.environ.get('CENDAVO_SANDBOXED'), 'signals to process groups are restricted inside the checks sandbox')
+    def test_terminate_group_treats_a_zombie_only_group_as_gone(self):
+        proc = subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(60)'], start_new_session=True)
+        time.sleep(0.3)
+        os.killpg(proc.pid, forge.signal.SIGTERM)
+        time.sleep(0.3)  # exited, not yet reaped
+        self.assertTrue(forge.terminate_group(proc.pid, proc))
+        self.assertIsNotNone(proc.returncode)
 
     def test_paid_fallback_and_budget_flags_are_refused(self):
         for flag in forge.FORBIDDEN_CLAUDE_FLAGS:
