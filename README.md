@@ -1,6 +1,6 @@
 # Cendavo
 
-An early business website and product demo for a reusable local service admin platform. The first increment lets visitors try a browser-local request queue, change statuses, and prepare follow-up drafts. It uses synthetic data and does not send messages, store customer data online or take payments.
+An early business website and product demo for a reusable local service admin platform. The first increment lets visitors try a browser-local request queue, change statuses, prepare follow-up drafts, and download the sample requests as a CSV file built in the browser (nothing is uploaded). It uses synthetic data and does not send messages, store customer data online or take payments.
 
 ## Run locally
 

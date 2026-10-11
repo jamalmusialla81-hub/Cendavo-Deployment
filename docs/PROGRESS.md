@@ -8,6 +8,7 @@
 | Enquiry and booking request flow | Browser-local demo using synthetic requests | Validate flow with local service businesses before a hosted backend |
 | Request tracking | New, Follow-up and Done states in demo | Status filter and open-first ordering exist; next, show the demo to local operators before adding workflow features |
 | Follow-up preparation | Local text draft and copy action; nothing sends | Design review and consent before any real messaging |
+| Data export | Demo button downloads all sample requests as a CSV built in the browser; nothing is uploaded | Note in operator sessions whether anyone asks for export before adding formats or import |
 | Shared business accounts | Not built | Define tenant isolation, sign-in and access policy first |
 | Payments and subscriptions | Not built | Validate pricing and operating cost first |
 
@@ -31,6 +32,6 @@ The current increment is a functional demo, not a production SaaS for real custo
 
 1. Improve the demo request workflow for a real local service task.
 2. Improve keyboard and screen reader access.
-3. Add browser-local export of synthetic demo requests.
+3. ~~Add browser-local export of synthetic demo requests.~~ Done: CSV download only (no import or other formats).
 
 Forge will process these after Claude Code is authenticated with the user's subscription. The host must remain awake and online during an overnight run.

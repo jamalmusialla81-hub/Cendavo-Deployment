@@ -78,7 +78,26 @@ function visibleItems(list, filter) {
     .map(({item}) => item);
 }
 
-if (typeof module !== 'undefined') module.exports = {normaliseItems, buildDraft, friendlyDate, isIsoDate, attentionLabel, visibleItems, normaliseFilter, seed};
+// CSV export of all items, built in the browser only. Every field is quoted and
+// cells that a spreadsheet could run as a formula get a leading apostrophe.
+const CSV_COLUMNS = [['Name', 'name'], ['Service', 'service'], ['Preferred date', 'date'], ['Status', 'status'], ['Request detail', 'note'], ['Created', 'created']];
+function csvCell(value) {
+  let text = typeof value === 'string' ? value : value == null ? '' : String(value);
+  if (/^[=+\-@\t\r]/.test(text)) text = "'" + text;
+  return '"' + text.replace(/"/g, '""') + '"';
+}
+function toCsv(list) {
+  const rows = [CSV_COLUMNS.map(([label]) => label).join(',')];
+  if (Array.isArray(list)) {
+    for (const item of list) {
+      if (!item || typeof item !== 'object') continue;
+      rows.push(CSV_COLUMNS.map(([, key]) => csvCell(item[key])).join(','));
+    }
+  }
+  return '\uFEFF' + rows.join('\r\n') + '\r\n';
+}
+
+if (typeof module !== 'undefined') module.exports = {normaliseItems, buildDraft, friendlyDate, isIsoDate, attentionLabel, visibleItems, normaliseFilter, toCsv, seed};
 
 if (typeof document !== 'undefined') {
   const $ = selector => document.querySelector(selector);
@@ -161,6 +180,16 @@ if (typeof document !== 'undefined') {
     const stored=save();render();form.reset();if(stored)say('Sample request added on this device.');
   });
   $('#reset-demo').addEventListener('click',()=>{items=structuredClone(seed);selectedId=null;filter='All';$('#status-filter').value='All';const stored=save();render();if(stored)say('Sample data restored.');});
+  $('#export-demo').addEventListener('click',()=>{
+    let url='';
+    try{
+      url=URL.createObjectURL(new Blob([toCsv(items)],{type:'text/csv;charset=utf-8'}));
+      const link=document.createElement('a');link.href=url;link.download=`cendavo-sample-requests-${localToday()}.csv`;link.hidden=true;
+      document.body.append(link);link.click();link.remove();
+      say(`Downloaded ${items.length} sample request${items.length===1?'':'s'}. Nothing was sent.`);
+    }catch{say('Download is not available in this browser.');}
+    finally{if(url)setTimeout(()=>URL.revokeObjectURL(url),0);}
+  });
   $('#copy-followup').addEventListener('click',async()=>{
     const draft=$('#followup-draft');
     if(!selectedId){say('Choose "Draft reply" on a request first.');return;}

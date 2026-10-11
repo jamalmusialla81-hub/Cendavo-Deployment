@@ -66,6 +66,16 @@ class SiteBuildTests(unittest.TestCase):
         self.assertIn("requestAnimationFrame", js)
         self.assertIn("$('#status-filter').focus()", js)
 
+    def test_demo_export_is_local_only(self):
+        demo = (OUT / 'demo/index.html').read_text()
+        self.assertIn('<button class="button outline" type="button" id="export-demo">Download sample requests (CSV)</button>', demo)
+        self.assertIn('Nothing is uploaded.', demo)
+        js = (OUT / 'assets/demo.js').read_text()
+        self.assertIn('URL.revokeObjectURL', js)
+        self.assertIn("type:'text/csv;charset=utf-8'", js)
+        self.assertIn('Nothing was sent.', js)
+        self.assertIn('Download is not available in this browser.', js)
+
     def test_contact_brief_is_wrapped_and_copy_is_guarded(self):
         html = (OUT / 'contact/index.html').read_text()
         self.assertRegex(html, r'<div data-brief-result hidden><label class="field">Your brief<textarea data-brief-output readonly></textarea></label><button[^>]*data-brief-copy[^>]*>')

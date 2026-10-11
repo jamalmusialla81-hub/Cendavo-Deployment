@@ -7,7 +7,7 @@ from pathlib import Path
 DEMO = Path(__file__).resolve().parents[1] / 'assets' / 'demo.js'
 
 SCRIPT = r"""
-const {normaliseItems, buildDraft, friendlyDate, isIsoDate, attentionLabel, visibleItems, normaliseFilter, seed} = require(process.argv[1]);
+const {normaliseItems, buildDraft, friendlyDate, isIsoDate, attentionLabel, visibleItems, normaliseFilter, toCsv, seed} = require(process.argv[1]);
 const good = {id:'a',name:'Pat',service:'Cleaning',date:'2026-10-14',note:'x',status:'Done',created:'2026-10-01'};
 console.log(JSON.stringify({
   nonArray: normaliseItems({}).length === seed.length,
@@ -44,6 +44,12 @@ console.log(JSON.stringify({
   seedStatuses: seed.map(i => i.status),
   seedPastOpen: seed.filter(i => i.status !== 'Done' && attentionLabel(i, '2026-10-11')).length,
   seedClauses: seed.map(i => buildDraft(i).includes('Could you')),
+  csvSeed: toCsv(seed),
+  csvSeedUnchanged: (() => { const copy = structuredClone(seed); toCsv(copy); return JSON.stringify(copy) === JSON.stringify(seed); })(),
+  csvNonArray: [toCsv(null), toCsv({}), toCsv('x')],
+  csvTricky: toCsv([{...good, name:'Pat "PJ" Doe', note:'Line one, with comma\nLine "two"'}]),
+  csvTriggers: ['=1+1', '+61 400', '-5', '@SUM(A1)', '\tTab', '\rCR', 'Plain', 'a=b'].map(v => toCsv([{...good, note:v}]).split('\r\n')[1]),
+  csvSkipsJunk: toCsv([null, 5, good]),
 }));
 """
 
@@ -128,6 +134,48 @@ class DemoScriptTests(unittest.TestCase):
         self.assertEqual(self.r['onlyDone'], ['a'])
         self.assertEqual(self.r['unknownFilter'], 2)
         self.assertEqual(self.r['notArray'], 0)
+
+
+    CSV_HEADER = 'Name,Service,Preferred date,Status,Request detail,Created'
+
+    def test_csv_header_bom_and_line_endings(self):
+        csv = self.r['csvSeed']
+        self.assertTrue(csv.startswith('﻿' + self.CSV_HEADER + '\r\n'))
+        self.assertTrue(csv.endswith('\r\n'))
+        self.assertNotIn('sample-1', csv)
+        self.assertNotRegex(csv.replace('\r\n', ''), '\n')
+
+    def test_csv_exports_all_seed_items_in_stored_order(self):
+        lines = self.r['csvSeed'][1:].split('\r\n')
+        self.assertEqual(lines[-1], '')
+        self.assertEqual(len(lines[:-1]), 5)
+        self.assertEqual(lines[1], '"Alex Morgan","Alteration","2026-10-14","New","Hem two pairs of trousers","2026-10-10"')
+        self.assertTrue(lines[2].startswith('"Sam Lee"'))
+        self.assertTrue(lines[4].startswith('"Casey Nguyen"'))
+        self.assertIn('"Done"', lines[4])
+        self.assertTrue(self.r['csvSeedUnchanged'])
+
+    def test_csv_non_array_gives_header_only(self):
+        for csv in self.r['csvNonArray']:
+            self.assertEqual(csv, '﻿' + self.CSV_HEADER + '\r\n')
+
+    def test_csv_quotes_commas_quotes_and_newlines(self):
+        row = self.r['csvTricky'][1:].split('\r\n', 1)[1]
+        self.assertEqual(row, '"Pat ""PJ"" Doe","Cleaning","2026-10-14","Done","Line one, with comma\nLine ""two""","2026-10-01"\r\n')
+
+    def test_csv_neutralises_formula_triggers(self):
+        notes = [row.split('","')[4] for row in self.r['csvTriggers']]
+        self.assertEqual(notes, ["'=1+1", "'+61 400", "'-5", "'@SUM(A1)", "'\tTab", "'\rCR", 'Plain', 'a=b'])
+        for row in self.r['csvTriggers']:
+            self.assertTrue(row.startswith('"Pat","Cleaning"'))
+
+    def test_csv_skips_non_object_entries(self):
+        self.assertEqual(len(self.r['csvSkipsJunk'].split('\r\n')), 3)
+
+    def test_demo_js_makes_no_network_requests(self):
+        js = DEMO.read_text(encoding='utf-8')
+        for token in ('fetch(', 'XMLHttpRequest', 'sendBeacon', 'WebSocket', 'EventSource', 'http://', 'https://'):
+            self.assertNotIn(token, js)
 
 
 if __name__ == '__main__':
