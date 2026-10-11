@@ -1,0 +1,510 @@
+<!doctype html>
+<html lang="en-AU">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cendavo: websites for Sydney service businesses</title>
+<meta name="description" content="Cendavo designs, builds, redesigns and looks after websites for Sydney's local service businesses. Request a free consultation and get a fixed quote.">
+<meta name="theme-color" content="#0E0E0D">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 200 200%22%3E%3Crect width=%22200%22 height=%22200%22 fill=%22%230E0E0D%22/%3E%3Cpath fill=%22%23D9A441%22 d=%22M55.67 43.26C86.24 19.38 130.22 24.01 155.16 53.72L135.24 70.43C119.31 51.45 91.21 48.5 71.68 63.75Z%22/%3E%3Cpath fill=%22%23EDEAE3%22 d=%22M48.21 150.02C21.26 122.11 21.26 77.89 48.21 49.98L66.91 68.05C49.7 85.87 49.7 114.13 66.91 131.95Z M155.16 146.28C130.22 175.99 86.24 180.62 55.67 156.74L71.68 136.25C91.21 151.5 119.31 148.55 135.24 129.57Z%22/%3E%3C/svg%3E">
+<link rel="preload" href="../fonts/Archivo-Variable.ttf" as="font" type="font/ttf" crossorigin>
+<link rel="preload" href="../images/detail-darkroom.jpg" as="image" fetchpriority="high">
+<link rel="stylesheet" href="ns.css">
+<script>
+/* Tiny boot flag: motion class + first-visit intro. Content stays visible if anything below fails (CSS failsafes). */
+(function (d) {
+  var c = d.documentElement.classList; c.add('js');
+  var still = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
+  if (still) return;
+  c.add('ns-motion');
+  try { if (!sessionStorage.getItem('ns-intro')) c.add('ns-intro'); } catch (e) {}
+})(document);
+</script>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+
+<!-- Intro (first visit per session only; shown via html.ns-intro) -->
+<div class="intro" id="intro" aria-hidden="true">
+  <div class="intro-lockup">
+    <svg class="intro-mark" viewBox="0 0 200 200">
+      <path class="arc arc-a" d="M55.67 43.26 C86.24 19.38 130.22 24.01 155.16 53.72 L135.24 70.43 C119.31 51.45 91.21 48.50 71.68 63.75 Z"/>
+      <path class="arc arc-b" d="M48.21 150.02 C21.26 122.11 21.26 77.89 48.21 49.98 L66.91 68.05 C49.70 85.87 49.70 114.13 66.91 131.95 Z"/>
+      <path class="arc arc-c" d="M155.16 146.28 C130.22 175.99 86.24 180.62 55.67 156.74 L71.68 136.25 C91.21 151.50 119.31 148.55 135.24 129.57 Z"/>
+    </svg>
+    <span class="intro-word"><span>CENDAVO</span></span>
+  </div>
+  <button class="intro-skip" type="button" tabindex="-1">Skip</button>
+</div>
+
+<header class="site-header" id="top">
+  <div class="header-in">
+    <a class="brand" href="index.html" aria-label="Cendavo, home">
+      <svg class="brand-mark" viewBox="0 0 200 200" aria-hidden="true">
+        <path d="M55.67 43.26 C86.24 19.38 130.22 24.01 155.16 53.72 L135.24 70.43 C119.31 51.45 91.21 48.50 71.68 63.75 Z"/>
+        <path d="M48.21 150.02 C21.26 122.11 21.26 77.89 48.21 49.98 L66.91 68.05 C49.70 85.87 49.70 114.13 66.91 131.95 Z"/>
+        <path d="M155.16 146.28 C130.22 175.99 86.24 180.62 55.67 156.74 L71.68 136.25 C91.21 151.50 119.31 148.55 135.24 129.57 Z"/>
+      </svg>
+      <span class="brand-word">CENDAVO</span>
+    </a>
+    <nav class="nav" aria-label="Main">
+      <ul>
+        <li><a class="ulink" href="work.html">Work</a></li>
+        <li><a class="ulink" href="services.html">Services</a></li>
+        <li><a class="ulink" href="#process">Process</a></li>
+        <li><a class="ulink" href="pricing.html">Pricing</a></li>
+        <li><a class="ulink" href="contact.html">Contact</a></li>
+      </ul>
+    </nav>
+    <a class="btn btn-primary btn-sm header-cta" href="contact.html">Request a free consultation</a>
+    <button class="menu-btn" type="button" aria-expanded="false" aria-controls="menu">
+      <span class="menu-btn-label">Menu</span>
+      <span class="menu-btn-icon" aria-hidden="true"><i></i><i></i></span>
+    </button>
+  </div>
+  <div class="menu" id="menu" hidden>
+    <nav aria-label="Mobile">
+      <ul>
+        <li><a href="work.html">Work</a></li>
+        <li><a href="services.html">Services</a></li>
+        <li><a href="#process">Process</a></li>
+        <li><a href="pricing.html">Pricing</a></li>
+        <li><a href="contact.html">Contact</a></li>
+      </ul>
+    </nav>
+    <a class="btn btn-primary btn-block" href="contact.html">Request a free consultation <svg class="i-arrow" viewBox="0 0 20 20" aria-hidden="true"><path d="M4 10h11M11 5.5 15.5 10 11 14.5"/></svg></a>
+    <p class="menu-foot">Sydney, Australia</p>
+  </div>
+</header>
+
+<main id="main">
+
+<!-- ============ 1. HERO ============ -->
+<section class="hero" aria-labelledby="hero-h">
+  <figure class="hero-photo" data-hero-photo>
+    <img src="../images/detail-darkroom.jpg" width="1600" height="1067" alt="The front of a black classic sedan in a dark garage, its round headlights glowing warm amber" fetchpriority="high" decoding="async">
+  </figure>
+  <div class="hero-in wrap">
+    <div class="hero-copy">
+      <h1 id="hero-h" class="display hero-h">
+        <span class="ln"><span>Your work is</span></span>
+        <span class="ln"><span>excellent.</span></span>
+        <span class="ln"><span>Your website</span></span>
+        <span class="ln"><span>should say so.</span></span>
+      </h1>
+      <p class="hero-sub" data-hero-fade>We design, build and look after websites for Sydney's local service businesses.</p>
+      <div class="btn-row" data-hero-fade>
+        <a class="btn btn-primary" href="contact.html">Request a free consultation <svg class="i-arrow" viewBox="0 0 20 20" aria-hidden="true"><path d="M4 10h11M11 5.5 15.5 10 11 14.5"/></svg></a>
+        <a class="btn btn-ghost" href="#work">See concept projects</a>
+      </div>
+    </div>
+  </div>
+  <div class="hero-device" data-hero-device>
+    <div class="phone" role="img" aria-label="Phone showing the homepage of Harbourside Mobile Detailing, a fictional concept business: a large photo of a car being hand washed, the headline Showroom finish in your driveway, and a Book a detail button.">
+      <div class="phone-screen">
+        <div class="ms hbm">
+          <div class="hbm-bar"><span class="hb-logo">HARBOURSIDE<small>Mobile Detailing</small></span><span class="hbm-burger"></span></div>
+          <div class="hbm-hero"><img src="../images/detail-splash.jpg" width="1600" height="1067" alt="" decoding="async"></div>
+          <div class="hbm-copy">
+            <div class="hb-kick">Eastern suburbs and inner west</div>
+            <div class="hbm-h">Showroom finish, in your driveway.</div>
+            <div class="hbm-btn">Book a detail</div>
+            <div class="hbm-row"><span>Full detail</span><span>About 4 hours</span></div>
+            <div class="hbm-row"><span>Express wash</span><span>About 1 hour</span></div>
+            <div class="hbm-row"><span>Paint correction</span><span>By quote</span></div>
+            <div class="hbm-l">Recent work</div>
+            <div class="hbm-thumbs"><img src="../images/detail-wax.jpg" width="1600" height="1067" alt="" decoding="async"><img src="../images/detail-dash.jpg" width="1600" height="899" alt="" decoding="async"><img src="../images/detail-buffer.jpg" width="1600" height="698" alt="" decoding="async"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <p class="hero-device-cap">Harbourside Mobile Detailing<br><span>Concept project · fictional business</span></p>
+  </div>
+</section>
+
+<!-- ============ 3. INTRO STATEMENT ============ -->
+<section class="statement band-bone" aria-labelledby="statement-h">
+  <div class="wrap statement-grid">
+    <h2 id="statement-h" class="display statement-h" data-rise>We make websites for people who do the work, so the first thing a customer sees online is as good as the job you do.</h2>
+    <div class="statement-body" data-rise>
+      <p>Most local businesses win work by word of mouth, then lose some of it at the website. Someone hears your name, looks you up on their phone and decides in a few seconds whether to call.</p>
+      <p>We design for that moment: clear services, real photos of your work and one obvious way to get in touch. After launch, we stay on to keep the site fast, secure and current.</p>
+    </div>
+    <figure class="statement-photo"><img src="../images/detail-buffer.jpg" width="1600" height="698" alt="A detailer in black gloves polishing a car bonnet with an orbital buffer" loading="lazy" decoding="async"></figure>
+  </div>
+</section>
+
+<!-- ============ 4. WORK ============ -->
+<section class="work" id="work" aria-labelledby="work-h">
+  <div class="wrap work-head">
+    <h2 id="work-h" class="display h-xl" data-rise>Concept projects</h2>
+    <p class="work-intro" data-rise>Three fictional businesses, designed and built the way we would build yours. Real photography, real layouts, real booking flows.</p>
+  </div>
+
+  <div class="work-stage" data-work>
+    <!-- Harbourside -->
+    <article class="proj proj-hb" aria-labelledby="p1-h">
+      <div class="proj-media"><img src="../images/detail-headlight.jpg" width="1600" height="1075" alt="A bronze car's headlight catching the light in a black studio" loading="lazy" decoding="async"></div>
+      <div class="proj-in wrap">
+        <div class="proj-copy">
+          <p class="proj-label">Concept project · fictional business</p>
+          <h3 id="p1-h" class="proj-name">Harbourside Mobile Detailing</h3>
+          <p class="proj-desc">A mobile detailer working Sydney's east. The site leads with the finish, explains each package by how long it takes, and lets a customer book from their phone.</p>
+          <ul class="proj-points">
+            <li>Online booking in two taps</li>
+            <li>Packages explained in plain words</li>
+            <li>Suburbs served, listed up front</li>
+          </ul>
+        </div>
+        <div class="proj-devices devices-hb">
+          <div class="laptop" role="img" aria-label="Laptop showing the Harbourside Mobile Detailing homepage: a full-width photo of a black car being hand washed, the headline Showroom finish in your driveway, and three packages with photos.">
+            <div class="laptop-lid"><div class="laptop-screen">
+              <div class="ms hb">
+                <div class="hb-nav"><span class="hb-logo">HARBOURSIDE<small>Mobile Detailing</small></span><span class="hb-links"><i>Packages</i><i>Our work</i><i>Areas</i><i>FAQ</i></span><span class="hb-book">Book a detail</span></div>
+                <div class="hb-hero">
+                  <img src="../images/detail-splash.jpg" width="1600" height="1067" alt="" loading="lazy" decoding="async">
+                  <div class="hb-copy">
+                    <div class="hb-kick">Eastern suburbs and inner west</div>
+                    <div class="hb-h">Showroom finish, in your driveway.</div>
+                    <div class="hb-p">We bring the water, the power and the patience. You get your weekend back.</div>
+                    <div class="hb-btns"><span class="hb-btn">Book a detail</span><span class="hb-btn hb-btn-o">See packages</span></div>
+                  </div>
+                </div>
+                <div class="hb-pk">
+                  <div><img src="../images/detail-wax.jpg" width="1600" height="1067" alt="" loading="lazy" decoding="async"><b>Express wash</b><span>About 1 hour</span></div>
+                  <div><img src="../images/detail-dash.jpg" width="1600" height="899" alt="" loading="lazy" decoding="async"><b>Full detail</b><span>About 4 hours</span></div>
+                  <div><img src="../images/detail-buffer.jpg" width="1600" height="698" alt="" loading="lazy" decoding="async"><b>Paint correction</b><span>By quote</span></div>
+                </div>
+              </div>
+            </div></div>
+            <div class="laptop-base"></div>
+          </div>
+          <div class="phone phone-sm" role="img" aria-label="Phone showing the Harbourside booking screen: Full detail selected, Tuesday 1 pm selected, and a Book Tuesday 1:00 pm button.">
+            <div class="phone-screen">
+              <div class="ms hbk">
+                <div class="hbk-top"><span>Book a detail</span><small>Step 2 of 2</small></div>
+                <div class="hbk-l">Package</div>
+                <div class="hbk-opt"><span>Express wash</span><small>1 hr</small></div>
+                <div class="hbk-opt is-on"><span>Full detail</span><small>4 hrs</small></div>
+                <div class="hbk-l">Tuesday</div>
+                <div class="hbk-times"><span>8:00</span><span class="is-on">1:00</span><span>3:30</span><span>5:00</span></div>
+                <div class="hbk-l">Where's the car?</div>
+                <div class="hbk-field">Street address</div>
+                <div class="hbk-l">Your details</div>
+                <div class="hbk-field">Name</div>
+                <div class="hbk-field">Mobile number</div>
+                <div class="hbk-cta">Book Tue 1:00 pm</div>
+                <div class="hbk-note">We come to you. Water and power supplied.</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </article>
+
+    <!-- Greenline -->
+    <article class="proj proj-gl" aria-labelledby="p2-h">
+      <div class="proj-media"><img src="../images/garden-lawn.jpg" width="1600" height="1067" alt="A narrow backyard with a stacked stone wall, timber pergola and lawn at dusk" loading="lazy" decoding="async"></div>
+      <div class="proj-in wrap">
+        <div class="proj-copy">
+          <p class="proj-label">Concept project · fictional business</p>
+          <h3 id="p2-h" class="proj-name">Greenline Landscapes</h3>
+          <p class="proj-desc">A landscaping crew for the North Shore. Finished projects do the selling, and the site-visit form asks the right questions before anyone drives out.</p>
+          <ul class="proj-points">
+            <li>Before/after project gallery</li>
+            <li>Site-visit requests with photos attached</li>
+            <li>Quick to load on a phone signal</li>
+          </ul>
+        </div>
+        <div class="proj-devices devices-gl">
+          <div class="laptop" role="img" aria-label="Laptop showing the Greenline Landscapes homepage: a serif headline Gardens built to be lived in beside a large photo of a stone garden path, with a row of recent project photos below.">
+            <div class="laptop-lid"><div class="laptop-screen">
+              <div class="ms gl">
+                <div class="gl-nav"><span class="gl-logo"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21V9M12 13c-4 0-7-3-7-8 4 0 7 3 7 8Zm0 0c4 0 7-3 7-8-4 0-7 3-7 8Z"/></svg>Greenline</span><span class="gl-links"><i>Projects</i><i>Services</i><i>About</i><i>Contact</i></span><span class="gl-book">Book a site visit</span></div>
+                <div class="gl-hero">
+                  <div class="gl-copy">
+                    <div class="gl-kick">Landscape design and construction, North Shore</div>
+                    <div class="gl-h">Gardens built to be lived in.</div>
+                    <div class="gl-p">Paving, retaining walls, planting and lawns, designed around how you use the space.</div>
+                    <div class="gl-btns"><span class="gl-btn">Book a site visit</span><span class="gl-link">See our projects</span></div>
+                  </div>
+                  <div class="gl-photo"><img src="../images/garden-walk.jpg" width="1600" height="1067" alt="" loading="lazy" decoding="async"></div>
+                </div>
+                <div class="gl-proj">
+                  <div class="gl-t"><img src="../images/garden-path.jpg" width="1600" height="1067" alt="" loading="lazy" decoding="async"><span>Paved courtyard, Lindfield</span></div>
+                  <div class="gl-t"><img src="../images/garden-wall.jpg" width="1600" height="1067" alt="" loading="lazy" decoding="async"><em>Before / after</em><span>Feature wall, Gordon</span></div>
+                  <div class="gl-t"><img src="../images/garden-deck.jpg" width="1600" height="1067" alt="" loading="lazy" decoding="async"><span>Deck and lawn, Turramurra</span></div>
+                </div>
+              </div>
+            </div></div>
+            <div class="laptop-base"></div>
+          </div>
+        </div>
+      </div>
+    </article>
+
+    <!-- Fade & Co -->
+    <article class="proj proj-fc" aria-labelledby="p3-h">
+      <div class="proj-media"><img src="../images/barber-interior.jpg" width="1600" height="1096" alt="A row of leather barber chairs and mirrors in a warmly lit barbershop" loading="lazy" decoding="async"></div>
+      <div class="proj-in wrap">
+        <div class="proj-copy">
+          <p class="proj-label">Concept project · fictional business</p>
+          <h3 id="p3-h" class="proj-name">Fade &amp; Co</h3>
+          <p class="proj-desc">A small barbershop. Opening hours, services and a booking button sit on the first screen, because that is what most customers came for.</p>
+          <ul class="proj-points">
+            <li>Choose your barber, pick a time</li>
+            <li>Today's hours on the first screen</li>
+            <li>Directions one tap away</li>
+          </ul>
+        </div>
+        <div class="proj-devices devices-fc">
+          <div class="phone" role="img" aria-label="Phone showing the Fade and Co homepage: a photo of barber chairs under warm lights, the name Fade and Co, Open today 9 to 7, and a Book a chair button.">
+            <div class="phone-screen">
+              <div class="ms fc">
+                <div class="fc-photo"><img src="../images/barber-chair.jpg" width="1600" height="1063" alt="" loading="lazy" decoding="async"></div>
+                <div class="fc-top"><span class="fc-logo">FADE&amp;CO</span><span class="fc-burger"></span></div>
+                <div class="fc-body">
+                  <div class="fc-open"><i></i>Open today, 9 am to 7 pm</div>
+                  <div class="fc-h">Sharp cuts. No waiting around.</div>
+                  <div class="fc-btn">Book a chair</div>
+                  <div class="fc-list"><span>Skin fade</span><small>45 min</small></div>
+                  <div class="fc-list"><span>Cut and beard</span><small>60 min</small></div>
+                  <div class="fc-list"><span>Beard trim</span><small>20 min</small></div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="phone phone-b" role="img" aria-label="Phone showing the Fade and Co booking screen: two barbers to choose from, a grid of times for Thursday, and a Confirm 2:30 pm button.">
+            <div class="phone-screen">
+              <div class="ms fcb">
+                <div class="fcb-top"><span>Book a chair</span><small>Skin fade, 45 min</small></div>
+                <div class="fcb-l">Choose your barber</div>
+                <div class="fcb-barbers">
+                  <div class="is-on"><img src="../images/barber-cut.jpg" width="1600" height="1067" alt="" loading="lazy" decoding="async"><span>Marco</span></div>
+                  <div><img src="../images/barber-shave.jpg" width="1600" height="1067" alt="" loading="lazy" decoding="async"><span>Dee</span></div>
+                  <div class="fcb-any"><b>Any</b><span>First free</span></div>
+                </div>
+                <div class="fcb-l">Thursday</div>
+                <div class="fcb-times"><span>10:00</span><span>11:15</span><span class="x">12:00</span><span>1:45</span><span class="is-on">2:30</span><span>3:15</span><span class="x">4:00</span><span>5:30</span><span>6:15</span></div>
+                <div class="fcb-l">Your details</div>
+                <div class="fcb-field">Name</div>
+                <div class="fcb-field">Mobile number</div>
+                <div class="fcb-cta">Confirm 2:30 pm</div>
+                <div class="fcb-note">We'll text you a reminder the day before.</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </article>
+
+    <div class="work-count" aria-hidden="true"><span class="work-count-n">1</span><span class="work-count-bar"><i></i></span><span>3</span></div>
+  </div>
+</section>
+
+<!-- ============ 5. BEFORE / AFTER ============ -->
+<section class="ba band-bone" aria-labelledby="ba-h">
+  <div class="wrap ba-grid">
+    <div class="ba-copy">
+      <h2 id="ba-h" class="display h-lg" data-rise>Same business. A very different first impression.</h2>
+      <p data-rise>Drag the handle to compare. On the left, the kind of site many local businesses still have: cramped, hard to read and with no clear next step. On the right, the same business with its work up front and a booking button you can't miss.</p>
+    </div>
+    <figure class="cmp">
+      <div class="cmp-win" id="cmp-win">
+        <div class="cmp-chrome" aria-hidden="true"><span class="cmp-tag">Before</span><span class="cmp-url">harbourside-detailing.example</span><span class="cmp-tag">After</span></div>
+        <div class="cmp-view">
+          <!-- BEFORE -->
+          <div class="cmp-layer cmp-before" aria-hidden="true">
+            <div class="ms old">
+              <div class="old-top"><div class="old-title">Harbourside Mobile Detailing!!!</div><div class="old-sub">*** The BEST car cleaning in Sydney ***</div></div>
+              <div class="old-marq">WELCOME TO OUR WEBSITE &nbsp; *** CALL NOW FOR A QUOTE *** &nbsp; WE COME TO YOU &nbsp; *** NEW SPECIALS ***</div>
+              <div class="old-body">
+                <div class="old-box"><u>Home</u><u>About Us</u><u>Services</u><u>Gallery</u><u>Contact Us</u><u>Links</u></div>
+                <div class="old-main">
+                  <div class="old-h">About Us</div>
+                  <div class="old-p">We are a mobile car detailing company that service all areas. We have many years experience and our prices are very competitive. Please call us for more information about our services and we will be happy to help with all of your car cleaning needs.</div>
+                  <img class="old-img" src="../images/detail-wax.jpg" width="1600" height="1067" alt="" loading="lazy" decoding="async">
+                  <div class="old-ph">Ph: 0400 000 000</div>
+                  <table class="old-tbl"><tr><th>Service</th><th>Price</th></tr><tr><td>Wash</td><td>Call for price</td></tr><tr><td>Wash &amp; Wax</td><td>Call for price</td></tr><tr><td>Interior</td><td>Call for price</td></tr></table>
+                  <div class="old-p"><u>Click HERE to email us!!</u> &nbsp; Sign our guestbook</div>
+                </div>
+                <div class="old-box"><b>Our Services</b><u>Wash</u><u>Wax</u><u>Interior</u><span class="old-count">004521</span><span class="old-uc"></span><small>Under construction</small></div>
+              </div>
+              <div class="old-foot">&copy; 2009 Harbourside Mobile Detailing. Best viewed in 800x600.</div>
+            </div>
+          </div>
+          <!-- AFTER -->
+          <div class="cmp-layer cmp-after" aria-hidden="true">
+            <div class="ms hb">
+              <div class="hb-nav"><span class="hb-logo">HARBOURSIDE<small>Mobile Detailing</small></span><span class="hb-links"><i>Packages</i><i>Our work</i><i>Areas</i><i>FAQ</i></span><span class="hb-book">Book a detail</span></div>
+              <div class="hb-hero">
+                <img src="../images/detail-splash.jpg" width="1600" height="1067" alt="" loading="lazy" decoding="async">
+                <div class="hb-copy">
+                  <div class="hb-kick">Eastern suburbs and inner west</div>
+                  <div class="hb-h">Showroom finish, in your driveway.</div>
+                  <div class="hb-p">We bring the water, the power and the patience. You get your weekend back.</div>
+                  <div class="hb-btns"><span class="hb-btn">Book a detail</span><span class="hb-btn hb-btn-o">See packages</span></div>
+                </div>
+              </div>
+              <div class="hb-pk">
+                <div><img src="../images/detail-wax.jpg" width="1600" height="1067" alt="" loading="lazy" decoding="async"><b>Express wash</b><span>About 1 hour</span></div>
+                <div><img src="../images/detail-dash.jpg" width="1600" height="899" alt="" loading="lazy" decoding="async"><b>Full detail</b><span>About 4 hours</span></div>
+                <div><img src="../images/detail-buffer.jpg" width="1600" height="698" alt="" loading="lazy" decoding="async"><b>Paint correction</b><span>By quote</span></div>
+              </div>
+            </div>
+          </div>
+          <div class="cmp-divider" aria-hidden="true"><span class="cmp-handle"><svg viewBox="0 0 24 24"><path d="M9 7l-5 5 5 5M15 7l5 5-5 5"/></svg></span></div>
+          <input class="cmp-range" id="cmp" type="range" min="0" max="100" step="1" value="50" aria-describedby="cmp-desc">
+        </div>
+      </div>
+      <div class="cmp-controls">
+        <label for="cmp">Compare before and after</label>
+        <div class="seg" role="group" aria-label="Show one version">
+          <button type="button" data-cmp="100" aria-pressed="false">Before</button>
+          <button type="button" data-cmp="0" aria-pressed="false">After</button>
+        </div>
+      </div>
+      <figcaption id="cmp-desc">An illustration, not a real client. Harbourside Mobile Detailing is a fictional business we made to show what a redesign changes: before, a 2009-style page with clashing colours and no way to book; after, a photo-led page with one headline, clear packages and a Book a detail button.</figcaption>
+    </figure>
+  </div>
+</section>
+
+<!-- ============ 6. SERVICES ============ -->
+<section class="services" aria-labelledby="svc-h">
+  <div class="wrap svc-grid">
+    <div class="svc-head">
+      <h2 id="svc-h" class="display h-lg" data-rise>What we do</h2>
+      <a class="ulink svc-all" href="services.html">All services</a>
+    </div>
+    <ol class="svc-list" data-svc>
+      <li class="svc is-active" data-svc-i="0">
+        <a href="services.html#new" class="svc-link">
+          <span class="svc-name">New website</span>
+          <span class="svc-text">For businesses with no site, or one that was never finished. We plan the pages, write the words with you and build it to bring in enquiries.</span>
+        </a>
+        <img class="svc-thumb" src="../images/barber-tools.jpg" width="1600" height="1067" alt="" loading="lazy" decoding="async">
+      </li>
+      <li class="svc" data-svc-i="1">
+        <a href="services.html#redesign" class="svc-link">
+          <span class="svc-name">Redesign</span>
+          <span class="svc-text">Keep your name and the trust you've built. Replace the dated look, the slow pages and the form nobody fills in.</span>
+        </a>
+        <img class="svc-thumb" src="../images/detail-dash.jpg" width="1600" height="899" alt="" loading="lazy" decoding="async">
+      </li>
+      <li class="svc" data-svc-i="2">
+        <a href="services.html#care" class="svc-link">
+          <span class="svc-name">Care plan</span>
+          <span class="svc-text">Updates, security, backups and small changes each month, so the site stays right long after launch.</span>
+        </a>
+        <img class="svc-thumb" src="../images/garden-walk.jpg" width="1600" height="1067" alt="" loading="lazy" decoding="async">
+      </li>
+    </ol>
+    <div class="svc-stage" aria-hidden="true">
+      <img class="svc-img is-active" src="../images/barber-tools.jpg" width="1600" height="1067" alt="" loading="lazy" decoding="async">
+      <img class="svc-img" src="../images/detail-dash.jpg" width="1600" height="899" alt="" loading="lazy" decoding="async">
+      <img class="svc-img" src="../images/garden-walk.jpg" width="1600" height="1067" alt="" loading="lazy" decoding="async">
+    </div>
+  </div>
+</section>
+
+<!-- ============ 7. WHO IT'S FOR ============ -->
+<section class="who band-bone" aria-labelledby="who-h">
+  <div class="wrap who-head">
+    <h2 id="who-h" class="display h-lg" data-rise>Built for the businesses that keep Sydney running</h2>
+    <p data-rise>If customers find you on their phone and then call, book or ask for a quote, we can help.</p>
+  </div>
+  <ul class="who-row">
+    <li class="who-i"><figure><div class="who-img"><img src="../images/clean-living.jpg" width="1600" height="900" alt="A cleaner mopping the floor of a bright living room" loading="lazy" decoding="async"></div><figcaption>Cleaners</figcaption></figure></li>
+    <li class="who-i"><figure><div class="who-img"><img src="../images/trade-panel.jpg" width="1600" height="1200" alt="An electrician testing a switchboard with a probe" loading="lazy" decoding="async"></div><figcaption>Electricians and trades</figcaption></figure></li>
+    <li class="who-i"><figure><div class="who-img"><img src="../images/barber-cut.jpg" width="1600" height="1067" alt="A barber trimming the back of a client's hair with scissors" loading="lazy" decoding="async"></div><figcaption>Barbers</figcaption></figure></li>
+    <li class="who-i"><figure><div class="who-img"><img src="../images/garden-lawn.jpg" width="1600" height="1067" alt="A landscaped backyard with stone wall and lawn" loading="lazy" decoding="async"></div><figcaption>Landscapers</figcaption></figure></li>
+    <li class="who-i"><figure><div class="who-img"><img src="../images/detail-wax.jpg" width="1600" height="1067" alt="A detailer working on the headlight of a silver car" loading="lazy" decoding="async"></div><figcaption>Mobile detailers</figcaption></figure></li>
+  </ul>
+</section>
+
+<!-- ============ 8. PROCESS ============ -->
+<section class="process" id="process" aria-labelledby="process-h">
+  <div class="wrap">
+    <div class="process-head">
+      <h2 id="process-h" class="display h-lg" data-rise>How it works</h2>
+      <p data-rise>Five steps, one point of contact. You see and approve everything before it goes live.</p>
+    </div>
+    <ol class="rail" data-rail>
+      <li class="rail-step"><span class="rail-n">1</span><h3 class="rail-t">Discover</h3><p>A free consultation. We learn how you win work, who your customers are and what the site needs to do.</p></li>
+      <li class="rail-step"><span class="rail-n">2</span><h3 class="rail-t">Design</h3><p>Layouts and words for your business, shown to you on desktop and mobile before anything is built.</p></li>
+      <li class="rail-step"><span class="rail-n">3</span><h3 class="rail-t">Build</h3><p>Fast, accessible pages with your photos and an enquiry form that reaches you. You review it on a private link.</p></li>
+      <li class="rail-step"><span class="rail-n">4</span><h3 class="rail-t">Launch</h3><p>We connect your domain, test every page and form, and go live with you.</p></li>
+      <li class="rail-step"><span class="rail-n">5</span><h3 class="rail-t">Look after</h3><p>On a care plan, we handle updates, backups and small edits, and keep an eye on it for you.</p></li>
+      <li class="rail-line" aria-hidden="true"><i></i></li>
+    </ol>
+  </div>
+</section>
+
+<!-- ============ 9. PRICING TEASER ============ -->
+<section class="pricing band-bone" aria-labelledby="pricing-h">
+  <div class="wrap pricing-grid">
+    <div class="pricing-copy">
+      <h2 id="pricing-h" class="display h-lg" data-rise>Fixed quote after a free consultation</h2>
+      <p data-rise>Every business needs something a little different, so we don't sell packages that won't fit. After a short call, we send a fixed quote in writing. You know the full price before any work starts.</p>
+      <a class="ulink ulink-strong" href="pricing.html">How pricing works</a>
+    </div>
+    <div class="pricing-inc">
+      <h3 class="pricing-inc-h">Always included</h3>
+      <ul class="inc-list">
+        <li><span class="inc-t">Mobile-first design</span><span class="inc-d">Designed for the phone your customer is holding, then scaled up.</span></li>
+        <li><span class="inc-t">Enquiry form</span><span class="inc-d">Enquiries go straight to your inbox, with the details you need to reply.</span></li>
+        <li><span class="inc-t">Launch help</span><span class="inc-d">Domain, hosting and going live, handled with you.</span></li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 10. CLOSING CTA ============ -->
+<section class="closing" aria-labelledby="closing-h">
+  <div class="closing-media"><img src="../images/detail-rear.jpg" width="1600" height="1067" alt="" loading="lazy" decoding="async"></div>
+  <div class="wrap closing-in">
+    <h2 id="closing-h" class="display closing-h" data-rise>Let's make your website as good as your work.</h2>
+    <p class="closing-p" data-rise>A short call, no obligation. We'll tell you honestly what your site needs, and what it doesn't.</p>
+    <a class="btn btn-primary btn-lg" href="contact.html">Request a free consultation <svg class="i-arrow" viewBox="0 0 20 20" aria-hidden="true"><path d="M4 10h11M11 5.5 15.5 10 11 14.5"/></svg></a>
+  </div>
+</section>
+
+</main>
+
+<footer class="site-footer">
+  <div class="wrap footer-grid">
+    <div class="footer-brand">
+      <a class="brand" href="index.html" aria-label="Cendavo, home">
+        <svg class="brand-mark" viewBox="0 0 200 200" aria-hidden="true">
+          <path d="M55.67 43.26 C86.24 19.38 130.22 24.01 155.16 53.72 L135.24 70.43 C119.31 51.45 91.21 48.50 71.68 63.75 Z"/>
+          <path d="M48.21 150.02 C21.26 122.11 21.26 77.89 48.21 49.98 L66.91 68.05 C49.70 85.87 49.70 114.13 66.91 131.95 Z"/>
+          <path d="M155.16 146.28 C130.22 175.99 86.24 180.62 55.67 156.74 L71.68 136.25 C91.21 151.50 119.31 148.55 135.24 129.57 Z"/>
+        </svg>
+        <span class="brand-word">CENDAVO</span>
+      </a>
+      <p>Websites for local service businesses.<br>Sydney, Australia</p>
+    </div>
+    <nav class="footer-nav" aria-label="Footer">
+      <ul>
+        <li><a class="ulink" href="work.html">Work</a></li>
+        <li><a class="ulink" href="services.html">Services</a></li>
+        <li><a class="ulink" href="#process">Process</a></li>
+        <li><a class="ulink" href="pricing.html">Pricing</a></li>
+        <li><a class="ulink" href="contact.html">Contact</a></li>
+      </ul>
+    </nav>
+    <div class="footer-cta">
+      <a class="btn btn-ghost" href="contact.html">Request a free consultation</a>
+    </div>
+    <div class="footer-base">
+      <p class="footer-copy">&copy; 2026 Cendavo</p>
+      <p>Harbourside Mobile Detailing, Greenline Landscapes and Fade &amp; Co are fictional concept businesses.</p>
+    </div>
+  </div>
+</footer>
+
+<script src="../gsap.min.js" defer></script>
+<script src="../ScrollTrigger.min.js" defer></script>
+<script src="ns.js" defer></script>
+</body>
+</html>
