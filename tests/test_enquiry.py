@@ -108,7 +108,7 @@ async function call(request, env) {
   const res = await mod.onRequest({ request, env });
   const text = await res.text();
   let body = null; try { body = JSON.parse(text); } catch {}
-  return { status: res.status, body, text, allow: res.headers.get('allow'), type: res.headers.get('content-type'), cache: res.headers.get('cache-control') };
+  return { status: res.status, body, text, allow: res.headers.get('allow'), type: res.headers.get('content-type'), cache: res.headers.get('cache-control'), retryAfter: res.headers.get('retry-after') };
 }
 
 const out = {};
@@ -156,18 +156,42 @@ out.foreignOrigin = await call(req(human(), { headers: { origin: 'https://evil.e
 out.nullOrigin = await call(req(human(), { headers: { origin: 'null' } }), { ENQUIRIES_DB: new FakeD1() });
 out.sameOrigin = await call(req(human(), { headers: { origin: 'https://cendavo.example' } }), { ENQUIRIES_DB: new FakeD1() });
 
+const warnings = [];
+const realWarn = console.warn;
+console.warn = (...args) => { warnings.push(args.map(String).join(' ')); };
 out.bots = {};
 for (const [label, extra] of [
   ['honeypot', { company_url: 'https://spam.example' }],
   ['honeypot non-string', { company_url: 1 }],
-  ['too fast', { elapsedMs: 1200 }],
-  ['no timing', { elapsedMs: undefined }],
-  ['timing as string', { elapsedMs: '9000' }],
   ['honeypot with invalid fields', { company_url: 'x', email: 'bad' }],
+  ['honeypot and too fast', { company_url: 'https://spam.example', elapsedMs: 100 }],
+  ['honeypot and no timing', { company_url: 'https://spam.example', elapsedMs: undefined }],
 ]) {
   db = new FakeD1();
   const r = await call(req(human(extra)), { ENQUIRIES_DB: db });
   out.bots[label] = { status: r.status, body: r.body, calls: db.calls.length };
+}
+out.tooFast = {};
+for (const [label, extra] of [
+  ['no timing', { elapsedMs: undefined }],
+  ['timing as string', { elapsedMs: '9000' }],
+  ['timing null (NaN in JSON)', { elapsedMs: NaN }],
+  ['799 ms', { elapsedMs: 799 }],
+  ['negative', { elapsedMs: -5 }],
+  ['zero', { elapsedMs: 0 }],
+  ['invalid fields too', { elapsedMs: 100, email: 'bad' }],
+]) {
+  db = new FakeD1();
+  const r = await call(req(human(extra)), { ENQUIRIES_DB: db });
+  out.tooFast[label] = { status: r.status, body: r.body, retryAfter: r.retryAfter, cache: r.cache, type: r.type, calls: db.calls.length };
+}
+out.spamWarnings = warnings.slice();
+console.warn = realWarn;
+out.humanTiming = {};
+for (const ms of [800, 1200]) {
+  db = new FakeD1();
+  const r = await call(req(human({ elapsedMs: ms })), { ENQUIRIES_DB: db });
+  out.humanTiming[ms] = { status: r.status, calls: db.calls.length };
 }
 db = new FakeD1();
 out.blankHoneypot = { ...(await call(req(human({ company_url: '  ' })), { ENQUIRIES_DB: db })), calls: db.calls.length };
@@ -215,6 +239,9 @@ const VALID = JSON.parse(process.argv[3]);
   out.r200 = await api.submitEnquiry(payload, fake(200, { ok: true, id: 7 }, seen));
   out.r400 = await api.submitEnquiry(payload, fake(400, { ok: false, errors: { email: 'server text', bogus: 'x' } }, seen));
   out.r503 = await api.submitEnquiry(payload, fake(503, { ok: false, message: 'down' }, seen));
+  out.r429 = await api.submitEnquiry(payload, fake(429, { ok: false, retry: true, message: 'wait' }, seen));
+  out.r429html = await api.submitEnquiry(payload, fake(429, undefined, seen));
+  out.r429okBody = await api.submitEnquiry(payload, fake(429, { ok: true }, seen));
   out.r500html = await api.submitEnquiry(payload, fake(500, undefined, seen));
   out.r200notOk = await api.submitEnquiry(payload, fake(200, { ok: false }, seen));
   out.rNetwork = await api.submitEnquiry(payload, async () => { throw new TypeError('Failed to fetch'); });
@@ -240,12 +267,28 @@ const VALID = JSON.parse(process.argv[3]);
   out.sentElapsed = sent.map(s => s.elapsedMs);
   out.fieldsUntouched = !('idempotencyKey' in fields);
 
+  // A 429 (timing check or rate limit) keeps the key; only the later success replaces it.
+  let m = 0;
+  const retrySent = [];
+  const retryPlan = [429, 201, 201];
+  let retryStep = 0;
+  const limited = async (url, init) => {
+    retrySent.push(JSON.parse(init.body).idempotencyKey);
+    const s = retryPlan[retryStep++];
+    return { status: s, json: async () => (s === 201 ? { ok: true, id: retryStep } : { ok: false, retry: true, message: 'wait' }) };
+  };
+  const retrySender = api.createSender(limited, () => keys[m++]);
+  out.retryFlow = [];
+  for (let i = 0; i < retryPlan.length; i++) out.retryFlow.push((await retrySender.send(fields, 500 + i * 1000)).kind);
+  out.retrySentKeys = retrySent;
+
   out.outcomes = Object.fromEntries([
     ['success', { ok: true, kind: 'success', id: 1 }],
     ['invalid', { ok: false, kind: 'invalid', errors: { email: api.MESSAGES.email } }],
     ['invalidKey', { ok: false, kind: 'invalid', errors: { idempotencyKey: api.MESSAGES.idempotencyKey } }],
     ['unavailable', { ok: false, kind: 'unavailable' }],
     ['network', { ok: false, kind: 'network' }],
+    ['retry', { ok: false, kind: 'retry' }],
     ['error', { ok: false, kind: 'error' }],
     ['garbage', { ok: false, kind: '__proto__' }],
     ['undefined', undefined],
@@ -353,7 +396,8 @@ class EnquiryFunctionTests(unittest.TestCase):
         self.assertEqual(self.r['nullOrigin']['status'], 403)
         self.assertEqual(self.r['sameOrigin']['status'], 201)
 
-    def test_spam_gets_fake_success_and_no_database_call(self):
+    def test_honeypot_gets_silent_success_and_no_database_call(self):
+        self.assertEqual(len(self.r['bots']), 5)
         for label, result in self.r['bots'].items():
             with self.subTest(case=label):
                 self.assertEqual(result['status'], 200)
@@ -361,6 +405,31 @@ class EnquiryFunctionTests(unittest.TestCase):
                 self.assertEqual(result['calls'], 0)
         self.assertEqual(self.r['blankHoneypot']['status'], 201)
         self.assertEqual(self.r['blankHoneypot']['calls'], 1)
+
+    def test_fast_or_missing_timing_is_an_honest_retry_not_a_fake_success(self):
+        self.assertEqual(len(self.r['tooFast']), 7)
+        for label, result in self.r['tooFast'].items():
+            with self.subTest(case=label):
+                self.assertEqual(result['status'], 429)
+                self.assertIs(result['body']['ok'], False)
+                self.assertIs(result['body']['retry'], True)
+                self.assertIn('not sent', result['body']['message'])
+                self.assertNotIn('@', result['body']['message'])
+                self.assertEqual(result['retryAfter'], '1')
+                self.assertEqual(result['cache'], 'no-store')
+                self.assertIn('application/json', result['type'])
+                self.assertEqual(result['calls'], 0)
+
+    def test_timing_at_or_above_800_ms_is_stored(self):
+        for ms in ('800', '1200'):
+            with self.subTest(ms=ms):
+                self.assertEqual(self.r['humanTiming'][ms], {'status': 201, 'calls': 1})
+
+    def test_spam_rejections_log_a_fixed_string_without_request_data(self):
+        warnings = self.r['spamWarnings']
+        self.assertEqual(warnings.count('enquiry: spam rejected (honeypot)'), 5)
+        self.assertEqual(warnings.count('enquiry: spam rejected (timing)'), 7)
+        self.assertEqual(len(warnings), 12)
 
     def test_missing_binding_is_503_and_names_no_email_address(self):
         for key in ('noBinding', 'noEnv'):
@@ -462,6 +531,10 @@ class EnquiryClientTests(unittest.TestCase):
         # Server field errors are shown with the client's own message, unknown fields are dropped.
         self.assertEqual(self.r['r400'], {'ok': False, 'kind': 'invalid', 'errors': {'email': self.r['messages']['email']}})
         self.assertEqual(self.r['r503'], {'ok': False, 'kind': 'unavailable'})
+        # 429 means "nothing stored, try again", whatever the body says (Cloudflare rate limits send HTML).
+        for key in ('r429', 'r429html', 'r429okBody'):
+            with self.subTest(case=key):
+                self.assertEqual(self.r[key], {'ok': False, 'kind': 'retry'})
         self.assertEqual(self.r['r500html'], {'ok': False, 'kind': 'error'})
         self.assertEqual(self.r['r200notOk'], {'ok': False, 'kind': 'error'})
         self.assertEqual(self.r['rNetwork'], {'ok': False, 'kind': 'network'})
@@ -476,20 +549,30 @@ class EnquiryClientTests(unittest.TestCase):
         self.assertRegex(self.r['generatedKey'], r'^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$')
         self.assertNotIn(k3, self.r['sentKeys'])
 
+    def test_retry_after_429_reuses_the_key_until_success(self):
+        k1, k2 = '11111111-1111-4111-8111-111111111111', '22222222-2222-4222-9222-222222222222'
+        self.assertEqual(self.r['retryFlow'], ['retry', 'success', 'success'])
+        self.assertEqual(self.r['retrySentKeys'], [k1, k1, k2])
+
     def test_only_success_clears_the_form(self):
         outcomes = self.r['outcomes']
         self.assertTrue(outcomes['success']['reset'])
         self.assertEqual(outcomes['success']['tone'], 'success')
-        for kind in ('invalid', 'invalidKey', 'unavailable', 'network', 'error', 'garbage', 'undefined'):
+        for kind in ('invalid', 'invalidKey', 'unavailable', 'network', 'retry', 'error', 'garbage', 'undefined'):
             with self.subTest(kind=kind):
                 self.assertFalse(outcomes[kind]['reset'])
                 self.assertEqual(outcomes[kind]['tone'], 'error')
         self.assertEqual(outcomes['invalid']['errors'], {'email': self.r['messages']['email']})
         self.assertEqual(outcomes['garbage']['message'], self.r['notices']['error'])
         self.assertEqual(outcomes['invalidKey']['message'], self.r['messages']['idempotencyKey'])
-        for kind in ('unavailable', 'network', 'error'):
+        for kind in ('unavailable', 'network', 'retry', 'error'):
             self.assertIn('Your details are still in the form', outcomes[kind]['message'])
             self.assertNotIn('@', outcomes[kind]['message'])
+        self.assertEqual(outcomes['retry']['message'], self.r['notices']['retry'])
+        self.assertEqual(outcomes['retry']['errors'], {})
+        self.assertIn('not sent', self.r['notices']['retry'])
+        self.assertIn('wait a moment', self.r['notices']['retry'])
+        self.assertIn('send again', self.r['notices']['retry'])
 
     def test_client_source_is_safe(self):
         source = CLIENT.read_text()
@@ -502,6 +585,9 @@ class EnquiryClientTests(unittest.TestCase):
         self.assertNotRegex(source, r"[Ff]etch\(\s*['\"]https?:")
         self.assertIn('first.focus()', source)
         self.assertIn('button.disabled = true', source)
+        # Elapsed time uses the monotonic clock where available.
+        self.assertIn('performance.now()', source)
+        self.assertNotIn('Date.now() - startedAt', source)
 
 
 if __name__ == '__main__':

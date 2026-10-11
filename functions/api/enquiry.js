@@ -3,7 +3,8 @@
 // runs one shared case table against both so they cannot drift apart.
 
 export const MAX_BODY_BYTES = 16 * 1024;
-export const MIN_FILL_MS = 3000;
+// Weak spam signal only: a submission reporting less than this is refused with a visible retry.
+export const MIN_FILL_MS = 800;
 export const SERVICES = ['website-design', 'website-redesign', 'maintenance', 'not-sure'];
 
 export const MESSAGES = {
@@ -18,6 +19,7 @@ export const MESSAGES = {
 };
 
 const UNAVAILABLE = 'Enquiries are temporarily unavailable, so nothing was sent. Please try again later.';
+const RETRY = 'Your enquiry was not sent. Please wait a moment and send it again.';
 const NOT_CONFIRMED = 'We could not confirm your enquiry. Please try again in a few minutes.';
 
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -154,13 +156,20 @@ async function handlePost(request, env) {
   }
   if (!body || typeof body !== 'object' || Array.isArray(body)) return json(400, { ok: false, message: 'The enquiry could not be read.' });
 
-  // Spam checks: answer bots with the same success shape a person gets, and store nothing.
+  // Spam checks. The honeypot is the real signal: a filled hidden field gets the same success shape a
+  // person gets and nothing is stored. Timing is only a weak signal (the browser reports it), so a
+  // too-fast or missing elapsedMs is refused honestly with a retry, never a fake success.
+  // Logs carry a fixed string only, never request data.
   const honeypot = body.company_url;
   const elapsed = body.elapsedMs;
   if ((typeof honeypot === 'string' && honeypot.trim() !== '') || (honeypot !== undefined && honeypot !== null && typeof honeypot !== 'string')) {
+    console.warn('enquiry: spam rejected (honeypot)');
     return json(200, { ok: true });
   }
-  if (typeof elapsed !== 'number' || !Number.isFinite(elapsed) || elapsed < MIN_FILL_MS) return json(200, { ok: true });
+  if (typeof elapsed !== 'number' || !Number.isFinite(elapsed) || elapsed < MIN_FILL_MS) {
+    console.warn('enquiry: spam rejected (timing)');
+    return json(429, { ok: false, retry: true, message: RETRY }, { 'retry-after': '1' });
+  }
 
   const { valid, values, errors } = validateEnquiry(body);
   if (!valid) return json(400, { ok: false, errors });

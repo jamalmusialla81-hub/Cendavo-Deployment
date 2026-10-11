@@ -18,6 +18,7 @@
   var NOTICES = {
     success: 'Thank you. Your enquiry has been received and we will reply to the email address you gave.',
     invalid: 'Please check the highlighted fields.',
+    retry: 'Your enquiry was not sent. Your details are still in the form. Please wait a moment and press send again.',
     unavailable: 'Enquiries are temporarily unavailable, so nothing was sent. Your details are still in the form. Please try again later.',
     network: 'We could not reach the server, so your enquiry may not have been sent. Your details are still in the form. Check your connection and try again.',
     error: 'Your enquiry could not be sent. Your details are still in the form. Please try again later.'
@@ -139,6 +140,8 @@
       });
       return { ok: false, kind: 'invalid', errors: errors };
     }
+    // 429: the server's timing check or a Cloudflare rate limit. Nothing was stored; ask for a retry.
+    if (response.status === 429) return { ok: false, kind: 'retry' };
     if (response.status === 503) return { ok: false, kind: 'unavailable' };
     return { ok: false, kind: 'error' };
   }
@@ -181,7 +184,11 @@
   var status = document.querySelector('[data-enquiry-status]');
   var button = form.querySelector('[type="submit"]');
   var idleLabel = button ? button.textContent : '';
-  var startedAt = Date.now();
+  // Monotonic clock where available, so a system clock change cannot make elapsed time negative.
+  var now = typeof performance !== 'undefined' && performance && typeof performance.now === 'function'
+    ? function () { return performance.now(); }
+    : function () { return Date.now(); };
+  var startedAt = now();
   var sender = createSender();
   var sending = false;
 
@@ -238,7 +245,7 @@
       button.textContent = 'Sending…';
     }
     announce('Sending your enquiry…', 'info');
-    var result = await sender.send(fields, Date.now() - startedAt);
+    var result = await sender.send(fields, Math.round(now() - startedAt));
     var outcome = outcomeFor(result);
     sending = false;
     form.removeAttribute('aria-busy');
@@ -248,7 +255,7 @@
     }
     if (outcome.reset) {
       form.reset();
-      startedAt = Date.now();
+      startedAt = now();
     } else {
       showErrors(outcome.errors);
     }

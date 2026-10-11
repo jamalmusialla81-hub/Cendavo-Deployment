@@ -56,7 +56,8 @@ DELETE FROM enquiries WHERE email = 'person@example.com';
 | Body over 16 KB (actual bytes, not just `Content-Length`) | `413` |
 | `Origin` header from another site | `403` |
 | Unreadable or non-object JSON | `400` |
-| Honeypot `company_url` filled, or filled in under 3 seconds (`elapsedMs`) | `200 {ok:true}`, **nothing stored** |
+| Honeypot `company_url` filled (checked first) | `200 {ok:true}`, **nothing stored**; a bot sees the same answer as a person |
+| `elapsedMs` missing, not a number, or under 800 ms | `429`, `Retry-After: 1`, `{ok:false, retry:true, message}`, **nothing stored**; the form keeps the details and shows "not sent, wait a moment and press send again" |
 | A field fails validation | `400 {ok:false, errors:{field: message}}` |
 | `ENQUIRIES_DB` not bound | `503`, "nothing was sent, try again later" |
 | New enquiry | `201 {ok:true, id}` |
@@ -69,7 +70,7 @@ Stored fields: name, email (lower-cased), optional phone, business and website (
 
 ## Spam and abuse
 
-The honeypot and minimum fill time stop simple bots only; anyone can call the endpoint directly. Every accepted submission is a D1 write. To limit floods without paid services, add a free **WAF rate-limiting rule** in the Cloudflare dashboard (Security → WAF → Rate limiting rules), for example: URI path equals `/api/enquiry` and method `POST`, at most 5 requests per 10 seconds per IP, action *Block*. Check the current free-plan limits for D1, Functions and rate limiting on the account.
+The honeypot stops simple bots only; anyone can call the endpoint directly. The fill-time check is a weak signal: `elapsedMs` is reported by the browser and is easy to fake, so it is set low (800 ms, faster than anyone can fill the form) and answered with an honest `429` and a visible retry message instead of a fake success, so a real visitor is never told an unsent enquiry was received. The same message appears if a Cloudflare rate limit answers `429`. Each spam rejection logs one fixed line, `enquiry: spam rejected (honeypot)` or `enquiry: spam rejected (timing)`, with no request data, so the owner can count them in the Pages Functions logs. The real defences are the honeypot and a rate limit. Every accepted submission is a D1 write. To limit floods without paid services, add a free **WAF rate-limiting rule** in the Cloudflare dashboard (Security → WAF → Rate limiting rules), for example: URI path equals `/api/enquiry` and method `POST`, at most 5 requests per 10 seconds per IP, action *Block*. Check the current free-plan limits for D1, Functions and rate limiting on the account.
 
 ## Differences from the task spec
 
