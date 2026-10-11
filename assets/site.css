@@ -27,8 +27,9 @@ button,input,select,textarea{font:inherit;color:inherit}
 button{cursor:pointer}
 img,svg{display:block;max-width:100%}
 img{height:auto}
-/* The build wraps every photo in <picture> for its AVIF source; display:contents keeps the img itself the grid/flex item. */
-picture{display:contents}
+/* The build wraps every photo in <picture> for its AVIF source; display:contents keeps the img itself the grid/flex item.
+   <source> is not display:none by default, so hide it or it becomes an extra grid/flex item. */
+picture{display:contents}picture>source{display:none}
 figure{margin:0}
 h1,h2,h3,p{margin-top:0}
 h1,h2,h3{font-family:var(--font-display);font-weight:760;font-stretch:88%;letter-spacing:-.02em;line-height:1;margin-bottom:var(--space-4);text-wrap:balance}

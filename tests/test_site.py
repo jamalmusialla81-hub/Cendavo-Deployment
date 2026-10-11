@@ -1188,6 +1188,22 @@ class ImagePerformanceAndSharingTests(unittest.TestCase):
     def test_picture_does_not_change_layout(self):
         css = (OUT / 'assets/site.css').read_text()
         self.assertIn('picture{display:contents}', base_rules(css))
+        # display:contents promotes <picture>'s children into the parent grid/flex, and <source> is not
+        # display:none by default, so every stylesheet using it must hide picture>source at top level.
+        for name in ('site.css', 'home.css', 'pages.css', 'kit.css'):
+            rules = base_rules((OUT / 'assets' / name).read_text())
+            if re.search(r'(?:^|[}\s,])picture\s*\{[^}]*display\s*:\s*contents', rules):
+                with self.subTest(stylesheet=name):
+                    self.assertRegex(rules, r'(?:^|[}\s,])picture\s*>\s*source\s*\{[^}]*display\s*:\s*none')
+
+    def test_no_img_selectors_broken_by_picture_wrapper(self):
+        # Every photo is wrapped in <picture>, so child/sibling/position selectors on img would silently stop matching.
+        fragile = re.compile(r'>\s*img\b|\bimg\s*[+~]|\bimg:(?:first|last|nth)-')
+        for name in ('site.css', 'home.css', 'pages.css', 'kit.css'):
+            css = re.sub(r'/\*.*?\*/', '', (OUT / 'assets' / name).read_text(), flags=re.S)
+            selectors = re.findall(r'([^{}]+)\{', css)
+            with self.subTest(stylesheet=name):
+                self.assertEqual([s.strip() for s in selectors if fragile.search(s)], [])
 
     def test_canonical_open_graph_and_twitter_metadata(self):
         from scripts.build_site import BASE_URL
