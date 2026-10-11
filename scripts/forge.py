@@ -519,6 +519,11 @@ def load_agents():
 
 def write_agents_file():
     agents = load_agents()
+    # An agent's `tools:` list also bounds what a session may use, so owner-configured MCP tools must be added to it.
+    # Each call's --tools/--allowedTools still decide, per profile, whether they are offered at all.
+    for name, spec in load_config()['mcp_servers'].items():
+        for agent in spec.get('agents', ['cendavo-builder']):
+            agents[agent]['tools'] += [f'mcp__{name}__{tool}' for tool in spec['tools'] if f'mcp__{name}__{tool}' not in agents[agent]['tools']]
     STATE.mkdir(mode=0o700, exist_ok=True)
     AGENTS_FILE.write_text(json.dumps(agents))
     AGENTS_FILE.chmod(0o600)

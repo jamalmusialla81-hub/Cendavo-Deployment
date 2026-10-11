@@ -325,6 +325,15 @@ class AgentPermissionTests(IsolatedAgentTests):
             site = forge.claude_argv('cendavo-builder', True, mcp_file=mcp)
         self.assertIn('mcp__*', denied(site))
 
+    def test_configured_mcp_tools_are_added_to_the_agent_definition(self):
+        """Regression (real CLI): an agent's tools list bounds its session, so configured MCP tools were unavailable."""
+        write_config(forge.ROOT, {'mcp_servers': {'docs': {'command': '/usr/bin/true', 'tools': ['search'], 'agents': ['cendavo-builder']}}})
+        with patch.object(forge, 'AGENT_DIR', Path(forge.__file__).resolve().parents[1] / '.claude' / 'agents'):
+            agents = forge.write_agents_file()
+        self.assertIn('mcp__docs__search', agents['cendavo-builder']['tools'])
+        self.assertNotIn('mcp__docs__search', agents['cendavo-security-reviewer']['tools'])
+        self.assertIn('mcp__docs__search', json.loads(forge.AGENTS_FILE.read_text())['cendavo-builder']['tools'])
+
     def test_claude_report_writes_private_mcp_config_with_only_configured_servers(self):
         write_config(forge.ROOT, {'mcp_servers': {'docs': {'command': '/usr/bin/true', 'tools': ['search']}}})
         with patch.object(forge, 'run_command', return_value='{"result":"ok"}') as command:
