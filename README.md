@@ -1,6 +1,6 @@
 # Cendavo
 
-An early business website and product demo for a reusable local service admin platform. The first increment lets visitors try a browser-local request queue, change statuses, prepare follow-up drafts, and download the sample requests as a CSV file built in the browser (nothing is uploaded). It uses synthetic data and does not send messages, store customer data online or take payments.
+An early business website and product demo for a reusable local service admin platform. The first increment lets visitors try a browser-local request queue, change statuses, prepare follow-up drafts, and download the sample requests as a CSV file built in the browser (nothing is uploaded). The demo uses synthetic data and does not send messages or take payments. The contact page has a working enquiry form: a Cloudflare Pages Function (`functions/api/enquiry.js`) validates submissions and stores them in a Cloudflare D1 database. See [docs/ENQUIRIES.md](docs/ENQUIRIES.md) for the one-time setup.
 
 ## Run locally
 
@@ -9,7 +9,7 @@ python3 scripts/build_site.py
 python3 -m http.server 8000 --directory dist
 ```
 
-Open `http://localhost:8000`. To validate: `python3 -m unittest discover -s tests -v`, then `node --check assets/site.js` and `node --check assets/demo.js`.
+Open `http://localhost:8000`. To validate: `python3 -m unittest discover -s tests -v`, then `node --check assets/site.js`, `node --check assets/demo.js` and `node --check assets/enquiry.js`. The static preview has no Pages Functions, so locally the enquiry form says it could not send and keeps what was typed.
 
 ## Development loop
 

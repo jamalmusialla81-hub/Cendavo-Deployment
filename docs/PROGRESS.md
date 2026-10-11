@@ -4,7 +4,8 @@
 
 | Capability | Current state | Next decision |
 | --- | --- | --- |
-| Business website | Five public pages live on Cloudflare Pages | Add a real contact channel when supplied |
+| Business website | Five public pages live on Cloudflare Pages | Reposition the remaining pages around website design (task B) |
+| Website enquiries | Contact form posts to a Cloudflare Pages Function that validates input and stores it in D1 (`ENQUIRIES_DB`), with idempotent retries, a honeypot and a minimum fill time. Setup: `docs/ENQUIRIES.md` | Owner creates the D1 database and binding; no notifications, admin view or retention rule yet; decide how often to check D1 |
 | Enquiry and booking request flow | Browser-local demo using synthetic requests | Validate flow with local service businesses before a hosted backend |
 | Request tracking | New, Follow-up and Done states in demo | Status filter and open-first ordering exist; next, show the demo to local operators before adding workflow features |
 | Follow-up preparation | Local text draft and copy action; nothing sends | Design review and consent before any real messaging |
@@ -19,12 +20,12 @@ The current increment is a functional demo, not a production SaaS for real custo
 - **Proposed price:** A$49–99 per month, unvalidated. No checkout exists.
 - **Customer acquisition:** Initial target groups are laundromats, tailors, cleaners, repair shops and other local services. Demand, conversion, sales cycle and acquisition cost have not been measured.
 - **Revenue:** No verified revenue data has been supplied. The website makes no revenue or customer claims.
-- **Operating cost:** The static site has no application database or messaging provider. Cloudflare account billing and future backend costs have not been verified; calculate them before launching paid subscriptions. Claude usage depends on its subscription terms and limits; no separate API billing is configured by Forge.
+- **Operating cost:** The only database is the D1 enquiry store; there is no messaging provider. Cloudflare account billing and future backend costs have not been verified; calculate them before launching paid subscriptions. Claude usage depends on its subscription terms and limits; no separate API billing is configured by Forge.
 
 ## Engineering and release
 
 - **Tests:** The site build, eight local unit tests, JavaScript syntax checks and macOS sandboxed test run pass. GitHub Checks passed for the deployed revision.
-- **Security:** The demo stores sample data in the browser, inserts text through DOM text nodes, sends no requests to Cendavo, and ships restrictive response headers. The future hosted product needs authentication, tenant isolation, data retention and abuse controls before real customer use.
+- **Security:** The demo stores sample data in the browser, inserts text through DOM text nodes, sends no requests to Cendavo, and ships restrictive response headers. The enquiry endpoint accepts same-origin JSON up to 16 KB, validates every field on the server, uses parameterised SQL, stores no IP or user-agent data and never returns database errors. Spam controls are a honeypot and fill time only; a free Cloudflare WAF rate-limit rule is recommended. The future hosted product needs authentication, tenant isolation, data retention and abuse controls before real customer use.
 - **Deployment:** `main` is connected to Cloudflare Pages project `cendavo-deployment`. Build command and output directory are configured. The home page and demo return HTTP 200. The manual GitHub Actions deploy workflow also passed for commit `2d83b7b`.
 - **Agent workflow:** Four Claude Code role files (Strategist, Builder, Security Reviewer, Functional Auditor; no Codex), persistent queue, bounded runtime, stop switch, logs and local Git checkpoints are implemented. Claude Code is installed but authentication has not completed; the runner paused without starting a task. No Claude Builder or Strategist output has been produced yet.
 
