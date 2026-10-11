@@ -86,12 +86,13 @@ if (typeof document !== 'undefined') {
   try { items = normaliseItems(JSON.parse(localStorage.getItem(STORAGE_KEY))); }
   catch { items = structuredClone(seed); }
   let selectedId = null;
-  const say = message => { $('#demo-status').textContent = message; };
+  // Clear then set next frame so an identical repeated message is announced again.
+  const say = message => { const node = $('#demo-status'); node.textContent = ''; requestAnimationFrame(() => { node.textContent = message; }); };
   const localToday = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
   function save(){try{localStorage.setItem(STORAGE_KEY,JSON.stringify(items));return true;}catch{say('Browser storage is unavailable. Your changes will last only until this page closes.');return false;}}
   function textElement(tag,value){const node=document.createElement(tag);node.textContent=value;return node;}
   let filter='All';
-  function render(focusId){
+  function render(focusId, focusKind){
     const body=$('#requests');body.replaceChildren();
     const shown=visibleItems(items,filter);
     if(!shown.some(item=>item.id===selectedId))selectedId=null;
@@ -120,13 +121,15 @@ if (typeof document !== 'undefined') {
         item.status=select.value;const stored=save();
         const hidden=filter!=='All'&&item.status!==filter;
         render(hidden?undefined:item.id);
+        if(hidden)$('#status-filter').focus();
         say(stored?`${item.name} marked ${item.status}.${hidden?` Hidden by the ${filter} filter.`:''}`:'Status changed, but browser storage is unavailable.');
       });
       const draftButton=textElement('button','Draft reply');draftButton.className='table-action';draftButton.type='button';
+      draftButton.setAttribute('aria-label','Draft reply for '+item.name);
       draftButton.setAttribute('aria-pressed',String(item.id===selectedId));
-      draftButton.addEventListener('click',()=>{selectedId=item.id;render();say(`Draft prepared for ${item.name}. Nothing was sent.`);});
+      draftButton.addEventListener('click',()=>{selectedId=item.id;render(item.id,'draft');say(`Draft prepared for ${item.name}. Nothing was sent.`);});
       action.append(select,draftButton);tr.append(action);body.append(tr);
-      if(item.id===focusId)select.focus();
+      if(item.id===focusId)(focusKind==='draft'?draftButton:select).focus();
     }
     $('#count-new').textContent=items.filter(item=>item.status==='New').length;
     $('#count-followup').textContent=items.filter(item=>item.status==='Follow-up').length;

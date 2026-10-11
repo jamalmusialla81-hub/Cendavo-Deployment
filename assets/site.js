@@ -1,11 +1,25 @@
+// Re-announce identical messages: clear the live region, then set text next frame.
+const announce = (node, message) => {
+  if (!node) return;
+  node.textContent = '';
+  requestAnimationFrame(() => { node.textContent = message; });
+};
 const menu = document.querySelector('[data-menu]');
+const nav = document.querySelector('[data-nav]');
 menu?.addEventListener('click', () => {
-  const nav = document.querySelector('[data-nav]');
   const open = nav.classList.toggle('open');
   menu.setAttribute('aria-expanded', String(open));
 });
+document.addEventListener('keydown', event => {
+  if (event.key !== 'Escape' || !menu || !nav?.classList.contains('open')) return;
+  nav.classList.remove('open');
+  menu.setAttribute('aria-expanded', 'false');
+  // Only move focus when the toggle is actually visible (narrow layouts).
+  if (getComputedStyle(menu).display !== 'none') menu.focus();
+});
 const brief = document.querySelector('[data-brief]');
-brief?.addEventListener('submit', async event => {
+const briefStatus = document.querySelector('[data-brief-status]');
+brief?.addEventListener('submit', event => {
   event.preventDefault();
   const data = new FormData(brief);
   const lines = [
@@ -17,15 +31,20 @@ brief?.addEventListener('submit', async event => {
     '',
     'This brief stays on your device until you choose to share it.'
   ];
-  const text = lines.join('\n');
   const output = document.querySelector('[data-brief-output]');
-  output.value = text;
-  output.hidden = false;
-  document.querySelector('[data-brief-copy]').hidden = false;
-  document.querySelector('[data-brief-status]').textContent = 'Your brief is ready. Copy it to share when you choose.';
+  output.value = lines.join('\n');
+  document.querySelector('[data-brief-result]').hidden = false;
+  output.focus();
+  announce(briefStatus, 'Your brief is ready. Copy it to share when you choose.');
 });
 document.querySelector('[data-brief-copy]')?.addEventListener('click', async () => {
   const output = document.querySelector('[data-brief-output]');
-  await navigator.clipboard.writeText(output.value);
-  document.querySelector('[data-brief-status]').textContent = 'Copied to clipboard.';
+  try {
+    await navigator.clipboard.writeText(output.value);
+    announce(briefStatus, 'Copied to clipboard.');
+  } catch {
+    output.focus();
+    output.select();
+    announce(briefStatus, 'Could not copy automatically. The brief is selected: copy it by hand.');
+  }
 });
