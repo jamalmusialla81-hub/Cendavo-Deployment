@@ -1,7 +1,10 @@
-// Homepage (Daylight, Task 33): the before/after comparison and its one demonstration sweep, the hero opening and its
-// one-time stage choreography, two transform-only hero scroll layers and the showreel frame's entrance. Without it (or
-// GSAP, or with reduced motion) everything shows in its final state and the comparison sits at 50%. Video playback and
-// the Pause motion button belong to reel.js (loaded first); a press of Pause motion here jumps the choreography to its end.
+// Homepage (Liquid Glass, Task 37, over the Daylight content): the before/after comparison and its one demonstration sweep,
+// the hero opening (headline lines, copy, the glass cards arriving from depth and the booking), the hero's scroll exit
+// (it also feeds the WebGL scene's progress), heading reveals, the showreel lens, the marquee, the concept cards fanning in
+// with a small tilt and light sweep, the glass browser frame swinging in, and the closing panel and phones. Without it
+// (or GSAP, or with reduced motion) everything shows in its final state and the comparison sits at 50%. Video playback
+// and the Pause motion button belong to reel.js (loaded first); a press of Pause motion here ends the opening at once and
+// stops the marquee.
 (() => {
   const doc = document;
   const root = doc.documentElement;
@@ -77,7 +80,7 @@
   }
 
   // GSAP is optional; motion stays inside the reduced-motion guard and animates transform, opacity and clip-path (plus the
-  // SVG ring's dash offset) only.
+  // marquee mask's position, a CSS variable on one short strip).
   const gsap = window.gsap;
   const ScrollTrigger = window.ScrollTrigger;
   const release = () => root.classList.remove('ph-wait');
@@ -86,60 +89,126 @@
   const mm = gsap.matchMedia();
   const motionToggle = $('[data-motion-toggle]');
   const held = () => motionToggle?.getAttribute('aria-pressed') === 'true';
+  const glass = window.__glass = window.__glass || { paused: false, heroP: 0, pointer: { x: 0, y: 0 } };
+  // Every scroll-linked tween shares this one definition (smoothing in seconds); none pins anything.
+  const SCRUB = { scrub: 0.6 };
+  const MAX_TILT = 6; // concept cards: never more than 6 degrees, fine pointers only
+  const tiltOf = value => Math.max(-MAX_TILT, Math.min(MAX_TILT, value));
+  // Scroll reveals only below the fold: hiding what is already on screen would make it blink.
+  const below = el => el.getBoundingClientRect().top >= window.innerHeight;
+  const once = (trigger, start) => ({ trigger, start: start || 'top 85%', once: true });
 
-  // Hero, once (about 4.7 s): the headline lines rise through their masks, the copy follows, the stage is laid down, the
-  // interface cards arrive one by one, the score is drawn, Desktop gets checked and the cursor picks 10:30 and books it.
-  // fromTo takes over the .ph-wait start states (y: 0, as GSAP reads the CSS percentage as pixels). Every piece ends in
-  // the same state the static page shows, which end() also sets directly.
+  // Hero, once (about 3.5 s): the headline lines rise through their masks, the copy follows, the two glass cards arrive
+  // from depth, then 10:30 is picked and booked. fromTo takes over the .ph-wait start states (y: 0, as GSAP reads the CSS
+  // percentage as pixels). Every piece ends in the state the static page shows, which end() also sets directly.
   const heroTimeline = () => {
     const tl = gsap.timeline({ paused: true, defaults: { ease: OUT } });
     const lines = $$('.hero-h .ln > span');
     const fades = $$('[data-hero-fade]');
-    const stage = $('.stage');
-    const book = $('.frag-book'), slot = $('.slot-pick'), cursor = $('.cursor'), dev = $('.frag-dev'), ring = $('.ring-fg'), count = $('[data-count]');
+    const cards = $$('.gcard');
+    const book = $('.c-book'), slot = $('.slot-pick');
     const end = () => {
       tl.progress(1);
-      dev?.classList.add('is-desktop');
       slot?.classList.add('on');
       book?.classList.add('booked');
-      if (count) count.textContent = '100';
     };
     if (lines.length) tl.fromTo(lines, { yPercent: 108, y: 0 }, { yPercent: 0, y: 0, duration: 1, stagger: 0.08, clearProps: 'transform' }, 0);
     if (fades.length) tl.fromTo(fades, { y: 18, opacity: 0 }, { y: 0, opacity: 1, duration: 0.7, stagger: 0.08, clearProps: 'opacity,transform' }, 0.4);
-    if (!stage) return { tl, end };
-    tl.fromTo(stage, { opacity: 0 }, { opacity: 1, duration: 0.4, clearProps: 'opacity' }, 0.2)
-      .fromTo($$('.rig-plinth'), { clipPath: 'inset(0% 0% 0% 100% round 3.2em)' }, { clipPath: 'inset(0% 0% 0% 0% round 3.2em)', duration: 1, ease: IO, clearProps: 'clipPath' }, 0.2)
-      .fromTo($$('.hd-laptop, .hd-phone'), { opacity: 0, y: 32 }, { opacity: 1, y: 0, duration: 1, stagger: 0.08, clearProps: 'opacity,transform' }, 0.4)
-      .fromTo($$('.frag'), { opacity: 0, scale: 0.96, y: 8 }, { opacity: 1, scale: 1, y: 0, duration: 0.4, stagger: 0.08, clearProps: 'opacity,transform' }, 1.2);
-    if (ring && count) {
-      const score = { n: 0 };
-      tl.fromTo(ring, { strokeDashoffset: 100 }, { strokeDashoffset: 0, duration: 1, ease: IO }, 1.3)
-        .fromTo(score, { n: 0 }, { n: 100, duration: 1, ease: IO, onUpdate: () => { count.textContent = String(Math.round(score.n)); } }, 1.3);
+    const deck = $('.hero-cards');
+    if (deck) tl.fromTo(deck, { opacity: 0 }, { opacity: 1, duration: 0.2, clearProps: 'opacity' }, 0.6);
+    if (cards.length) {
+      tl.fromTo(cards, { opacity: 0, z: -420, rotationX: 18, rotationY: -14, transformPerspective: 900 },
+        { opacity: 1, z: 0, rotationX: 0, rotationY: 0, duration: 1.4, stagger: 0.14, ease: OUT, clearProps: 'opacity,transform' }, 0.6);
     }
-    if (dev) {
-      dev.classList.remove('is-desktop');
-      tl.add(() => dev.classList.add('is-desktop'), 2.2);
-    }
-    if (book && slot && cursor) {
+    if (book && slot) {
       book.classList.remove('booked');
       slot.classList.remove('on');
-      tl.fromTo(cursor, { xPercent: 160, yPercent: 220, opacity: 0 }, { opacity: 1, duration: 0.2 }, 2.4)
-        .to(cursor, { xPercent: -230, yPercent: -150, duration: 1, ease: IO }, 2.6)
-        .add(() => slot.classList.add('on'), 3.6)
-        .to(cursor, { xPercent: 0, yPercent: 0, duration: 0.7, ease: IO, clearProps: 'transform,opacity' }, 3.8)
-        .add(() => book.classList.add('booked'), 4.5);
+      tl.add(() => slot.classList.add('on'), 2.6).add(() => book.classList.add('booked'), 3.3);
     }
     return { tl, end };
   };
 
-  // Two depth layers drift up as the hero scrolls away (the only scrubbed motion on the page; transform only).
-  const layers = () => {
+  // The hero's scroll exit (wide screens; the stage is pinned by CSS sticky): the copy rises and fades, the cards fly past
+  // in depth, and the scene's progress (window.__glass.heroP) tilts the 3D logo away.
+  const heroExit = () => {
     const hero = $('.hero');
-    [['.rig-devices', -16], ['.rig-cards', -40]].forEach(([selector, y]) => {
-      const layer = $(selector);
-      if (hero && layer) gsap.to(layer, { y, ease: 'none', scrollTrigger: { trigger: hero, start: 'top top', end: 'bottom top', scrub: 0.4 } });
-    });
+    if (!hero) return;
+    const tl = gsap.timeline({ scrollTrigger: { trigger: hero, start: 'top top', end: 'bottom bottom', ...SCRUB, onUpdate: self => { glass.heroP = self.progress; } } });
+    tl.to('.hero-copy', { yPercent: -14, opacity: 0, ease: 'none', duration: 0.42 }, 0)
+      .to('.hero-cap', { opacity: 0, ease: 'none', duration: 0.4 }, 0);
+    // fromTo with explicit start values: the opening may still hold the cards at opacity 0 when this is created.
+    $$('.gcard').forEach((card, i) => tl.fromTo(card, { z: 0, rotationX: 0, rotationY: 0, opacity: 1 },
+      { z: 260, rotationX: -10, rotationY: i % 2 ? 12 : -12, opacity: 0, ease: 'none', duration: 0.45, transformPerspective: 900, immediateRender: false }, 0.04 * i));
   };
+
+  // Section headings rise through a mask, once, as they come into view.
+  const headings = () => $$('[data-rise]').filter(below).forEach(el => {
+    gsap.fromTo(el, { clipPath: 'inset(0% 0% 100% 0%)', yPercent: 30 }, { clipPath: 'inset(0% 0% -12% 0%)', yPercent: 0, duration: 1, ease: OUT, clearProps: 'clipPath,transform', scrollTrigger: once(el, 'top 88%') });
+  });
+
+  // Showreel: a rounded glass lens that opens to the full frame and tilts flat as it scrolls in; the chapters follow once.
+  const reelLens = () => {
+    const frame = $('.reel-frame');
+    if (!frame) return;
+    gsap.fromTo(frame, { clipPath: 'inset(9% 16% 9% 16% round 48px)', rotationX: 10, scale: 0.97, transformPerspective: 1600 },
+      { clipPath: 'inset(0% 0% 0% 0% round 18px)', rotationX: 0, scale: 1, ease: 'none', scrollTrigger: { trigger: frame, start: 'top 92%', end: 'top 25%', ...SCRUB } });
+    const panel = $('.reel-panel');
+    if (panel && below(panel)) gsap.fromTo(panel, { y: 40, opacity: 0 }, { y: 0, opacity: 1, duration: 1, ease: OUT, clearProps: 'opacity,transform', scrollTrigger: once(frame, 'top 40%') });
+  };
+
+  // Marquee: the photo strip, the pills and the type's mask glide continuously (transform and a mask offset), faster for
+  // a moment while the page scrolls quickly; only while the strip is on screen and Pause motion is off.
+  const marquee = () => {
+    const strip = $('.marq'), type = $('.mq-type');
+    if (!strip) return () => {};
+    const tracks = $$('[data-marquee]').map(el => ({ el, dir: Number(el.dataset.marquee) || 1, x: 0 }));
+    let inView = false, boost = 0, frame = 0, last = 0, mx = 0;
+    const tick = now => {
+      const dt = Math.min(0.05, (now - (last || now)) / 1000);
+      last = now;
+      boost *= 0.94;
+      const speed = 38 * (1 + boost) * dt;
+      tracks.forEach(t => {
+        const half = t.el.scrollWidth / 2 || 1;
+        t.x = (t.x - speed * t.dir) % half;
+        if (t.x > 0) t.x -= half;
+        t.el.style.transform = 'translate3d(' + t.x.toFixed(1) + 'px,0,0)';
+      });
+      if (type) {
+        mx = (mx - speed * 1.4) % (type.offsetHeight * 15.85 || 1);
+        type.style.setProperty('--mqx', mx.toFixed(1) + 'px');
+      }
+      frame = window.requestAnimationFrame(tick);
+    };
+    const run = () => {
+      const on = inView && !glass.paused && !held();
+      if (on && !frame) { last = 0; frame = window.requestAnimationFrame(tick); }
+      else if (!on && frame) { window.cancelAnimationFrame(frame); frame = 0; }
+    };
+    ScrollTrigger.create({ trigger: strip, start: 'top bottom', end: 'bottom top', onToggle: self => { inView = self.isActive; run(); },
+      onUpdate: self => { boost = Math.min(4, Math.abs(self.getVelocity()) / 500); } });
+    return run;
+  };
+
+  // Concept cards fan in from depth once, each on its own angle (wide screens), and settle flat.
+  const cardsIn = wide => $$('.teaser-card').filter(below).forEach((card, i) => {
+    const fan = [{ x: -160, rY: 32, rZ: -4 }, { x: 220, rY: -38, rZ: 5 }, { x: 260, rY: -30, rZ: -3 }][i % 3];
+    gsap.fromTo(card, { opacity: 0, y: 160, x: wide ? fan.x : 0, z: -500, rotationX: 22, rotationY: wide ? fan.rY : 0, rotationZ: wide ? fan.rZ : 0, transformPerspective: 1400, transformOrigin: '50% 100%' },
+      { opacity: 1, y: 0, x: 0, z: 0, rotationX: 0, rotationY: 0, rotationZ: 0, duration: 1.6, delay: (i % 3) * 0.12, ease: OUT, clearProps: 'opacity,transform', scrollTrigger: once(card, 'top 94%') });
+  });
+
+  // Fine pointers: a small tilt toward the pointer and a light sweep across the photo (keyboard focus gets neither).
+  const tilt = () => $$('.teaser-card').forEach(card => {
+    const rx = gsap.quickTo(card, 'rotationX', { duration: 0.6, ease: OUT }), ry = gsap.quickTo(card, 'rotationY', { duration: 0.6, ease: OUT });
+    const shine = $('.teaser-img', card);
+    card.addEventListener('pointermove', e => {
+      const r = card.getBoundingClientRect(), nx = (e.clientX - r.left) / r.width - 0.5, ny = (e.clientY - r.top) / r.height - 0.5;
+      gsap.set(card, { transformPerspective: 1200 });
+      rx(tiltOf(-ny * 8)); ry(tiltOf(nx * 10));
+      shine?.style.setProperty('--sweep', Math.round(nx * 120) + '%');
+    });
+    card.addEventListener('pointerleave', () => { rx(0); ry(0); shine?.style.setProperty('--sweep', '-120%'); });
+  });
 
   // Only the visual --pos moves: the range value, its aria-valuetext and the buttons never change (nothing is announced).
   const demoSweep = () => {
@@ -155,17 +224,23 @@
     } });
   };
 
-  // Showreel, if below the fold: the frame opens from a slightly inset window once, then the caption and button rise.
-  const reelEntrance = () => {
-    const reel = doc.querySelector('[data-reel]');
-    const frame = reel?.querySelector('.reel-frame');
-    if (!frame || reel.getBoundingClientRect().top < window.innerHeight) return;
-    const once = { trigger: reel, start: 'top 85%', once: true };
-    gsap.fromTo(frame, { clipPath: 'inset(4% 4% 4% 4% round 18px)' }, { clipPath: 'inset(0% 0% 0% 0% round 18px)', duration: 1, ease: IO, clearProps: 'clipPath', scrollTrigger: once });
-    gsap.fromTo($$('.reel-cap, [data-reel-toggle]', reel), { opacity: 0, y: 14 }, { opacity: 1, y: 0, duration: 0.7, stagger: 0.08, clearProps: 'opacity,transform', scrollTrigger: { ...once } });
+  // The glass browser frame swings in once before the sweep; the closing panel lifts out of depth once.
+  const arrivals = () => {
+    const frame = $('.compare-frame');
+    if (frame && below(frame)) gsap.fromTo(frame, { rotationY: -18, rotationX: 6, y: 60, opacity: 0, transformPerspective: 1600 }, { rotationY: 0, rotationX: 0, y: 0, opacity: 1, duration: 1.4, ease: OUT, clearProps: 'opacity,transform', scrollTrigger: once(frame) });
+    const panel = $('.band-panel');
+    if (panel && below(panel)) gsap.fromTo(panel, { y: 90, opacity: 0, scale: 0.94, rotationX: 10, transformPerspective: 1400 }, { y: 0, opacity: 1, scale: 1, rotationX: 0, duration: 1.4, ease: OUT, clearProps: 'opacity,transform', scrollTrigger: once(panel, 'top 80%') });
   };
 
-  // The hero opens only while CSS holds it; after the 2.5 s failsafe it stays shown as it is.
+  // Wide screens: the two glass phones fly in from depth as the closing band scrolls up (scrubbed, transform only).
+  const phones = () => {
+    const band = $('.band');
+    if (!band || !$('.gp-1')) return;
+    gsap.timeline({ scrollTrigger: { trigger: band, start: 'top bottom', end: 'center center', ...SCRUB } })
+      .fromTo('.gp-1', { x: 420, y: 300, z: -900, rotationY: -60, rotationX: 24, rotationZ: 10, transformPerspective: 1400 }, { x: 0, y: 0, z: 0, rotationY: -16, rotationX: 4, rotationZ: 0, ease: 'none', duration: 1 }, 0)
+      .fromTo('.gp-2', { x: 360, y: -340, z: -1100, rotationY: -70, rotationX: -26, rotationZ: -8, transformPerspective: 1400 }, { x: 0, y: 0, z: 60, rotationY: -22, rotationX: -2, rotationZ: 0, ease: 'none', duration: 1 }, 0.05);
+  };
+
   mm.add(MOTION, () => {
     let hero = null;
     if (root.classList.contains('ph-wait')) {
@@ -174,10 +249,12 @@
       else hero.tl.play(0);
     }
     release();
-    layers();
-    reelEntrance();
+    headings();
+    reelLens();
     demoSweep();
-    const onHold = () => { if (hero && held()) hero.end(); };
+    arrivals();
+    const runMarquee = marquee();
+    const onHold = () => { if (hero && held()) hero.end(); runMarquee(); };
     motionToggle?.addEventListener('click', onHold);
     return () => {
       hero?.end();
@@ -185,5 +262,8 @@
       motionToggle?.removeEventListener('click', onHold);
     };
   });
+  mm.add(MOTION + ' and (min-width: 761px)', () => { heroExit(); cardsIn(true); phones(); });
+  mm.add(MOTION + ' and (max-width: 760px)', () => cardsIn(false));
+  mm.add(MOTION + ' and (hover: hover) and (pointer: fine)', tilt);
   release();
 })();

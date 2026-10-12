@@ -34,6 +34,16 @@
     const it = { video, loop, label, wanted: !still && !saveData };
     video.muted = true;
     if (win.IntersectionObserver) new win.IntersectionObserver(e => { it.inView = e[e.length - 1].isIntersecting; sync(it); showFab(); }, { threshold: 0.4 }).observe(video);
+    // Liquid Glass (Task 37): a loop far down the page may carry data-poster instead of poster, so its still is fetched only
+    // when it comes near the screen (not with the first load).
+    if (video.dataset?.poster && win.IntersectionObserver) {
+      const near = new win.IntersectionObserver(e => {
+        if (!e[e.length - 1].isIntersecting) return;
+        video.setAttribute('poster', video.dataset.poster);
+        near.disconnect?.();
+      }, { rootMargin: '50% 0px' });
+      near.observe(video);
+    }
     // When a large video stops, another one in view may take its turn.
     if (!loop) video.addEventListener('pause', () => items.forEach(other => { if (other !== it && !other.loop) sync(other); }));
     return items.push(it) && it;
@@ -125,7 +135,8 @@
       try { video.play()?.catch?.(() => {}); } catch (error) {}
     };
     previews.push(stop);
-    const target = frame.closest?.('a') || frame;
+    // Work tiles sit inside their link; the homepage's concept cards are articles whose title link covers the card.
+    const target = frame.closest?.('a') || frame.closest?.('article') || frame;
     if (fine) {
       target.addEventListener('pointerenter', start);
       target.addEventListener('pointerleave', stop);
@@ -136,10 +147,16 @@
     }
   });
   const loops = Array.from(doc.querySelectorAll('video[data-loop]')).filter(v => !(narrowNow && v.dataset.loop === 'wide')).map(v => add(v, true));
+  // Liquid Glass (Task 37): the same state is shared with the glass shell and the WebGL hero, so Pause motion also stops the
+  // drifting atmosphere and the 3D render loop (window.__glass.onPauseChange).
+  const glass = win.__glass = win.__glass || { paused: false, heroP: 0, pointer: { x: 0, y: 0 } };
   if (motion && loops.length) {
     const show = () => motion.setAttribute('aria-pressed', String(held));
+    glass.paused = held;
     motion.addEventListener('click', () => {
       held = !held;
+      glass.paused = held;
+      glass.onPauseChange?.(held);
       items.forEach(it => { it.wanted = !held; sync(it); it.label(); });
       if (held) previews.forEach(stop => stop());
       show();

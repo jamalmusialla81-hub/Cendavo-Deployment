@@ -118,8 +118,9 @@ function makeWindow(env, extra) {
 }
 """
 
-# Runs assets/home.js against the stub DOM (Daylight, Task 33): without GSAP (everything stays in its final state) and with
-# the recording GSAP stub (hero opening and stage choreography, the Pause motion button, reduced motion, small screens).
+# Runs assets/home.js against the stub DOM (Liquid Glass, Task 37, over Daylight): without GSAP (everything stays in its final
+# state) and with the recording GSAP stub (hero opening and the glass cards' booking, the hero's scroll exit, the showreel
+# lens, the Pause motion button, reduced motion, small screens).
 HOME_SCRIPT = HARNESS + r"""
 const source = fs.readFileSync(process.argv[1], 'utf8');
 function run(env) {
@@ -128,26 +129,27 @@ function run(env) {
   before.dataset.compareSet = '0'; after.dataset.compareSet = '100'; controls.hidden = true;
   controls.parts = { 'input[type="range"]': [range], '[data-compare-set]': [before, after] };
   figure.parts = { '[data-compare-controls]': [controls] };
-  // The stage as the HTML ships it: its final state (booked, 10:30 picked, Desktop checked, score 100).
+  // The glass booking card as the HTML ships it: its final state (10:30 picked and booked).
   const book = element('book'); book.classList = classList(['booked']);
   const slot = element('slot'); slot.classList = classList(['on']);
-  const dev = element('dev'); dev.classList = classList(['is-desktop']);
-  const count = element('count'); count.textContent = '100';
   // reel.js (loaded first) has already set aria-pressed: "true" when Save-Data or reduced motion holds the motion.
   const toggle = element('toggle'); toggle.attrs['aria-pressed'] = env.held ? 'true' : 'false';
   // The class motion-boot.js would have set: .ph-wait (openings held by CSS) unless its failsafe already removed it.
   const root = element('html'); root.classList = classList(['js'].concat(env.reduce ? [] : ['motion'], env.wait ? ['ph-wait'] : []));
-  const parts = { '[data-compare]': [figure], '.hero-h .ln > span': many('line', 4), '[data-hero-fade]': many('fade', 2), '.stage': [element('stage')],
-    '.rig-plinth': [element('plinth')], '.hd-laptop, .hd-phone': many('device', 2), '.frag': many('card', 4), '.frag-book': [book],
-    '.slot-pick': [slot], '.cursor': [element('cursor')], '.frag-dev': [dev], '.ring-fg': [element('ring')], '[data-count]': [count],
-    '.hero': [element('hero')], '.rig-devices': [element('devices')], '.rig-cards': [element('cards')], '[data-motion-toggle]': [toggle] };
+  // Below-the-fold pieces (headings, cards, the glass frame and panel) and the showreel frame.
+  const below = name => { const el = element(name); el.getBoundingClientRect = () => ({ left: 0, top: 3000, width: 400, height: 300 }); return el; };
+  const parts = { '[data-compare]': [figure], '.hero-h .ln > span': many('line', 4), '[data-hero-fade]': many('fade', 2), '.hero-cards': [element('deck')],
+    '.gcard': many('card', 2), '.c-book': [book], '.slot-pick': [slot], '.hero': [element('hero')], '[data-motion-toggle]': [toggle],
+    '[data-rise]': [below('rise0'), element('riseOnScreen')], '.reel-frame': [element('reelFrame')], '.reel-panel': [below('reelPanel')],
+    '.teaser-card': [below('teaser0'), below('teaser1'), below('teaser2')], '.compare-frame': [below('glassFrame')], '.band-panel': [below('bandPanel')],
+    '.band': [element('band')], '.gp-1': [element('phone1')], '.marq': [element('marq')], '.mq-type': [element('mqType')], '[data-marquee]': many('track', 2) };
   const doc = { documentElement: root, querySelector: s => (parts[s] || [])[0] || null, querySelectorAll: s => parts[s] || [] };
-  const { win } = makeWindow(env);
+  const { win } = makeWindow(env, { requestAnimationFrame: () => 1, cancelAnimationFrame() {} });
   let log = null;
   if (env.gsap) { const stub = makeGsap(env); win.gsap = stub.gsap; win.ScrollTrigger = stub.ScrollTrigger; log = stub.log; }
   vm.runInNewContext(source, { window: win, document: doc });
   const snap = () => ({ pos: figure.style.props['--pos'], before: before.attrs['aria-pressed'], after: after.attrs['aria-pressed'], text: range.attrs['aria-valuetext'] });
-  const stage = () => ({ booked: book.classList.contains('booked'), picked: slot.classList.contains('on'), desktop: dev.classList.contains('is-desktop'), count: count.textContent });
+  const stage = () => ({ booked: book.classList.contains('booked'), picked: slot.classList.contains('on') });
   const out = { shown: controls.hidden === false, initial: snap(), classes: Array.from(root.classList.set).sort(), stage: stage() };
   if (log) {
     const hero = log.timelines.find(tl => tl.vars.paused);
@@ -165,16 +167,20 @@ function run(env) {
     out.defaultEase = hero ? typeof hero.vars.defaults.ease : null;
     out.tweenEases = hero ? Array.from(new Set(hero.tweens.map(t => typeof t.vars.ease))) : [];
     if (hero) {
-      const OUT = hero.vars.defaults.ease, IO = hero.tweens.find(t => t.names[0] === 'plinth').vars.ease;
-      const xs = [0, 0.1, 0.25, 0.5, 0.75, 0.9, 1];
-      out.curves = { out: xs.map(OUT), io: xs.map(IO) };
+      // OUT: the opening's default; IO: the comparison's glide (the before/after buttons), tested below.
+      out.curvesFrom = hero.vars.defaults.ease;
     }
     out.autoAlpha = log.varsSeen.some(v => v && ('autoAlpha' in v || 'visibility' in v));
     out.snap = log.varsSeen.some(v => v && v.scrollTrigger && 'snap' in v.scrollTrigger);
     out.pins = log.varsSeen.filter(v => v && v.scrollTrigger && v.scrollTrigger.pin).length;
-    out.scrollTimelines = log.timelines.filter(tl => tl.vars.scrollTrigger).length;
+    out.scrollTimelines = log.timelines.filter(tl => tl.vars.scrollTrigger).map(tl => ({ scrub: tl.vars.scrollTrigger.scrub, pin: 'pin' in tl.vars.scrollTrigger,
+      tweens: tl.tweens.map(t => ({ names: t.names, ease: t.vars.ease, props: Object.keys(t.vars).concat(Object.keys(t.from || {})) })) }));
     out.scrubs = log.tweens.filter(t => t.vars && t.vars.scrollTrigger && t.vars.scrollTrigger.scrub)
-      .map(t => ({ names: t.names, props: Object.keys(t.vars).filter(k => k !== 'scrollTrigger' && k !== 'ease').sort(), y: t.vars.y, ease: t.vars.ease }));
+      .map(t => ({ names: t.names, props: Object.keys(t.vars).concat(Object.keys(t.from || {})).filter(k => k !== 'scrollTrigger' && k !== 'ease').sort(), scrub: t.vars.scrollTrigger.scrub, ease: t.vars.ease }));
+    out.reveals = log.tweens.filter(t => t.kind === 'fromTo' && t.vars.scrollTrigger && t.vars.scrollTrigger.once).map(t => t.names[0]);
+    out.heroP = (() => { const tl = log.timelines.find(t => t.vars.scrollTrigger && t.vars.scrollTrigger.trigger && t.vars.scrollTrigger.trigger.name === 'hero');
+      if (!tl) return null; tl.vars.scrollTrigger.onUpdate({ progress: 0.4 }); return win.__glass.heroP; })();
+    out.marquee = log.creates.filter(c => c.trigger && c.trigger.name === 'marq').length;
     out.notOnce = log.creates.filter(c => !c.once).length;
     if (hero && env.press) {
       toggle.attrs['aria-pressed'] = 'true';  // reel.js flips it first (it is loaded first)
@@ -193,7 +199,13 @@ function run(env) {
   }
   range.value = '0'; range.listeners.input[0](); out.input = snap();
   after.listeners.click[0](); out.click = { ...snap(), value: String(range.value) };
-  out.glides = log ? log.tweens.filter(t => t.kind === 'to' && t.vars && 'v' in t.vars).length : 0;
+  const glides = log ? log.tweens.filter(t => t.kind === 'to' && t.vars && 'v' in t.vars) : [];
+  out.glides = glides.length;
+  if (log && out.curvesFrom && glides.length) {
+    const xs = [0, 0.1, 0.25, 0.5, 0.75, 0.9, 1];
+    out.curves = { out: xs.map(out.curvesFrom), io: xs.map(glides[0].vars.ease) };
+  }
+  delete out.curvesFrom;
   return out;
 }
 const desktop = { width: 1440, height: 900, fine: true, reduce: false };
@@ -473,9 +485,10 @@ function run(env) {
   const reel = element('reel', { video: [video], '.reel-frame': [frame], '.reel-cap, [data-reel-toggle]': [cap, toggle] });
   reel.getBoundingClientRect = () => ({ left: 0, top: env.reelTop === undefined ? 2000 : env.reelTop, width: 1200, height: 675 });
   const root = element('html'); root.classList = classList(['js', 'motion']);
-  const parts = { '[data-compare]': [figure], '[data-reel]': [reel] };
+  // Liquid Glass (Task 37): the showreel's lens is the frame; the chapter panel stands in at the reel's position.
+  const parts = { '[data-compare]': [figure], '[data-reel]': [reel], '.reel-frame': [frame], '.reel-panel': [reel] };
   const doc = { documentElement: root, querySelector: s => (parts[s] || [])[0] || null, querySelectorAll: s => parts[s] || [] };
-  const { win, listeners } = makeWindow(env);
+  const { win, listeners } = makeWindow(env, { requestAnimationFrame: () => 1, cancelAnimationFrame() {} });
   let log = null;
   if (env.gsap) {
     const stub = makeGsap(env);
@@ -497,7 +510,8 @@ function run(env) {
   if (log) {
     const entrance = log.tweens.filter(t => t.kind === 'fromTo');
     out.entrance = entrance.map(t => ({ names: t.names, from: t.from, to: { ...t.vars, scrollTrigger: undefined },
-      trigger: t.vars.scrollTrigger ? { scrub: t.vars.scrollTrigger.scrub || null, once: Boolean(t.vars.scrollTrigger.once), pin: 'pin' in t.vars.scrollTrigger } : null }));
+      trigger: t.vars.scrollTrigger ? { scrub: t.vars.scrollTrigger.scrub || null, once: Boolean(t.vars.scrollTrigger.once), pin: 'pin' in t.vars.scrollTrigger } : null }))
+      .filter(t => t.names[0] === 'frame' || t.names[0] === 'reel');
   }
   if (env.touchFirst) { value = '30'; range.listeners.input[0](); }
   const sweepTrigger = log ? log.creates.find(c => c.trigger === figure) : null;
@@ -937,9 +951,9 @@ class DemoScriptTests(unittest.TestCase):
         self.assertEqual(plain['initial'], {'pos': '50%', 'before': 'false', 'after': 'false', 'text': '50 of 100 showing the redesign'})
         self.assertEqual(plain['input'], {'pos': '0%', 'before': 'true', 'after': 'false', 'text': 'Before only'})
         self.assertEqual(plain['click'], {'pos': '100%', 'before': 'false', 'after': 'true', 'text': 'After only', 'value': '100'})
-        # Without GSAP the CSS hold on the hero is released at once and the stage keeps its final, static state.
+        # Without GSAP the CSS hold on the hero is released at once and the booking card keeps its final, static state.
         self.assertNotIn('ph-wait', plain['classes'])
-        self.assertEqual(plain['stage'], {'booked': True, 'picked': True, 'desktop': True, 'count': '100'})
+        self.assertEqual(plain['stage'], {'booked': True, 'picked': True})
         # With GSAP the buttons glide via a tween but end in the same state.
         for name in ('first', 'released', 'reduced', 'phone'):
             with self.subTest(case=name):
@@ -953,16 +967,16 @@ class DemoScriptTests(unittest.TestCase):
         for query in r['first']['queries']:
             with self.subTest(query=query):
                 self.assertTrue(all('prefers-reduced-motion' in part for part in query.split(', ')))
-        # Reduced motion: nothing is animated, nothing is pinned or scrubbed, the stage stays final.
+        # Reduced motion: nothing is animated, nothing is pinned or scrubbed, no marquee runs, the card stays final.
         reduced = r['reduced']
         self.assertIsNone(reduced['heroEnd'])
-        self.assertEqual((reduced['pins'], reduced['scrubs']), (0, []))
+        self.assertEqual((reduced['pins'], reduced['scrubs'], reduced['scrollTimelines'], reduced['marquee'], reduced['reveals']), (0, [], [], 0, []))
         self.assertEqual(reduced['stage'], plain['stage'])
 
     def test_home_hero_plays_once_within_five_seconds(self):
-        # Daylight (Task 33): the opening and the stage choreography are one timeline that plays once, at load, and is
-        # over by 5 s (WCAG 2.2.2: the loops that keep moving have the Pause motion button). It only plays while CSS still
-        # holds the hero; after the failsafe has let go nothing is hidden again.
+        # The opening (headline, copy, the two glass cards from depth, then the booking) is one timeline that plays once, at
+        # load, and is over by 5 s (WCAG 2.2.2: everything that keeps moving has the Pause motion button). It only plays while
+        # CSS still holds the hero; after the failsafe has let go nothing is hidden again.
         r = self.node_json(HOME_SCRIPT, HOME)
         for name in ('first', 'phone'):
             with self.subTest(case=name):
@@ -971,44 +985,38 @@ class DemoScriptTests(unittest.TestCase):
                 self.assertGreater(result['heroEnd'], 3)
                 self.assertLessEqual(result['heroEnd'], 5)
                 self.assertNotIn('ph-wait', result['classes'])
-                self.assertEqual(result['notOnce'], 0)  # the comparison's one sweep trigger
+                self.assertEqual(result['notOnce'], 1)  # only the marquee's in-view trigger repeats; the sweep runs once
+                self.assertEqual(result['marquee'], 1)
         released = r['released']
         self.assertIsNone(released['heroEnd'])
         self.assertIsNone(released['heroPlayed'])
         self.assertNotIn('ph-wait', released['classes'])
-        self.assertEqual(released['stage'], {'booked': True, 'picked': True, 'desktop': True, 'count': '100'})
+        self.assertEqual(released['stage'], {'booked': True, 'picked': True})
 
     def test_home_hero_takes_over_the_css_hold_without_a_flash(self):
         # Night Shift Task 23: fromTo applies the start states at once (matching the CSS held under .ph-wait), then home.js
-        # removes .ph-wait. The stage pieces animate transform, opacity and clip-path only (plus the ring's dash offset).
+        # removes .ph-wait. Liquid Glass (Task 37): the lines, the copy, the card layer, then the cards themselves.
         r = self.node_json(HOME_SCRIPT, HOME)
         for name in ('first', 'phone'):
             with self.subTest(case=name):
                 kinds, names = r[name]['openingKinds'], r[name]['openingNames']
                 self.assertTrue(kinds)
-                self.assertNotIn('from', kinds)
-                self.assertEqual(names[:5], ['line0', 'fade0', 'stage', 'plinth', 'device0'])
-                self.assertIn('card0', names)
-                self.assertIn('ring', names)
+                self.assertEqual(set(kinds), {'fromTo'})
+                self.assertEqual(names, ['line0', 'fade0', 'deck', 'card0'])
 
     def test_home_stage_starts_unbooked_and_ends_in_the_static_state(self):
-        # The choreography starts from the "before" state (set while the stage is still held hidden) and finishes in
-        # exactly the state the static page shows: Desktop checked at 2.2 s, 10:30 picked at 3.6 s, booked at 4.5 s.
+        # The booking starts from the "before" state (set while the cards are still held hidden) and finishes in exactly the
+        # state the static page shows: 10:30 picked at 2.6 s, booked at 3.3 s.
         r = self.node_json(HOME_SCRIPT, HOME)
         first = r['first']
-        self.assertEqual(first['atStart'], {'booked': False, 'picked': False, 'desktop': False, 'count': '100'})
+        self.assertEqual(first['atStart'], {'booked': False, 'picked': False})
         self.assertEqual(first['progressedAtStart'], [])
-        self.assertEqual(first['callbacks'], [2.2, 3.6, 4.5])
-        self.assertEqual(first['atEnd'], {'booked': True, 'picked': True, 'desktop': True, 'count': '100'})
-        # The cursor arrives from off the card, visits the slot and comes to rest where CSS draws it (transform cleared).
-        cursor = first['cursor']
-        self.assertEqual(cursor[0]['from'], {'xPercent': 160, 'yPercent': 220, 'opacity': 0})
-        self.assertEqual((cursor[-1]['xPercent'], cursor[-1]['yPercent']), (0, 0))
-        self.assertIn('transform', cursor[-1]['clearProps'])
+        self.assertEqual(first['callbacks'], [2.6, 3.3])
+        self.assertEqual(first['atEnd'], {'booked': True, 'picked': True})
 
     def test_home_motion_uses_exactly_the_two_css_curves(self):
-        # Daylight motion rules: entrances on cubic-bezier(.2,.8,.2,1), changes of state on cubic-bezier(.7,0,.2,1). home.js
-        # solves them like CSS does; compare against an independent solver.
+        # Entrances on cubic-bezier(.2,.8,.2,1), changes of state on cubic-bezier(.7,0,.2,1). home.js solves them like CSS
+        # does; compare against an independent solver. Scroll-linked tweens use 'none' (the scroll is the easing).
         def css_bezier(x1, y1, x2, y2, x):
             at = lambda t, a, b: 3 * a * t * (1 - t) ** 2 + 3 * b * t * t * (1 - t) + t ** 3
             low, high = 0.0, 1.0
@@ -1028,38 +1036,55 @@ class DemoScriptTests(unittest.TestCase):
             for x, y in zip(xs, first['curves'][name]):
                 with self.subTest(curve=name, x=x):
                     self.assertAlmostEqual(y, css_bezier(*curve, x), places=4)
+        for timeline in first['scrollTimelines']:
+            for tween in timeline['tweens']:
+                self.assertEqual(tween['ease'], 'none')
+        for scrub in first['scrubs']:
+            self.assertEqual(scrub['ease'], 'none')
 
     def test_pause_motion_jumps_the_choreography_to_its_end(self):
-        # The Pause motion button (owned by reel.js, which flips aria-pressed first) also ends the stage choreography at
-        # once in its final state; pressing it again never replays it. With Save-Data the button starts pressed, so the
-        # choreography is skipped straight to its end.
+        # The Pause motion button (owned by reel.js, which flips aria-pressed first) also ends the opening at once in its
+        # final state; pressing it again never replays it. With Save-Data the button starts pressed, so the opening is skipped
+        # straight to its end.
         r = self.node_json(HOME_SCRIPT, HOME)
         press = r['press']['afterPress']
         self.assertIn(1, press['progressed'])
-        self.assertEqual(press['stage'], {'booked': True, 'picked': True, 'desktop': True, 'count': '100'})
+        self.assertEqual(press['stage'], {'booked': True, 'picked': True})
         self.assertEqual(r['press']['resumeProgressCalls'], 0)
         held = r['held']
         self.assertEqual(held['heroPlayed'], [])
         self.assertEqual(held['progressedAtStart'], [1])
-        self.assertEqual(held['atStart'], {'booked': True, 'picked': True, 'desktop': True, 'count': '100'})
+        self.assertEqual(held['atStart'], {'booked': True, 'picked': True})
         self.assertNotIn('ph-wait', held['classes'])
 
-    def test_home_has_no_pin_and_only_two_transform_scrubs(self):
-        # Daylight (Task 33): no pinned sequence and no scroll-linked timeline. The only scrubbed motion is the hero's two
-        # depth layers drifting up (y only, 8-40 px), never with reduced motion.
+    def test_home_has_no_pin_and_scroll_motion_is_transform_opacity_or_clip_only(self):
+        # Liquid Glass (Task 37): the owner asked for bolder, scroll-linked 3D motion. Still nothing is pinned by script (the
+        # hero stage is CSS sticky) and every scroll-linked tween moves transform, opacity or clip-path only, with one shared
+        # smoothing. Wide screens: the hero exit (which also feeds the WebGL scene's progress) and the phones' fly-in; every
+        # screen: the showreel lens. Below-the-fold pieces reveal once; what is already on screen is left alone.
         r = self.node_json(HOME_SCRIPT, HOME)
+        allowed = {'x', 'y', 'z', 'xPercent', 'yPercent', 'scale', 'rotationX', 'rotationY', 'rotationZ', 'opacity', 'clipPath',
+                   'transformPerspective', 'transformOrigin', 'duration', 'ease', 'immediateRender', 'stagger', 'delay', 'clearProps'}
         for name in ('first', 'released', 'held', 'phone'):
             with self.subTest(case=name):
-                self.assertEqual(r[name]['pins'], 0)
-                self.assertEqual(r[name]['scrollTimelines'], 0)
-                scrubs = r[name]['scrubs']
-                self.assertEqual([s['names'] for s in scrubs], [['devices'], ['cards']])
-                for scrub in scrubs:
-                    self.assertEqual(scrub['props'], ['y'])
-                    self.assertEqual(scrub['ease'], 'none')
-                    self.assertTrue(8 <= abs(scrub['y']) <= 40)
+                result = r[name]
+                self.assertEqual(result['pins'], 0)
+                self.assertEqual([s['names'] for s in result['scrubs']], [['reelFrame']])
+                timelines = result['scrollTimelines']
+                self.assertEqual(len(timelines), 0 if name == 'phone' else 2)
+                for scrub in [s['scrub'] for s in result['scrubs']] + [t['scrub'] for t in timelines]:
+                    self.assertEqual(scrub, 0.6)
+                for timeline in timelines:
+                    self.assertFalse(timeline['pin'])
+                    for tween in timeline['tweens']:
+                        self.assertTrue(set(tween['props']) <= allowed, tween['props'])
+                for scrub in result['scrubs']:
+                    self.assertTrue(set(scrub['props']) <= allowed, scrub['props'])
+                self.assertEqual(sorted(result['reveals']), ['bandPanel', 'glassFrame', 'reelPanel', 'rise0', 'teaser0', 'teaser1', 'teaser2'])
+        self.assertEqual(r['first']['heroP'], 0.4)  # the hero's scroll progress reaches the WebGL scene
+        self.assertIsNone(r['phone']['heroP'])
         js = HOME.read_text(encoding='utf-8')
-        for gone in ('pin:', 'PIN_', 'STACK_QUERY', 'work-exit', 'work-count', 'is-pinned', '[data-work]', '.proj', "--w'", "--sw'"):
+        for gone in ('pin:', 'PIN_', 'STACK_QUERY', 'work-exit', 'work-count', 'is-pinned', '[data-work]', '.proj', "--w'", "--sw'", 'repeat:', 'yoyo'):
             with self.subTest(gone=gone):
                 self.assertNotIn(gone, js)
 
@@ -1361,27 +1386,26 @@ class DemoScriptTests(unittest.TestCase):
         self.assertFalse(touched['started'])
         self.assertEqual((touched['finalPos'], touched['value']), ('30%', '30'))
 
-    def test_showreel_entrance_plays_once_unpinned_and_only_below_the_fold(self):
-        # Daylight (Task 33): the frame opens once from a slightly inset window as it scrolls in (no scrub: the plan allows
-        # scrubbing only in the hero; no pin; clip-path only), then the caption and Pause button rise once. Never under
-        # reduced motion, and not when the frame is already on screen (it would jump).
+    def test_showreel_lens_opens_with_the_scroll_and_the_chapters_arrive_once(self):
+        # Liquid Glass (Task 37): the frame opens from a rounded glass lens to its full size and tilts flat, linked to the
+        # scroll (clip-path and transform only, never pinned); the chapter panel rises once, only if it starts below the
+        # fold. Never under reduced motion.
         r = self.node_json(SWEEP_SCRIPT, HOME)
         for name in ('complete', 'phone'):
             with self.subTest(case=name):
-                frame, after = r[name]['entrance']
+                frame, panel = r[name]['entrance']
                 self.assertEqual(frame['names'], ['frame'])
-                self.assertEqual(frame['from'], {'clipPath': 'inset(4% 4% 4% 4% round 18px)'})
+                self.assertEqual(frame['from']['clipPath'], 'inset(9% 16% 9% 16% round 48px)')
                 self.assertEqual(frame['to']['clipPath'], 'inset(0% 0% 0% 0% round 18px)')
-                self.assertEqual(frame['to']['duration'], 1)
-                self.assertEqual(after['names'], ['cap', 'toggle'])
-                self.assertEqual(after['from'], {'opacity': 0, 'y': 14})
-                self.assertIn('opacity', after['to']['clearProps'])
-                for tween in (frame, after):
-                    self.assertEqual(tween['trigger'], {'scrub': None, 'once': True, 'pin': False})
-                    self.assertTrue(set(tween['from']) <= {'clipPath', 'opacity', 'y'})
-        for name in ('onScreen', 'reduced'):
-            with self.subTest(case=name):
-                self.assertEqual(r[name]['entrance'], [])
+                self.assertEqual((frame['to']['rotationX'], frame['to']['scale'], frame['to']['ease']), (0, 1, 'none'))
+                self.assertEqual(frame['trigger'], {'scrub': 0.6, 'once': False, 'pin': False})
+                self.assertTrue(set(frame['from']) <= {'clipPath', 'rotationX', 'scale', 'transformPerspective'})
+                self.assertEqual(panel['names'], ['reel'])
+                self.assertEqual(panel['from'], {'y': 40, 'opacity': 0})
+                self.assertIn('opacity', panel['to']['clearProps'])
+                self.assertEqual(panel['trigger'], {'scrub': None, 'once': True, 'pin': False})
+        self.assertEqual([t['names'] for t in r['onScreen']['entrance']], [['frame']])  # the panel is already on screen
+        self.assertEqual(r['reduced']['entrance'], [])
 
     def test_step_numerals_count_up_once_and_keep_their_final_text(self):
         # Task 29: Services step numerals (aria-hidden, final in the HTML) count up once as they scroll in. Only below the
@@ -1572,6 +1596,248 @@ class DemoScriptTests(unittest.TestCase):
         js = DEMO.read_text(encoding='utf-8')
         for token in ('fetch(', 'XMLHttpRequest', 'sendBeacon', 'WebSocket', 'EventSource', 'http://', 'https://'):
             self.assertNotIn(token, js)
+
+
+# Liquid Glass (Task 37): the shell (site.js), the glass layer (glass.js), the WebGL boot (glass-boot.js) and the pause
+# hand-off from reel.js, run in Node against the same stub DOM.
+SITE = Path(__file__).resolve().parents[1] / 'assets' / 'site.js'
+GLASS = Path(__file__).resolve().parents[1] / 'assets' / 'glass.js'
+GLASS_BOOT = Path(__file__).resolve().parents[1] / 'assets' / 'glass-boot.js'
+
+# glass-boot.js: which environments import the scene, and when. import() is replaced by a recording stub (vm scripts have
+# no module loader); everything else runs as shipped.
+GLASS_BOOT_SCRIPT = HARNESS + r"""
+const source = fs.readFileSync(process.argv[1], 'utf8').replace('import(SCENE)', '__import(SCENE)');
+const settle = () => new Promise(resolve => setImmediate(resolve));
+async function run(env) {
+  const host = element('host');
+  const imports = [], idle = [], timers = [], contexts = [];
+  const doc = { readyState: env.complete ? 'complete' : 'interactive', querySelector: s => (s === '[data-gl]' && !env.noHost ? host : null),
+    createElement: tag => ({ tag, getContext: kind => { contexts.push(kind); return env.noWebGL ? null : {}; } }) };
+  const nav = { connection: { saveData: Boolean(env.saveData) } };
+  if (env.memory !== undefined) nav.deviceMemory = env.memory;
+  if (env.cores !== undefined) nav.hardwareConcurrency = env.cores;
+  const { win, listeners } = makeWindow(env, { navigator: nav, requestIdleCallback: (fn, o) => idle.push([fn, o]), setTimeout: (fn, ms) => timers.push([fn, ms]) });
+  let started = null;
+  const __import = url => { imports.push(url); return env.fail ? Promise.reject(new Error('offline')) : Promise.resolve({ start: (h, g) => { started = { host: h.name, shared: g === win.__glass }; } }); };
+  let error = null;
+  try { vm.runInNewContext(source, { window: win, document: doc, __import }); } catch (e) { error = String(e); }
+  const out = { error, beforeLoad: imports.length, loadListeners: (listeners.load || []).length };
+  (listeners.load || []).forEach(l => l.fn({ type: 'load' }));
+  out.afterLoad = imports.length;
+  out.idleTimeout = idle.length ? idle[0][1].timeout : null;
+  idle.splice(0).forEach(([fn]) => fn());
+  await settle();
+  out.imports = imports;
+  out.contexts = contexts;
+  out.started = started;
+  out.liveRemoved = host.classList.set.size === 0;
+  out.decide = win.__glass && win.__glass.wantsGL ? [
+    win.__glass.wantsGL({ reduce: false, saveData: false, narrow: false, lowEnd: false, webgl: true }),
+    win.__glass.wantsGL({ reduce: true, saveData: false, narrow: false, lowEnd: false, webgl: true }),
+    win.__glass.wantsGL({ reduce: false, saveData: true, narrow: false, lowEnd: false, webgl: true }),
+    win.__glass.wantsGL({ reduce: false, saveData: false, narrow: true, lowEnd: false, webgl: true }),
+    win.__glass.wantsGL({ reduce: false, saveData: false, narrow: false, lowEnd: true, webgl: true }),
+    win.__glass.wantsGL({ reduce: false, saveData: false, narrow: false, lowEnd: false, webgl: false })] : null;
+  return out;
+}
+(async () => {
+  const desktop = { width: 1440, height: 900, fine: true, reduce: false, memory: 8, cores: 8 };
+  const cases = { desktop, complete: { ...desktop, complete: true }, unknownDevice: { width: 1440, height: 900, fine: true, reduce: false },
+    reduced: { ...desktop, reduce: true }, saveData: { ...desktop, saveData: true }, narrow: { ...desktop, width: 760 },
+    lowMemory: { ...desktop, memory: 2 }, fourCores: { ...desktop, cores: 4 }, noWebGL: { ...desktop, noWebGL: true },
+    noHost: { ...desktop, noHost: true }, fail: { ...desktop, fail: true } };
+  const out = {};
+  for (const [name, env] of Object.entries(cases)) out[name] = await run(env);
+  console.log(JSON.stringify(out));
+})();
+"""
+
+# site.js: the menu and the glass nav pill hiding on scroll down and coming back on scroll up, near the top, with the menu
+# open, or on keyboard focus inside it.
+SHELL_SCRIPT = HARNESS + r"""
+const source = fs.readFileSync(process.argv[1], 'utf8');
+const header = element('header'), menu = element('menu'), nav = element('nav');
+menu.attrs['aria-expanded'] = 'false';
+let focused = null;
+menu.focus = () => { focused = 'menu'; };
+const root = element('html');
+const parts = { '[data-menu]': [menu], '[data-nav]': [nav], '.site-header': [header] };
+const doc = { documentElement: root, listeners: {}, addEventListener(type, fn) { (this.listeners[type] = this.listeners[type] || []).push(fn); },
+  querySelector: s => (parts[s] || [])[0] || null, querySelectorAll: s => parts[s] || [] };
+const { win, listeners } = makeWindow({ width: 390, height: 844, fine: false, reduce: false }, { scrollY: 0, location: { pathname: '/' } });
+vm.runInNewContext(source, { window: win, document: doc, getComputedStyle: () => ({ display: 'inline-flex' }) });
+const steps = [];
+const state = () => ({ hidden: header.classList.contains('is-hidden'), expanded: menu.attrs['aria-expanded'], open: nav.classList.contains('open') });
+const scroll = y => { win.scrollY = y; (listeners.scroll || []).forEach(l => l.fn({ type: 'scroll' })); };
+const step = (name, act) => { act(); steps.push([name, state()]); };
+step('start', () => {});
+step('down a little, near the top', () => scroll(80));
+step('down past the first screen', () => scroll(600));
+step('a jitter of 3px up', () => scroll(597));
+step('up', () => scroll(400));
+step('down again', () => scroll(900));
+step('focus inside the header', () => (header.listeners.focusin || []).forEach(fn => fn({ type: 'focusin' })));
+step('down after focus', () => scroll(1300));
+step('open the menu', () => (menu.listeners.click || []).forEach(fn => fn({ type: 'click' })));
+step('down with the menu open', () => scroll(1800));
+step('Escape', () => (doc.listeners.keydown || []).forEach(fn => fn({ key: 'Escape' })));
+step('back to the top', () => scroll(40));
+console.log(JSON.stringify({ steps, focused, passive: (listeners.scroll || []).every(l => l.options && l.options.passive), js: root.classList.contains('js') }));
+"""
+
+# reel.js's Pause motion button also pauses the glass layer and the WebGL loop (window.__glass), and every video.
+PAUSE_SCRIPT = HARNESS + r"""
+const source = fs.readFileSync(process.argv[1], 'utf8');
+function run(env) {
+  const videos = ['loop', 'phone'].map(name => {
+    const src = element('source'); src.dataset.src = '/assets/video/' + name + '.mp4';
+    const v = element(name, { source: [src] }); v.dataset.loop = '';
+    Object.assign(v, { paused: true, load() {}, play() { v.paused = false; return Promise.resolve(); }, pause() { v.paused = true; } });
+    return v;
+  });
+  const motion = element('motion'); motion.hidden = true; motion.attrs['aria-pressed'] = 'false';
+  const parts = { 'video[data-loop]': videos, '[data-motion-toggle]': [motion] };
+  const doc = { documentElement: element('html'), readyState: 'complete', hidden: false, listeners: {}, addEventListener(type, fn) { (this.listeners[type] = this.listeners[type] || []).push(fn); },
+    querySelector: s => (parts[s] || [])[0] || null, querySelectorAll: s => parts[s] || [] };
+  const observers = [];
+  class FakeObserver { constructor(cb) { this.cb = cb; this.targets = []; observers.push(this); } observe(t) { this.targets.push(t); } }
+  const { win } = makeWindow(env, { IntersectionObserver: FakeObserver, navigator: { connection: { saveData: Boolean(env.saveData) } } });
+  const calls = [];
+  if (env.shared) win.__glass = { paused: false, onPauseChange: p => calls.push(p) };
+  vm.runInNewContext(source, { window: win, document: doc });
+  observers.forEach(o => o.targets.forEach(t => o.cb([{ isIntersecting: true, target: t }])));
+  const out = { initial: win.__glass.paused, playing: videos.map(v => !v.paused) };
+  (motion.listeners.click || []).forEach(fn => fn({ type: 'click' }));
+  out.pressed = { paused: win.__glass.paused, aria: motion.attrs['aria-pressed'], playing: videos.map(v => !v.paused) };
+  (motion.listeners.click || []).forEach(fn => fn({ type: 'click' }));
+  out.released = { paused: win.__glass.paused, aria: motion.attrs['aria-pressed'], playing: videos.map(v => !v.paused) };
+  out.calls = calls;
+  return out;
+}
+const desktop = { width: 1440, height: 900, fine: true, reduce: false };
+console.log(JSON.stringify({ shared: run({ ...desktop, shared: true }), alone: run(desktop), saveData: run({ ...desktop, saveData: true, shared: true }) }));
+"""
+
+# glass.js: Lenis only with motion allowed, the drift held by Pause motion, refraction only in Chromium.
+GLASS_SCRIPT = HARNESS + r"""
+const source = fs.readFileSync(process.argv[1], 'utf8');
+function run(env) {
+  const fields = many('field', 4).map(f => { f.style.transform = ''; return f; });
+  const defs = element('defs'); defs.namespaceURI = 'svg-namespace';
+  const parts = { '.atmos i': fields, '[data-lg-defs]': [defs], '.lg, .site-header .nav': [] };
+  const root = element('html');
+  const doc = { documentElement: root, hidden: false, listeners: {}, addEventListener(type, fn) { (this.listeners[type] = this.listeners[type] || []).push(fn); },
+    querySelector: s => (parts[s] || [])[0] || null, querySelectorAll: s => parts[s] || [], fonts: { ready: { then() {} } } };
+  const frames = [], cancelled = [];
+  let lenis = 0, ticks = 0;
+  class Lenis { constructor(o) { lenis++; this.options = o; } on() {} raf() {} }
+  const { win } = makeWindow(env, { Lenis, requestAnimationFrame: fn => { frames.push(fn); return frames.length; }, cancelAnimationFrame: id => cancelled.push(id),
+    navigator: { connection: { saveData: Boolean(env.saveData) }, userAgentData: { brands: env.chromium ? [{ brand: 'Chromium' }] : [{ brand: 'Firefox' }] } } });
+  if (env.gsap) { const stub = makeGsap(env); stub.gsap.ticker = { add() { ticks++; } }; win.gsap = stub.gsap; win.ScrollTrigger = stub.ScrollTrigger; }
+  let error = null;
+  try { vm.runInNewContext(source, { window: win, document: doc, getComputedStyle: () => ({ borderTopLeftRadius: '20px' }), Promise }); } catch (e) { error = String(e); }
+  const out = { error, lenis, ticks, refract: root.classList.contains('lg-refract'), driftFrames: frames.length };
+  if (frames.length) { frames.shift()(1000); }
+  out.moved = fields[0].style.transform || null;
+  const before = cancelled.length;
+  win.__glass.paused = true; win.__glass.onPauseChange(true);
+  out.cancelledOnPause = cancelled.length - before;
+  const queued = frames.length;
+  win.__glass.paused = false; win.__glass.onPauseChange(false);
+  out.resumed = frames.length - queued;
+  return out;
+}
+const desktop = { width: 1440, height: 900, fine: true, reduce: false };
+console.log(JSON.stringify({ motion: run({ ...desktop, gsap: true, chromium: true }), safari: run({ ...desktop, gsap: true }),
+  reduced: run({ ...desktop, reduce: true, gsap: true, chromium: true }), saveData: run({ ...desktop, saveData: true, gsap: true, chromium: true }) }));
+"""
+
+
+class GlassShellScriptTests(unittest.TestCase):
+    def node_json(self, script, path):
+        out = subprocess.run(['node', '-e', script, str(path)], capture_output=True, text=True, check=True)
+        return json.loads(out.stdout)
+
+    def test_webgl_loads_only_on_capable_desktops_after_load_and_idle(self):
+        r = self.node_json(GLASS_BOOT_SCRIPT, GLASS_BOOT)
+        desktop = r['desktop']
+        self.assertIsNone(desktop['error'])
+        self.assertEqual((desktop['beforeLoad'], desktop['afterLoad'], desktop['loadListeners']), (0, 0, 1))  # never before load and idle
+        self.assertEqual(desktop['idleTimeout'], 1500)
+        self.assertEqual(desktop['imports'], ['/assets/glass-scene.js'])
+        self.assertEqual(desktop['started'], {'host': 'host', 'shared': True})
+        self.assertEqual(r['complete']['loadListeners'], 0)  # already loaded: straight to idle
+        self.assertEqual(r['complete']['imports'], ['/assets/glass-scene.js'])
+        self.assertEqual(r['unknownDevice']['imports'], ['/assets/glass-scene.js'])  # browsers that do not report memory or cores
+        # Reduced motion, Save-Data, 760px or less, under 4 GB, 4 cores or fewer, no WebGL, no hero: the scene is never
+        # imported (and, except without WebGL, no WebGL context is ever created to find out).
+        for name in ('reduced', 'saveData', 'narrow', 'lowMemory', 'fourCores', 'noWebGL', 'noHost'):
+            with self.subTest(case=name):
+                self.assertIsNone(r[name]['error'])
+                self.assertEqual(r[name]['imports'], [])
+                self.assertIsNone(r[name]['started'])
+                if name != 'noWebGL':
+                    self.assertEqual(r[name]['contexts'], [])
+        self.assertEqual(desktop['decide'], [True, False, False, False, False, False])
+        # A failed import leaves the still in place (the host only loses a live flag it never had).
+        self.assertEqual(r['fail']['imports'], ['/assets/glass-scene.js'])
+        self.assertIsNone(r['fail']['started'])
+        self.assertTrue(r['fail']['liveRemoved'])
+        js = GLASS_BOOT.read_text(encoding='utf-8')
+        for banned in ('URLSearchParams', 'location', '?poster', 'http', 'importmap'):
+            self.assertNotIn(banned, js)
+        self.assertIn("const SCENE = '/assets/glass-scene.js';", js)
+
+    def test_nav_pill_hides_on_scroll_down_and_returns_on_up_focus_and_menu(self):
+        r = self.node_json(SHELL_SCRIPT, SITE)
+        self.assertTrue(r['js'])
+        self.assertTrue(r['passive'])
+        self.assertEqual(r['steps'], [
+            ['start', {'hidden': False, 'expanded': 'false', 'open': False}],
+            ['down a little, near the top', {'hidden': False, 'expanded': 'false', 'open': False}],
+            ['down past the first screen', {'hidden': True, 'expanded': 'false', 'open': False}],
+            ['a jitter of 3px up', {'hidden': True, 'expanded': 'false', 'open': False}],
+            ['up', {'hidden': False, 'expanded': 'false', 'open': False}],
+            ['down again', {'hidden': True, 'expanded': 'false', 'open': False}],
+            ['focus inside the header', {'hidden': False, 'expanded': 'false', 'open': False}],
+            ['down after focus', {'hidden': True, 'expanded': 'false', 'open': False}],
+            ['open the menu', {'hidden': False, 'expanded': 'true', 'open': True}],
+            ['down with the menu open', {'hidden': False, 'expanded': 'true', 'open': True}],
+            ['Escape', {'hidden': False, 'expanded': 'false', 'open': False}],
+            ['back to the top', {'hidden': False, 'expanded': 'false', 'open': False}],
+        ])
+        self.assertEqual(r['focused'], 'menu')  # Escape returns focus to the menu button
+
+    def test_pause_motion_also_pauses_the_glass_layer_and_the_webgl_loop(self):
+        r = self.node_json(PAUSE_SCRIPT, REEL)
+        shared = r['shared']
+        self.assertFalse(shared['initial'])
+        self.assertEqual(shared['playing'], [True, True])
+        self.assertEqual(shared['pressed'], {'paused': True, 'aria': 'true', 'playing': [False, False]})
+        self.assertEqual(shared['released'], {'paused': False, 'aria': 'false', 'playing': [True, True]})
+        self.assertEqual(shared['calls'], [True, False])  # window.__glass.onPauseChange, which the scene and glass.js listen to
+        self.assertEqual(r['alone']['pressed']['paused'], True)  # the shared state exists even before glass.js loads
+        save = r['saveData']
+        self.assertTrue(save['initial'])  # Save-Data: held from the start, so WebGL never runs
+        self.assertEqual(save['playing'], [False, False])
+
+    def test_glass_layer_keeps_lenis_drift_and_refraction_to_where_they_belong(self):
+        r = self.node_json(GLASS_SCRIPT, GLASS)
+        motion = r['motion']
+        self.assertIsNone(motion['error'])
+        self.assertEqual((motion['lenis'], motion['ticks']), (1, 1))  # Lenis, driven by GSAP's ticker (ScrollTrigger in step)
+        self.assertTrue(motion['refract'])
+        self.assertEqual(motion['driftFrames'], 1)
+        self.assertRegex(motion['moved'], r'^translate3d\(-?[\d.]+vmax,-?[\d.]+vmax,0\)$')  # transform only
+        self.assertEqual(motion['cancelledOnPause'], 1)
+        self.assertEqual(motion['resumed'], 1)
+        self.assertFalse(r['safari']['refract'])  # no SVG backdrop filters outside Chromium: plain blur
+        self.assertEqual(r['safari']['lenis'], 1)
+        reduced = r['reduced']
+        self.assertEqual((reduced['lenis'], reduced['ticks'], reduced['driftFrames'], reduced['refract']), (0, 0, 0, False))
+        self.assertIsNone(reduced['moved'])
+        self.assertFalse(r['saveData']['refract'])  # Save-Data: no displacement maps are drawn
 
 
 if __name__ == '__main__':

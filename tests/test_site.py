@@ -374,7 +374,8 @@ REEL_ROUTES = ['index.html', 'work/index.html', 'services/index.html', 'about/in
 # Pricing's quote sheet moved to pricing.css in Daylight (Task 34).
 KIT_ROUTES = ['index.html', 'work/index.html', 'services/index.html']
 # Every stylesheet the site ships (Daylight, Task 34, adds one sheet per large inner page). Global CSS rules are checked on all.
-SHEETS = ('site.css', 'home.css', 'pages.css', 'kit.css', 'work.css', 'services.css', 'pricing.css', 'about.css')
+# Liquid Glass (Task 37) adds the shared glass shell, glass.css, loaded on every page right after site.css.
+SHEETS = ('site.css', 'glass.css', 'home.css', 'pages.css', 'kit.css', 'work.css', 'services.css', 'pricing.css', 'about.css')
 # The inner pages with their own stylesheet, loaded after pages.css.
 OWN_SHEET_ROUTES = {'work/index.html': 'work.css', 'services/index.html': 'services.css', 'pricing/index.html': 'pricing.css',
                     'about/index.html': 'about.css'}
@@ -385,7 +386,9 @@ STATIC_ROUTES = ['contact/index.html', 'demo/index.html']
 # (Task 33) adds the homepage hero's two device loops (laptop and phone).
 # Daylight (Task 34): Work adds six device loops (a laptop and a phone per concept), Services the Care plan phone loop and
 # About the launch film.
-VIDEOS_PER_ROUTE = {'index.html': 3, 'services/index.html': 3, 'work/index.html': 7, 'about/index.html': 1}
+# Liquid Glass (Task 37): the homepage's hero has no <video> (the WebGL scene makes its own, after load); it shows the
+# showreel, the marquee's footage, the closing band's footage and its two glass phones.
+VIDEOS_PER_ROUTE = {'index.html': 5, 'services/index.html': 3, 'work/index.html': 7, 'about/index.html': 1}
 # Daylight (Task 34) adds the inner-page choreography hooks from the prototype (lists, benches and their cues, drawn lines,
 # the Services illustrations, the Work queue and the Pricing quote sheet).
 MOTION_HOOKS = ('data-ph', 'data-reveal', 'data-parallax', 'data-devices', 'data-rise', 'data-work', 'data-intro', 'data-stagger',
@@ -397,6 +400,11 @@ REEL_HOOKS = ('data-reel', 'data-reel-toggle', 'data-loop', 'data-motion-toggle'
 # Daylight (Task 33/34): every motion page loads GSAP, ScrollTrigger and motion.js but no page loads details.js (no card tilt
 # or cursor ring under the Daylight motion rules).
 HOME_GSAP_TAGS = GSAP_TAGS[:3]
+# Liquid Glass (Task 37): the homepage runs its own motion in home.js and loads GSAP and ScrollTrigger without motion.js.
+INDEX_GSAP_TAGS = GSAP_TAGS[:2]
+# The glass shell's scripts: Lenis and glass.js on the motion pages, the WebGL boot on the homepage only.
+GLASS_TAGS = ['<script src="/assets/vendor/lenis/lenis.min.js" defer></script>', '<script src="/assets/glass.js" defer></script>']
+GLASS_BOOT_TAG = '<script src="/assets/glass-boot.js" defer></script>'
 DETAILS_TAG = GSAP_TAGS[3]
 # Network, storage and markup-injection APIs no motion script may use; autoAlpha (visibility:hidden), snap (scroll
 # hijacking) and preventDefault (swallowing a visitor's key or click) are banned too.
@@ -625,7 +633,10 @@ class DesignSystemTests(unittest.TestCase):
                                'What we do', 'Let’s make your website as good as your work.'])
         sections = re.findall(r'<section class="([a-z -]+)"', main)
         # Daylight (Task 33): the same order on paper, with warm bands behind the showreel and the comparison.
-        self.assertEqual(sections, ['hero', 'reel band-warm', 'work', 'ba band-warm', 'services', 'band'])
+        # Liquid Glass (Task 37): the marquee (decorative, labelled "What we make", no heading) sits between the showreel and
+        # the concept projects.
+        self.assertEqual(sections, ['hero', 'reel band-warm', 'marq', 'work', 'ba band-warm', 'services', 'band'])
+        self.assertIn('<section class="marq" aria-label="What we make">\n<p class="sr-only">New websites, redesigns and care plans.</p>', main)
         # The process now lives on /services/ and the questions on /services/ and /pricing/.
         self.assertNotIn('<ol class="steps"', main)
         self.assertEqual(main.count('<details'), 0)
@@ -657,17 +668,19 @@ class DesignSystemTests(unittest.TestCase):
             with self.subTest(banned=banned):
                 self.assertNotIn(banned, text)
         self.assertNotRegex(text, r'\d+\s*(day|week|hour)')
-        # Daylight (Task 33): the hero's page-speed card is an illustration, not a measurement. It sits in the aria-hidden
-        # card layer, says "Example", and the figure's description calls the score an example.
-        rig = re.search(r'<figure class="rig" role="img" aria-label="([^"]+)">(.*?)</figure>', self.home_main, re.S)
-        self.assertTrue(rig.group(1).startswith('Illustration:'))
-        self.assertIn('an example page speed score', rig.group(1))
-        self.assertIn('fictional concept business', rig.group(1))
-        speed = re.search(r'<div class="frag frag-speed">(.*?)</div>', rig.group(2), re.S).group(1)
-        self.assertIn('<small>Example, concept site</small>', speed)
-        self.assertRegex(rig.group(2), r'<div class="rig-cards" aria-hidden="true">\s*<div class="frag frag-speed">')
+        # Liquid Glass (Task 37): the hero is described as an illustration of fictional concept businesses; its glass cards
+        # sit in an aria-hidden layer, the booking card is tagged "Concept" and the enquiry card says it is an example.
+        hero = re.search(r'<section class="hero".*?</section>', self.home_main, re.S).group(0)
+        label = re.search(r'<div class="hero-gl" data-gl role="img" aria-label="([^"]+)"></div>', hero)
+        self.assertIsNotNone(label)
+        self.assertTrue(label.group(1).startswith('Illustration:'))
+        self.assertIn('fictional concept businesses', label.group(1))
+        cards = re.search(r'<div class="hero-cards" aria-hidden="true">(.*?)</div>\n</div>\n<p class="hero-cap', hero, re.S)
+        self.assertIsNotNone(cards)
+        self.assertIn('<span class="tag">Concept</span>', cards.group(1))
+        self.assertIn('<small>Example, Sam, website redesign</small>', cards.group(1))
         self.assertNotIn('Lighthouse', self.home_main)
-        self.assertIn('<span class="tag">Concept</span>', rig.group(2))
+        self.assertNotIn('Page speed', self.home_main)
 
     def test_before_after_comparison(self):
         figure = re.search(r'<figure class="compare" data-compare>.*?</figure>', self.home_main, re.S).group(0)
@@ -805,8 +818,15 @@ class DesignSystemTests(unittest.TestCase):
         for route in self.ROUTES + ['404.html']:
             with self.subTest(route=route):
                 html = (OUT / route).read_text()
+                gsap_tags = INDEX_GSAP_TAGS if route == 'index.html' else HOME_GSAP_TAGS
                 for tag in HOME_GSAP_TAGS:
+                    self.assertEqual(html.count(tag), 1 if route in MOTION_ROUTES and tag in gsap_tags else 0)
+                # Liquid Glass (Task 37): Lenis and glass.js follow the page scripts on every motion page; the WebGL boot
+                # follows them on the homepage only. Contact, Demo and 404 load neither.
+                for tag in GLASS_TAGS:
                     self.assertEqual(html.count(tag), 1 if route in MOTION_ROUTES else 0)
+                self.assertEqual(html.count(GLASS_BOOT_TAG), 1 if route == 'index.html' else 0)
+                self.assertEqual(html.count('glass-scene.js'), 0)  # imported by glass-boot.js only, never a <script>
                 self.assertEqual(html.count(DETAILS_TAG), 0)
                 self.assertNotIn('details.js', html)
                 self.assertEqual(html.count(HOME_TAG), 1 if route == 'index.html' else 0)
@@ -814,8 +834,8 @@ class DesignSystemTests(unittest.TestCase):
                 self.assertEqual(html.count(SCENES_TAG), 1 if route in SCENES_ROUTES else 0)
                 self.assertEqual(html.count('scenes.js'), 1 if route in SCENES_ROUTES else 0)
                 if route in MOTION_ROUTES:
-                    tags = (HOME_GSAP_TAGS + ([SCENES_TAG] if route in SCENES_ROUTES else []) + ([REEL_TAG] if route in REEL_ROUTES else [])
-                            + ([HOME_TAG] if route == 'index.html' else []))
+                    tags = (gsap_tags + ([SCENES_TAG] if route in SCENES_ROUTES else []) + ([REEL_TAG] if route in REEL_ROUTES else [])
+                            + ([HOME_TAG] if route == 'index.html' else []) + GLASS_TAGS + ([GLASS_BOOT_TAG] if route == 'index.html' else []))
                     positions = [html.index(tag) for tag in tags]
                     self.assertEqual(positions, sorted(positions))
                     self.assertGreater(positions[0], html.index('</footer>'))
@@ -829,8 +849,10 @@ class DesignSystemTests(unittest.TestCase):
         # progress, the hover previews); motion.js to 12 KB (the Pricing quote-sheet opening) and the inner pages' scroll
         # scenes went to their own scenes.js (8 KB). Every page stays inside the plan's 30 KB of first-party script
         # (test_first_party_javascript_budget_per_page).
+        # Liquid Glass (Task 37): the shared shell (glass.js) and the WebGL boot (glass-boot.js, at most 2 KB) follow the
+        # same rules.
         budgets = {'home.js': 12 * 1024, 'motion.js': 12 * 1024, 'motion-boot.js': 1024, 'details.js': 6 * 1024, 'reel.js': 10 * 1024,
-                   'scenes.js': 8 * 1024}
+                   'scenes.js': 8 * 1024, 'glass.js': 7 * 1024, 'glass-boot.js': 2 * 1024}
         scripts = {}
         for name, budget in budgets.items():
             path = OUT / 'assets' / name
@@ -1162,7 +1184,7 @@ class DesignSystemTests(unittest.TestCase):
         checked = 0
         for page in pages.glob('*.html'):
             route = 'index.html' if page.stem == 'index' else '404.html' if page.stem == '404' else f'{page.stem}/index.html'
-            css = self.css + (self.home_css if page.stem == 'index' else self.pages_css)
+            css = self.css + (OUT / 'assets/glass.css').read_text() + (self.home_css if page.stem == 'index' else self.pages_css)
             if route in OWN_SHEET_ROUTES:
                 css += (OUT / 'assets' / OWN_SHEET_ROUTES[route]).read_text()
             if route in KIT_ROUTES:
@@ -1526,7 +1548,8 @@ class ImagePerformanceAndSharingTests(unittest.TestCase):
                 # (two on Services, one on Work). Daylight (Task 33): the two hero loops carry data-src until reel.js plays them;
                 # Task 34 adds Work's six device loops and the Services Care plan phone loop, the same way.
                 video_sources = re.findall(r'<source (?:data-)?src="[^"]+\.mp4" type="video/mp4">', main)
-                self.assertEqual(main.count('<source data-src='), {'index.html': 2, 'work/index.html': 6, 'services/index.html': 1}.get(route, 0))
+                # Liquid Glass (Task 37): the homepage's four silent loops (marquee and closing footage, two glass phones).
+                self.assertEqual(main.count('<source data-src='), {'index.html': 4, 'work/index.html': 6, 'services/index.html': 1}.get(route, 0))
                 self.assertEqual(len(video_sources), VIDEOS_PER_ROUTE.get(route, 0))
                 self.assertEqual(main.count('<source '), len(parser.images) + len(video_sources))
         self.assertGreaterEqual(total, 40)
@@ -1778,10 +1801,11 @@ class AboutPageTests(unittest.TestCase):
 
     def test_reuses_shared_assets_and_motion_hooks_only(self):
         # Daylight (Task 34): the shared inner-page sheet plus About's own; reel.js plays the launch film. No details.js.
-        self.assertEqual(re.findall(r'<link rel="stylesheet" href="([^"]+)">', self.head), ['/assets/site.css', '/assets/pages.css', '/assets/about.css'])
+        self.assertEqual(re.findall(r'<link rel="stylesheet" href="([^"]+)">', self.head), ['/assets/site.css', '/assets/glass.css', '/assets/pages.css', '/assets/about.css'])
         scripts = re.findall(r'<script src="([^"]+)"', self.html)
         self.assertEqual(scripts, ['/assets/motion-boot.js', '/assets/site.js', '/assets/vendor/gsap/gsap.min.js',
-                                   '/assets/vendor/gsap/ScrollTrigger.min.js', '/assets/motion.js', '/assets/scenes.js', '/assets/reel.js'])
+                                   '/assets/vendor/gsap/ScrollTrigger.min.js', '/assets/motion.js', '/assets/scenes.js', '/assets/reel.js',
+                                   '/assets/vendor/lenis/lenis.min.js', '/assets/glass.js'])  # Liquid Glass shell (Task 37)
         self.assertNotIn('data-intro', self.html)
         # Night Shift Task 23: About opens like Work, Services and Pricing (headline line masks, staggered photo reveal).
         self.assertEqual(self.main.count(' data-ph '), 1)
@@ -1906,7 +1930,8 @@ class DesignCritiqueFixTests(unittest.TestCase):
             with self.subTest(page='work', article=article[:60]):
                 self.assertEqual(article.count(CONCEPT_LABEL), 1)
                 self.assertRegex(article, rf'<p class="cs-label">{re.escape(CONCEPT_LABEL)}</p>\s*<h2 id="[a-z]+-title" class="cs-title" data-rise>')
-        self.assertIn('<p class="hero-cap">Harbourside Mobile Detailing<span>Concept project · fictional business</span></p>', self.home)
+        # Liquid Glass (Task 37): the hero's screens show two concepts, so its glass caption says so in general terms.
+        self.assertIn('<p class="hero-cap lg">On screen<span>Concept projects for fictional businesses</span></p>', self.home)
         self.assertIn('.teaser-card h3{margin:20px 0 0;', self.home_css)
         self.assertIn('.teaser-label{margin:10px 0 0;', self.home_css)
 
@@ -1920,22 +1945,26 @@ class DesignCritiqueFixTests(unittest.TestCase):
         phone = rules_for(media_blocks(self.home_css, 'max-width:640px'), '.reel-frame')[0]
         self.assertIn('width:min(100%,calc(74svh * 9 / 16))', phone)
         self.assertIn('aspect-ratio:9/16', phone)
+        # Liquid Glass (Task 37): on wide screens the lens opens to a larger frame, still never taller than 84% of the screen.
+        wide = rules_for(media_blocks(self.home_css, 'min-width:961px'), '.reel-frame')[0]
+        self.assertEqual(wide, 'width:min(100%,calc(84svh * 16 / 9))')
 
     def test_mobile_hero_puts_the_headline_and_buttons_first(self):
-        # Daylight (Task 33) replaces Night Shift's photo hero: below 1024px the copy (headline, line, both buttons) comes
-        # first in one column and the stage follows, so the H1 and the primary call to action lead on a phone. On phones the
-        # stage is redrawn for a narrow frame and drops the Mobile/Desktop card.
+        # Liquid Glass (Task 37): the copy (headline, line, both buttons) comes before the glass cards and the caption in the
+        # markup; below 1024px it spans the full width, the cards leave below 1200px, and at 760px and below the hero shows
+        # the portrait still (logo on top) with the copy at the bottom on an opaque veil.
         tablet = media_blocks(self.home_css, 'max-width:1023px')
-        self.assertIn('grid-template-columns:minmax(0,1fr)', rules_for(tablet, '.hero-in')[0])
+        self.assertIn('grid-column:1/-1', rules_for(tablet, '.hero-copy')[0])
         self.assertIn('grid-row:auto', rules_for(tablet, '.hero-copy')[0])
+        self.assertEqual(rules_for(media_blocks(self.home_css, 'max-width:1199px'), '.hero-cards'), ['display:none'])
         hero = re.search(r'<section class="hero".*?</section>', self.home, re.S).group(0)
         for part in ('<p class="hero-sub"', '<div class="actions"'):
             self.assertLess(hero.index('<h1'), hero.index(part))
-            self.assertLess(hero.index(part), hero.index('<div class="stage">'))
-        phone = media_blocks(self.home_css, 'max-width:640px')
-        self.assertIn('aspect-ratio:62/66', rules_for(phone, '.rig')[0])
-        self.assertEqual(rules_for(phone, '.frag-dev'), ['display:none'])
-        self.assertIn('width:100%', rules_for(phone, '.actions .button')[0])
+            self.assertLess(hero.index(part), hero.index('<div class="hero-cards"'))
+        phone = media_blocks(self.home_css, 'max-width:760px')
+        self.assertIn('background-image:url("/assets/glass/hero-glass-poster-m.jpg")', rules_for(phone, '.hero-gl')[0])
+        self.assertIn('rgba(246,245,241,.96) 0%', rules_for(phone, '.hero-gl::after')[0])
+        self.assertIn('width:100%', rules_for(media_blocks(self.home_css, 'max-width:640px'), '.actions .button')[0])
         self.assertNotIn('detail-darkroom', self.home)
         self.assertNotIn('hero-photo', self.home_css)
 
@@ -2275,6 +2304,120 @@ class WorkArtDirectionTests(unittest.TestCase):
             self.assertIn(needle, self.work)
 
 
+class LiquidGlassTests(unittest.TestCase):
+    """Liquid Glass (Task 37, docs/NIGHT_SHIFT_PLAN.md and the strategist brief): the shared glass shell on every page, the
+    WebGL hero's module and its fallbacks, the CSP, and the shipped scripts. Behaviour is tested in tests/test_demo_js.py
+    (GlassShellScriptTests and the home.js tests)."""
+    ROUTES = SiteBuildTests.ROUTES + ['404.html']
+
+    @classmethod
+    def setUpClass(cls):
+        build()
+        cls.html = {route: (OUT / route).read_text() for route in cls.ROUTES}
+        cls.scene = (OUT / 'assets/glass-scene.js').read_text()
+        cls.glass_css = (OUT / 'assets/glass.css').read_text()
+
+    def test_no_inline_script_import_map_or_style_and_the_csp_is_unchanged(self):
+        for route, html in self.html.items():
+            with self.subTest(route=route):
+                self.assertNotRegex(html, r'<script(?![^>]*\bsrc=)')
+                self.assertNotIn('importmap', html)
+                self.assertNotIn('type="module"', html)  # the scene is imported by glass-boot.js, never a module tag
+                self.assertNotIn(' style="', html)
+                self.assertNotIn('<style', html)
+        self.assertEqual((OUT / '_headers').read_text(), HEADERS)
+        self.assertIn("script-src 'self';", HEADERS)
+
+    def test_scene_imports_only_vendored_three_by_relative_path(self):
+        imports = re.findall(r"^import [^;]*? from '([^']+)';", self.scene, re.M)
+        self.assertEqual(imports, ['./vendor/three/three.module.min.js', './vendor/three/jsm/SVGLoader.js', './vendor/three/jsm/BufferGeometryUtils.js'])
+        for path in imports:
+            self.assertTrue((OUT / 'assets' / path).resolve().is_file(), path)
+        # The vendored helpers import three by the same relative path, so the browser fetches one copy and needs no map.
+        for helper in ('SVGLoader.js', 'BufferGeometryUtils.js'):
+            self.assertRegex((OUT / 'assets/vendor/three/jsm' / helper).read_text(), r"\} from '\.\./three\.module\.min\.js';")
+        self.assertNotRegex(self.scene, r"from 'three|import\('three")
+        for banned in ('http', 'fetch(', 'XMLHttpRequest', 'innerHTML', 'eval(', 'localStorage', '?poster', 'preserveDrawingBuffer'):
+            self.assertNotIn(banned, self.scene)
+        self.assertEqual(self.scene, (ROOT / 'assets/glass-scene.js').read_text())  # modules ship as written
+        # Budgets: the scene file 40 KB at most, and everything the boot imports (three, its two helpers and the scene)
+        # 900 KB at most; none of it is on any page's first load (no page names it in a tag).
+        self.assertLessEqual(len(self.scene.encode()), 40 * 1024)
+        total = sum((OUT / 'assets' / path).stat().st_size for path in imports) + len(self.scene.encode())
+        self.assertLessEqual(total, 900 * 1024)
+        for route, html in self.html.items():
+            with self.subTest(route=route):
+                self.assertNotIn('vendor/three', html)
+
+    def test_scene_runs_only_in_view_visible_and_unpaused_and_caps_its_resolution(self):
+        run = self.scene.split('function setRunning(want) {', 1)[1].split('\n  }', 1)[0]
+        for needle in ('inView', '!G.paused', '!document.hidden', "host.classList.contains('is-live')",
+                       'renderer.setAnimationLoop(loop)', 'renderer.setAnimationLoop(null)', 'v.pause()'):
+            self.assertIn(needle, run)
+        self.assertIn('new IntersectionObserver(', self.scene)
+        self.assertIn("document.addEventListener('visibilitychange', () => setRunning(true));", self.scene)
+        self.assertIn('(G.pauseFns = G.pauseFns || []).push(() => setRunning(true));', self.scene)
+        self.assertIn("const DPR_CAP = window.matchMedia('(max-width: 760px)').matches ? 1.5 : 1.75;", self.scene)
+        self.assertIn('renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, DPR_CAP));', self.scene)
+        # Yaw stays within about 32 degrees, so the glass name never reads backwards.
+        yaw = float(re.search(r'const YAW = ([\d.]+);', self.scene).group(1))
+        self.assertLessEqual(yaw, 0.56)
+        self.assertIn('-YAW, YAW)', self.scene)
+        self.assertIn('clock.getDelta(), 1 / 20', self.scene)  # frame-rate independent, never a huge jump after a pause
+
+    def test_glass_shell_is_on_every_page_with_opaque_fallbacks(self):
+        atmos = '<div class="atmos" aria-hidden="true"><i></i><i></i><i></i><i></i></div>'
+        defs = '<svg class="lg-defs" width="0" height="0" aria-hidden="true" focusable="false"><defs data-lg-defs></defs></svg>'
+        for route, html in self.html.items():
+            with self.subTest(route=route):
+                self.assertEqual(html.count('<link rel="stylesheet" href="/assets/glass.css">'), 1)
+                self.assertLess(html.index('/assets/site.css'), html.index('/assets/glass.css'))
+                self.assertIn('Skip to main content</a>' + atmos + '<header class="site-header">', html)
+                self.assertEqual(html.count(defs), 1 if route in MOTION_ROUTES else 0)
+                self.assertEqual(html.count('/assets/vendor/lenis/'), 1 if route in MOTION_ROUTES else 0)  # none on Contact, Demo, 404
+        css = self.glass_css
+        self.assertIn('backdrop-filter:var(--lg-filter,blur(18px) saturate(1.8))', css)
+        self.assertIn('@supports not ((-webkit-backdrop-filter:blur(1px)) or (backdrop-filter:blur(1px))){', css)
+        reduced = media_blocks(css, 'prefers-reduced-transparency:reduce')
+        self.assertIn('.lg,.site-header .nav,.button.outline{background:#FBFAF7;-webkit-backdrop-filter:none;backdrop-filter:none}', reduced)
+        self.assertIn('.lenis.lenis-smooth{scroll-behavior:auto!important}', css)
+        self.assertEqual(rules_for(base_rules(css), '.site-header.is-hidden'), ['transform:translateY(calc(-100% - 16px))'])
+        # Glass text stays readable: ink on frosted white, white on dark glass.
+        self.assertGreaterEqual(contrast('#0E0E0D', '#E8E4DC'), 4.5)  # ink over the darkest the light glass gets over the fields
+        self.assertIn('color:#fff', rules_for(base_rules(css), '.lg-dark')[0])
+        js = (OUT / 'assets/glass.js').read_text()
+        self.assertIn("root.classList.add('lg-refract');", js)
+        self.assertLess(js.index("brands.some(b => /Chromium/.test(b.brand))"), js.index("root.classList.add('lg-refract');"))
+        self.assertLess(js.index('if (!motionOK) return;'), js.index('new win.Lenis('))
+        for banned in MOTION_SCRIPT_BANS:
+            self.assertNotIn(banned, js)
+
+    def test_shipped_scripts_are_the_sources_without_comments(self):
+        # The build strips whole-line comments and indentation from first-party classic scripts (not from modules, not from
+        # scripts with template literals). Every shipped script must still parse, and keep every line of code in order.
+        import shutil
+        import subprocess
+        from scripts.build_site import strip_js
+        node = shutil.which('node')
+        for path in sorted((ROOT / 'assets').glob('*.js')):
+            shipped = (OUT / 'assets' / path.name).read_text()
+            source = path.read_text()
+            with self.subTest(script=path.name):
+                if path.name == 'glass-scene.js' or '`' in source:
+                    self.assertEqual(shipped, source)
+                else:
+                    self.assertEqual(shipped, strip_js(source))
+                    # Every shipped line is a source line (trimmed), in the source's order: nothing rewritten or reordered.
+                    lines = iter(line.strip() for line in source.splitlines())
+                    for line in shipped.splitlines():
+                        self.assertTrue(any(line == candidate or candidate.endswith('*/ ' + line) for candidate in lines), line)
+                if node:
+                    module = ['--input-type=module'] if path.name == 'glass-scene.js' else []
+                    result = subprocess.run(['node', *module, '--check'], input=shipped, capture_output=True, text=True)
+                    self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(strip_js('a();\n  // note\n  /* block\n   still */ b();\n/* one */\n  c(); // kept\n'), 'a();\nb();\nc(); // kept\n')
+
+
 if __name__ == '__main__':
     unittest.main()
 
@@ -2576,21 +2719,21 @@ class MotionQualityTests(unittest.TestCase):
                     self.assertTrue(set(classes.split()) & media[hero], classes)
                 if hero == 'ab-hero':
                     self.assertIn('<div class="ab-photos" aria-hidden="true">', head.group(2))
-        # The homepage hero is held the same way and opened with fromTo, never from. Daylight (Task 33): the headline lines,
-        # the copy and the whole stage (devices, cards, caption, Pause motion) are held, and nothing else.
+        # The homepage hero is held the same way and opened with fromTo, never from. Liquid Glass (Task 37): the headline
+        # lines, the copy and the glass cards are held, and nothing else (the WebGL host and its still are never hidden).
         home = self.guarded(self.home_css)
         held = ['.ph-wait .hero-h .ln>span{transform:translateY(108%)}',
-                '.ph-wait :is(.hero-sub,.hero .actions){opacity:0;transform:translateY(18px)}', '.ph-wait .stage{opacity:0}']
+                '.ph-wait :is(.hero-sub,.hero .actions){opacity:0;transform:translateY(18px)}', '.ph-wait .hero-cards{opacity:0}']
         for rule in held:
             with self.subTest(rule=rule):
                 self.assertIn(rule, home)
         bare = re.sub(r'/\*.*?\*/', '', home, flags=re.S)
         self.assertEqual([sel.strip() + '{' + body + '}' for sel, body in re.findall(r'([^{}]+)\{([^{}]*)\}', bare) if '.ph-wait' in sel], held)
-        hero = self.home_js.split('const heroTimeline', 1)[1].split('const layers', 1)[0]
+        hero = self.home_js.split('const heroTimeline', 1)[1].split('const heroExit', 1)[0]
         self.assertNotIn('.from(', hero)
-        for target in ("$$('.hero-h .ln > span')", "$$('[data-hero-fade]')", "$('.stage')"):
+        for target in ("$$('.hero-h .ln > span')", "$$('[data-hero-fade]')", "$('.hero-cards')"):
             self.assertIn(target, hero)
-        self.assertIn('tl.fromTo(stage, { opacity: 0 }, { opacity: 1', hero)
+        self.assertIn('tl.fromTo(deck, { opacity: 0 }, { opacity: 1', hero)
         self.assertIn('class="hero-sub" data-hero-fade', self.home)
         self.assertIn('class="actions" data-hero-fade', self.home)
 
@@ -2834,9 +2977,18 @@ class ViewTransitionAndDetailTests(unittest.TestCase):
         self.assertNotIn('teaser', self.css['site.css'])
         for route in self.ROUTES:
             self.assertNotIn('/assets/details.js', self.html[route])  # so no tilt on any card
-        # The homepage cards wipe in with the shared, staggered clip-path reveal.
+        # Liquid Glass (Task 37): the homepage cards fan in from depth (home.js) and preview their loop through reel.js; the
+        # owner asked for a tilt on them, so home.js tilts them within the same limits as details.js did: at most 6 degrees,
+        # fine pointers with motion allowed only, and never on keyboard focus.
         home = main_of(self.html['index.html'])
-        self.assertEqual(home.count('<figure class="teaser-img" data-reveal>'), 3)
+        self.assertEqual(len(re.findall(r'<figure class="teaser-img" data-hover-src="/assets/video/loop-(?:hb|gl|fc)-desktop\.mp4">', home)), 3)
+        js = (OUT / 'assets/home.js').read_text()
+        self.assertIn('const MAX_TILT = 6;', js)
+        self.assertIn('Math.max(-MAX_TILT, Math.min(MAX_TILT, value))', js)
+        tilt = js.split('const tilt = () =>', 1)[1].split('const demoSweep', 1)[0]
+        self.assertNotIn('focus', tilt)
+        self.assertIn("mm.add(MOTION + ' and (hover: hover) and (pointer: fine)', tilt);", js)
+        self.assertEqual(js.count('tilt)'), 1)  # the tilt runs only from that branch
 
 
 class SocialClipTests(unittest.TestCase):
@@ -2957,61 +3109,95 @@ class DaylightTests(unittest.TestCase):
         cls.hero = re.search(r'<section class="hero".*?</section>', cls.home, re.S).group(0)
         cls.css = {name: (OUT / 'assets' / name).read_text() for name in ('site.css', 'home.css', 'pages.css', 'kit.css')}
 
-    def test_hero_plays_exactly_two_silent_loops_inside_a_described_figure(self):
-        videos = re.findall(r'<video ([^>]*)>(.*?)</video>', self.hero, re.S)
-        self.assertEqual(len(videos), 2)
-        self.assertEqual(self.home.count('<video'), 3)  # plus the showreel
-        figure = re.search(r'<figure class="rig" role="img" aria-label="[^"]{80,}">(.*?)</figure>', self.hero, re.S)
-        self.assertIsNotNone(figure)
-        devices = re.search(r'<div class="rig-devices" aria-hidden="true">(.*?)<div class="rig-cards" aria-hidden="true">', figure.group(1), re.S)
-        self.assertIsNotNone(devices)
-        self.assertEqual(devices.group(1).count('<video'), 2)  # both videos are inside the aria-hidden device layer
-        for (tag, inner), (name, size, loop) in zip(videos, (('loop-hb-desktop', (1280, 800), 'wide'), ('loop-hb-phone', (780, 1688), ''))):
-            with self.subTest(video=name):
-                attrs = dict(re.findall(r'([a-z-]+)(?:="([^"]*)")?', tag))
-                for flag in ('muted', 'loop', 'playsinline', 'data-loop'):
-                    self.assertIn(flag, attrs)
-                self.assertEqual(attrs['data-loop'], loop)  # "wide": the laptop never plays at 640px and below (reel.js)
-                self.assertEqual(attrs['preload'], 'none')
-                for banned in ('autoplay', 'src', 'controls', 'poster'):
-                    self.assertNotIn(banned, attrs)  # the posters come from CSS (AVIF first), so no second JPEG download
-                self.assertEqual((int(attrs['width']), int(attrs['height'])), size)
-                # data-src only: reel.js sets src right before the first play, so nothing downloads before that.
-                self.assertEqual(re.findall(r'<source ([^>]*)>', inner), [f'data-src="/assets/video/{name}.mp4" type="video/mp4"'])
-                self.assertTrue((OUT / f'assets/video/{name}.mp4').is_file())
-                poster = OUT / f'assets/video/{name}-poster.jpg'
-                self.assertEqual(jpeg_size(poster), size)  # poster and video share one shape
-                self.assertTrue((OUT / f'assets/video/{name}-poster.avif').is_file())
+    def test_hero_is_a_described_glass_scene_over_a_still_that_never_goes_away(self):
+        # Liquid Glass (Task 37): the hero has no <video> and no <img>. Its host is a described role="img" whose background is
+        # the still render (CSS, so it is there without JS and before anything loads); glass-scene.js only ever adds an
+        # aria-hidden canvas on top, and a failed import, start or a lost GPU context leaves the still showing.
+        self.assertNotIn('<video', self.hero)
+        self.assertNotIn('<img', self.hero)
+        self.assertEqual(self.home.count('<video'), 5)  # the showreel, two footage loops and two glass phones
+        host = re.search(r'<div class="hero-gl" data-gl role="img" aria-label="([^"]{80,})"></div>', self.hero)
+        self.assertIsNotNone(host)
+        self.assertEqual(self.html.count('data-gl'), 1)
+        base = base_rules(self.css['home.css'])
+        rule = rules_for(base, '.hero-gl')[0]
+        self.assertIn('url("/assets/glass/hero-glass-poster.jpg")', rule)
+        self.assertIn('/cover', rule)
+        mobile = rules_for(media_blocks(self.css['home.css'], 'max-width:760px'), '.hero-gl')[0]
+        self.assertIn('url("/assets/glass/hero-glass-poster-m.jpg")', mobile)
+        for name, size in (('hero-glass-poster.jpg', (2160, 1350)), ('hero-glass-poster-m.jpg', (780, 1688))):
+            with self.subTest(poster=name):
+                self.assertEqual(jpeg_size(OUT / 'assets/glass' / name), size)
+        # The still is never hidden by CSS; only a canvas that is not live is.
+        self.assertEqual(rules_for(base, '.hero-gl:not(.is-live) .hero-canvas'), ['display:none'])
+        for selectors, body in re.findall(r'([^{}]+)\{([^{}]*)\}', re.sub(r'/\*.*?\*/', '', self.css['home.css'], flags=re.S)):
+            if '.hero-gl' in selectors and 'canvas' not in selectors:
+                self.assertNotRegex(body, r'display:none|opacity:0(?![.\d])|visibility:hidden', selectors)
+        scene = (ROOT / 'assets/glass-scene.js').read_text()
+        boot = (ROOT / 'assets/glass-boot.js').read_text()
+        self.assertIn("canvas.setAttribute('aria-hidden', 'true')", scene)
+        self.assertIn("canvas.addEventListener('webglcontextlost', () => { host.classList.remove('is-live');", scene)
+        catch = re.search(r"\.catch\(\(\) => ([^;]*\))\);", boot)
+        self.assertEqual(catch.group(1), "host.classList.remove('is-live')")  # nothing removes the still
+        for code in (scene, boot):
+            self.assertNotIn('.remove()', code)
+            self.assertNotIn('backgroundImage', code)
+            self.assertNotIn('innerHTML', code)
 
-    def test_homepage_uses_only_the_harbourside_loops_and_cards_have_no_video(self):
-        # Strategist brief 33a item 7: no hero rotation between the hb/gl/fc loops and no hover-to-play loop on the concept
-        # cards (each would add about 1 MB, and touch screens cannot hover). Only the two hb loops and their posters appear.
-        page = self.html + self.css['home.css']
-        self.assertEqual(re.findall(r'loop-(?:gl|fc)-', page), [])
-        self.assertEqual(sorted(set(re.findall(r'loop-hb-(?:desktop|phone)(?:-poster)?\.(?:mp4|avif|jpg)', page))),
-                         ['loop-hb-desktop-poster.avif', 'loop-hb-desktop-poster.jpg', 'loop-hb-desktop.mp4',
-                          'loop-hb-phone-poster.avif', 'loop-hb-phone-poster.jpg', 'loop-hb-phone.mp4'])
+    def test_homepage_loops_exist_load_late_and_cards_preview_through_reel_js(self):
+        # Liquid Glass (Task 37) reverses strategist brief 33a item 7 by owner direction: the concept cards preview their
+        # gl/fc/hb loops (through reel.js, created only on hover or when centred) and the WebGL screens play the gl and hb
+        # loops. Every loop and poster the page, its stylesheet or the scene names must exist; home.js still starts no video.
+        page = self.html + self.css['home.css'] + (OUT / 'assets/glass-scene.js').read_text()
+        names = set(re.findall(r'/assets/(?:video|glass)/[a-z0-9-]+\.(?:mp4|jpg|avif|svg)', page))
+        names |= {f'/assets/video/loop-{n}-desktop{s}' for n in ('gl', 'hb') for s in ('.mp4', '-poster-800.jpg')}
+        self.assertGreaterEqual(len(names), 12)
+        for name in sorted(names):
+            with self.subTest(file=name):
+                self.assertTrue((OUT / name.lstrip('/')).is_file())
         cards = re.findall(r'<article class="teaser-card".*?</article>', self.home, re.S)
         self.assertEqual(len(cards), 3)
-        for card in cards:
+        for card, loop in zip(cards, ('hb', 'gl', 'fc')):
             self.assertNotIn('<video', card)
+            self.assertIn(f'data-hover-src="/assets/video/loop-{loop}-desktop.mp4"', card)
         home_js = (OUT / 'assets/home.js').read_text()
         for needle in ('loop-', 'video', 'mouseenter', 'pointerenter'):
-            self.assertNotIn(needle, home_js)  # home.js starts no video; reel.js is the only controller
+            self.assertNotIn(needle, home_js)  # home.js starts no video; reel.js is the only controller on the page
+        # The scene's two screen videos get their file only when the scene first runs (in view, tab visible, not paused).
+        scene = (OUT / 'assets/glass-scene.js').read_text()
+        self.assertIn("v.preload = 'none';", scene)
+        self.assertIn('if (!v.src) { v.src = v.dataset.src; v.load(); }', scene)
+        self.assertNotIn("preload = 'auto'", scene)
 
-    def test_hero_posters_come_from_css_as_avif_with_a_jpeg_fallback(self):
-        base = base_rules(self.css['home.css'])
-        for shot, name, ratio in (('.hd-shot-desktop', 'loop-hb-desktop', '1280/800'), ('.hd-shot-phone', 'loop-hb-phone', '780/1688')):
-            with self.subTest(shot=shot):
-                rule = rules_for(base, shot)[0]
-                self.assertIn(f'aspect-ratio:{ratio}', rule)  # the frame reserves the video's exact shape
-                jpg, avif = f'/assets/video/{name}-poster.jpg', f'/assets/video/{name}-poster.avif'
-                self.assertLess(rule.index(f'background-image:url("{jpg}")'), rule.index('image-set('))
-                self.assertIn(f'image-set(url("{avif}") type("image/avif"),url("{jpg}") type("image/jpeg"))', rule)
-                for path in (jpg, avif):
-                    self.assertTrue((OUT / path.lstrip('/')).is_file())
-        self.assertIn('object-fit:cover', rules_for(base, '.hd-video')[0])
-        self.assertIn('aspect-ratio:76/62', rules_for(base, '.rig')[0])
+    def test_every_homepage_video_is_silent_lazy_and_hidden_from_assistive_tech(self):
+        parser = VideoCollector()
+        parser.feed(self.home)
+        self.assertEqual(len(parser.videos), 5)
+        for attrs, sources, ancestors in parser.videos:
+            with self.subTest(video=attrs.get('class') or attrs.get('data-poster')):
+                for flag in ('muted', 'loop', 'playsinline'):
+                    self.assertIn(flag, attrs)
+                self.assertEqual(attrs.get('preload'), 'none')
+                self.assertNotIn('autoplay', attrs)
+                self.assertNotIn('src', attrs)
+                self.assertTrue(attrs.get('width') and attrs.get('height'))
+                self.assertEqual(len(sources), 1)
+                if attrs.get('id') == 'reel-video':
+                    continue  # the showreel: ShowreelMarkupTests
+                # A silent loop: no file before reel.js plays it, no controls, its still fetched only near the screen
+                # (data-poster), and hidden from assistive technology with its decorative container.
+                self.assertIn('data-loop', attrs)
+                self.assertNotIn('controls', attrs)
+                self.assertNotIn('poster', attrs)
+                self.assertEqual(attrs.get('aria-hidden'), 'true')
+                self.assertTrue(any(a.get('aria-hidden') == 'true' for a in ancestors))
+                self.assertEqual(list(sources[0]), ['data-src', 'type'])
+                for url in (attrs['data-poster'], sources[0]['data-src']):
+                    self.assertRegex(url, r'^/assets/(?:video|glass)/[a-z0-9-]+\.(?:jpg|mp4)$')
+                    self.assertTrue((OUT / url.lstrip('/')).is_file(), url)
+        reel = (OUT / 'assets/reel.js').read_text()
+        self.assertIn("video.setAttribute('poster', video.dataset.poster);", reel)
+        self.assertIn("{ rootMargin: '50% 0px' }", reel)
 
     def test_hero_loop_files_are_within_target(self):
         for name in HERO_LOOPS:
@@ -3019,11 +3205,13 @@ class DaylightTests(unittest.TestCase):
                 self.assertLessEqual((OUT / 'assets/video' / name).stat().st_size, HERO_LOOP_TARGET)
 
     def test_first_load_stays_within_650_kb(self):
-        # Everything a first visit downloads before the hero videos: the HTML, linked CSS, every script (GSAP included), the
-        # fonts, eager photos (none), the hero posters (AVIF, what image-set() browsers fetch) and the showreel's poster. The
-        # hero loops start only after load and idle (reel.js), and the showreel and clips load nothing until played.
+        # Everything a first visit on a desktop downloads before any video or the WebGL modules: the HTML, linked CSS,
+        # every script (GSAP and Lenis included), the fonts, eager photos (none), every image the stylesheets use outside
+        # media queries (the desktop hero still and the marquee's type mask) and the showreel's poster. The loops' stills
+        # load near the screen (data-poster), the loops after load and idle, and three.js only on capable desktops.
         total = len(self.html.encode())
-        for href in re.findall(r'<link rel="stylesheet" href="(/assets/[^"]+)">', self.html):
+        sheets = re.findall(r'<link rel="stylesheet" href="(/assets/[^"]+)">', self.html)
+        for href in sheets:
             total += (OUT / href.lstrip('/')).stat().st_size
         for src in re.findall(r'<script src="(/assets/[^"]+)"', self.html):
             total += (OUT / src.lstrip('/')).stat().st_size
@@ -3033,8 +3221,12 @@ class DaylightTests(unittest.TestCase):
         parser.feed(self.home)
         eager = [attrs['src'] for attrs, _ in parser.images if attrs.get('loading') != 'lazy']
         self.assertEqual(eager, [])
-        for poster in set(re.findall(r'url\("(/assets/video/[^"]+\.avif)"\)', self.css['home.css'])) | set(re.findall(r'poster="([^"]+)"', self.home)):
-            total += (OUT / poster.lstrip('/')).stat().st_size
+        images = set(re.findall(r'\sposter="([^"]+)"', self.home))
+        for href in sheets:
+            images |= set(re.findall(r'url\("(/assets/(?!fonts/)[^"]+)"\)', base_rules((OUT / href.lstrip('/')).read_text())))
+        self.assertIn('/assets/glass/hero-glass-poster.jpg', images)
+        for image in images:
+            total += (OUT / image.lstrip('/')).stat().st_size
         self.assertLessEqual(total, FIRST_LOAD_BUDGET, f'first load is {total} bytes')
 
     def test_pause_motion_is_a_real_toggle_button_hidden_without_js(self):
@@ -3067,9 +3259,12 @@ class DaylightTests(unittest.TestCase):
         for tag in re.findall(r'<video ([^>]*)>', self.home):
             self.assertRegex(tag, r'width="\d+" height="\d+"')
         base = base_rules(self.css['home.css'])
-        for selector in ('.rig', '.reel-frame', '.teaser-img', '.vig', '.hd-shot-desktop', '.hd-shot-phone'):
+        for selector in ('.reel-frame', '.teaser-img', '.vig', '.gphone', '.mq-photos img'):
             with self.subTest(selector=selector):
                 self.assertIn('aspect-ratio:', rules_for(base, selector)[0])
+        # Liquid Glass (Task 37): the hero is one screen tall before anything loads (the still and canvas fill it).
+        self.assertIn('height:100svh', rules_for(base, '.hero-pin')[0])
+        self.assertIn('position:absolute;inset:0', rules_for(base, '.hero-gl')[0])
 
     def test_no_inline_styles_and_the_comparison_uses_set_property(self):
         for route in SiteBuildTests.ROUTES + ['404.html']:
@@ -3322,9 +3517,16 @@ class DaylightInnerPageTests(unittest.TestCase):
         for url in previews:
             self.assertTrue((OUT / url.lstrip('/')).is_file())
         self.assertNotIn('<video', index)  # nothing to download until a visitor hovers, focuses or centres a tile
+        # Liquid Glass (Task 37) reverses the Daylight brief for the homepage: its three concept cards preview the same loops.
         for route in self.ROUTES:
-            if route != 'work/index.html':
+            if route not in ('work/index.html', 'index.html'):
                 self.assertNotIn('data-hover-src', self.html[route])
+        home = main_of(self.html['index.html'])
+        self.assertEqual(re.findall(r'data-hover-src="([^"]+)"', home), previews)
+        self.assertNotIn('<video', ''.join(re.findall(r'<article class="teaser-card".*?</article>', home, re.S)))
+        home_css = base_rules((OUT / 'assets/home.css').read_text())
+        for needle in ('pointer-events:none', 'position:absolute', 'object-fit:cover'):
+            self.assertIn(needle, ''.join(rules_for(home_css, '.hover-video')))
         work_css = base_rules((OUT / 'assets/work.css').read_text())
         hover = ''.join(rules_for(work_css, '.hover-video'))
         for needle in ('pointer-events:none', 'position:absolute', 'object-fit:cover'):

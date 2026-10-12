@@ -50,7 +50,8 @@ def page_styles(key):
 # Motion (Night Shift Task 10). GSAP 3.13 (vendored in /assets/vendor/gsap/, GSAP Standard "No Charge" License; see
 # LICENSE.txt there) loads, deferred, only on the pages that animate: GSAP, then ScrollTrigger, then motion.js (shared
 # openings and reveals), then scenes.js on the inner motion pages, then reel.js (the one silent-video controller) on the
-# pages with video, then home.js on /. No page loads details.js since Daylight (Task 34): the motion rules allow no
+# pages with video, then home.js on / (which, since Liquid Glass, Task 37, replaces motion.js there: see GSAP_ONLY). No
+# page loads details.js since Daylight (Task 34): the motion rules allow no
 # decorative rotation, so cards neither tilt nor get a cursor ring. These pages also load motion-boot.js in <head>
 # (external, not deferred) to set the .js/.motion classes before first paint. Contact (the enquiry form), Demo (the
 # browser app) and the 404 page load no GSAP and no motion scripts.
@@ -60,9 +61,52 @@ GSAP_CORE = '<script src="/assets/vendor/gsap/gsap.min.js" defer></script><scrip
 # film frame) after motion.js; the homepage does not need it, which keeps its first-party script within the 30 KB budget.
 SCENES = '<script src="/assets/scenes.js" defer></script>'
 REEL = '<script src="/assets/reel.js" defer></script>'
-PAGE_SCRIPTS = {'index': GSAP_CORE + REEL + '<script src="/assets/home.js" defer></script>', 'work': GSAP_CORE + SCENES + REEL,
+# Liquid Glass (Task 37): the homepage runs its own motion in home.js (headings, cards, the hero exit), so it no longer
+# loads motion.js; that keeps it inside the 30 KB first-party script budget with the glass shell and the WebGL boot.
+GSAP_ONLY = '<script src="/assets/vendor/gsap/gsap.min.js" defer></script><script src="/assets/vendor/gsap/ScrollTrigger.min.js" defer></script>'
+PAGE_SCRIPTS = {'index': GSAP_ONLY + REEL + '<script src="/assets/home.js" defer></script>', 'work': GSAP_CORE + SCENES + REEL,
                 'services': GSAP_CORE + SCENES + REEL, 'pricing': GSAP_CORE + SCENES, 'about': GSAP_CORE + SCENES + REEL,
                 'demo': '<script src="/assets/demo.js" defer></script>', 'contact': '<script src="/assets/enquiry.js" defer></script>'}
+
+
+# Liquid Glass shell (Task 37). Every page loads glass.css after site.css (glass nav pill, colour-field atmosphere, glass
+# panels, glass footer) and the small shell in site.js (menu, nav hide/show). The motion pages add Lenis smooth scrolling
+# and glass.js (pointer light, Chromium edge refraction, the drifting atmosphere), after their page scripts; Contact, Demo
+# and the 404 page do not (the form, the demo app and plain scrolling stay as they are). Only the homepage loads
+# glass-boot.js, which decides after load and idle whether to import the WebGL hero (assets/glass-scene.js).
+GLASS_STYLE = '<link rel="stylesheet" href="/assets/glass.css">'
+ATMOSPHERE = '<div class="atmos" aria-hidden="true"><i></i><i></i><i></i><i></i></div>'
+GLASS_MOTION = '<script src="/assets/vendor/lenis/lenis.min.js" defer></script><script src="/assets/glass.js" defer></script>'
+GLASS_BOOT = '<script src="/assets/glass-boot.js" defer></script>'
+# Where glass.js builds its SVG displacement filters (Chromium only); empty and invisible otherwise.
+GLASS_DEFS = '<svg class="lg-defs" width="0" height="0" aria-hidden="true" focusable="false"><defs data-lg-defs></defs></svg>'
+# First-party classic scripts ship without whole-line comments and indentation (see strip_js). ES modules are copied as is.
+STRIP_SKIP = {'glass-scene.js'}
+
+
+def strip_js(text):
+    """Remove whole-line // comments, /* */ comment blocks that start a line, blank lines and indentation.
+
+    Only applied to scripts without template literals, so no string can span lines; code is never reordered or rewritten."""
+    out, in_block = [], False
+    for line in text.splitlines():
+        s = line.strip()
+        if in_block:
+            if '*/' not in s:
+                continue
+            in_block, s = False, s.split('*/', 1)[1].strip()
+        elif s.startswith('/*'):
+            if '*/' not in s:
+                in_block = True
+                continue
+            s = s.split('*/', 1)[1].strip()
+        if s and not s.startswith('//'):
+            out.append(s)
+    return '\n'.join(out) + '\n'
+
+
+def shell_scripts(key):
+    return (GLASS_MOTION if key in MOTION_PAGES else '') + (GLASS_BOOT if key == 'index' else '')
 
 
 def boot_script(key):
@@ -113,6 +157,10 @@ def build():
         shutil.rmtree(OUT)
     OUT.mkdir()
     shutil.copytree(ROOT / 'assets', OUT / 'assets')
+    for script in (OUT / 'assets').glob('*.js'):
+        text = script.read_text()
+        if script.name not in STRIP_SKIP and '`' not in text:
+            script.write_text(strip_js(text))
     for source in (ROOT / 'pages').glob('*.html'):
         key = source.stem
         title, desc = TITLES[key], DESCRIPTIONS[key]
@@ -125,7 +173,7 @@ def build():
             # desktop row fits without wrapping. The footer keeps every link.
             optional = ' class="nav-optional"' if href in HEADER_OPTIONAL else ''
             header_links += f'<a{optional} href="{href}"{current}>{label}</a>'
-        html = f'''<!doctype html><html lang="en-AU"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="light"><meta name="theme-color" content="#FFFFFF"><meta name="description" content="{desc}"><title>{title}</title>{head_meta(key, title, desc)}<link rel="icon" href="/assets/favicon.svg" type="image/svg+xml"><link rel="preload" href="/assets/fonts/archivo-var-latin.woff2" as="font" type="font/woff2" crossorigin><link rel="stylesheet" href="/assets/site.css">{page_styles(key)}{boot_script(key)}</head><body><a class="skip-link" href="#main">Skip to main content</a><header class="site-header"><div class="wrap nav"><a class="brand" href="/" aria-label="Cendavo home">{MARK}CENDAVO</a><button class="menu" type="button" data-menu aria-label="Toggle menu" aria-controls="site-nav" aria-expanded="false"><span aria-hidden="true">☰</span></button><nav class="nav-links" id="site-nav" data-nav aria-label="Main navigation">{header_links}</nav><a class="button small" href="/contact/">Request a free consultation</a></div></header><main id="main" tabindex="-1">{page}</main><footer class="footer"><div class="wrap"><div class="footer-row"><div><a class="brand" href="/">{MARK}CENDAVO</a><p>Website design, redesign and care for local service businesses.<br>Sydney, Australia.<br>{MAIL_LINK}</p></div><nav class="footer-links" aria-label="Footer navigation">{links}</nav></div><div class="footer-bottom"><p>© 2026 Cendavo. The demonstration project uses sample data only.</p><p>Harbourside Mobile Detailing, Greenline Landscapes and Fade &amp; Co are fictional concept businesses.</p></div></div>{FOOTER_SIGNATURE}</footer><script src="/assets/site.js" defer></script>{PAGE_SCRIPTS.get(key, '')}</body></html>'''
+        html = f'''<!doctype html><html lang="en-AU"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="light"><meta name="theme-color" content="#FFFFFF"><meta name="description" content="{desc}"><title>{title}</title>{head_meta(key, title, desc)}<link rel="icon" href="/assets/favicon.svg" type="image/svg+xml"><link rel="preload" href="/assets/fonts/archivo-var-latin.woff2" as="font" type="font/woff2" crossorigin><link rel="stylesheet" href="/assets/site.css">{GLASS_STYLE}{page_styles(key)}{boot_script(key)}</head><body><a class="skip-link" href="#main">Skip to main content</a>{ATMOSPHERE}<header class="site-header"><div class="wrap nav"><a class="brand" href="/" aria-label="Cendavo home">{MARK}CENDAVO</a><button class="menu" type="button" data-menu aria-label="Toggle menu" aria-controls="site-nav" aria-expanded="false"><span aria-hidden="true">☰</span></button><nav class="nav-links" id="site-nav" data-nav aria-label="Main navigation">{header_links}</nav><a class="button small" href="/contact/">Request a free consultation</a></div></header><main id="main" tabindex="-1">{page}</main><footer class="footer"><div class="wrap"><div class="footer-row"><div><a class="brand" href="/">{MARK}CENDAVO</a><p>Website design, redesign and care for local service businesses.<br>Sydney, Australia.<br>{MAIL_LINK}</p></div><nav class="footer-links" aria-label="Footer navigation">{links}</nav></div><div class="footer-bottom"><p>© 2026 Cendavo. The demonstration project uses sample data only.</p><p>Harbourside Mobile Detailing, Greenline Landscapes and Fade &amp; Co are fictional concept businesses.</p></div></div>{FOOTER_SIGNATURE}</footer><script src="/assets/site.js" defer></script>{PAGE_SCRIPTS.get(key, '')}{shell_scripts(key)}{GLASS_DEFS if key in MOTION_PAGES else ''}</body></html>'''
         if '{{' in html:
             raise ValueError(f'unreplaced placeholder in {source.name}')
         dest = OUT / ('index.html' if key == 'index' else '404.html' if key == NOT_FOUND else f'{key}/index.html')
