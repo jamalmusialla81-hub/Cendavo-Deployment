@@ -1,7 +1,9 @@
 import hashlib
+import json
 import re
 import struct
 import unittest
+from html import unescape
 from html.parser import HTMLParser
 from pathlib import Path
 from scripts.build_site import build, OUT
@@ -3417,17 +3419,61 @@ class DaylightTests(unittest.TestCase):
         chapters = re.search(r'<ol class="chapters" data-chapters="reel-video" aria-label="Showreel chapters" hidden>(.*?)</ol>', section, re.S)
         self.assertIsNotNone(chapters)
         self.assertIn('id="reel-video"', section)
-        items = re.findall(r'<li><button type="button" data-t="([\d.]+)"><span class="ch-t">(\d:\d\d)</span>([^<]+)</button></li>', chapters.group(1))
-        # Task 41: the liquid-glass reel (22.2 s) has six chapters, at the owner's times, in order.
+        items = [(t, label, unescape(title)) for t, label, title in re.findall(
+            r'<li><button type="button" data-t="([\d.]+)"><span class="ch-t">(\d:\d\d)</span>([^<]+)</button></li>', chapters.group(1))]
+        # Task 52: the v2 liquid-glass reel (24.67 s) has nine chapters, at the owner's times, in order;
+        # the closing "Cendavo" logo beat is merged into the first chapter, so the last chapter carries to the loop.
         self.assertEqual([(float(t), title) for t, _, title in items], [
-            (0, 'Cendavo'), (1.5, 'Your work is excellent'), (6, 'Three concept sites'), (12, 'Book from a phone'),
-            (15.4, 'Before / after'), (17.7, 'New websites, redesigns, care plans')])
+            (0, 'Cendavo'), (1, 'Your work is excellent'), (3.27, 'Your website should say so'),
+            (5.2, 'Harbourside (concept)'), (7.87, 'Greenline (concept)'), (10.13, 'Fade & Co (concept)'),
+            (12.13, 'Book from a phone'), (14.47, 'Before / after'), (18.4, 'New websites, redesigns, care plans')])
         times = [float(t) for t, _, _ in items]
         self.assertEqual(times, sorted(times))
-        self.assertLess(times[-1], 22.2)  # the reel is 22.2 seconds long
+        self.assertLess(times[-1], 24.67)  # the reel is 24.67 seconds long
         self.assertEqual(len({title for _, _, title in items}), len(items))  # distinct names, as 0:00 and 0:01 sound alike
+        self.assertNotIn('Cendavo', [title for _, _, title in items[1:]])  # both logo beats share the first chapter
         for t, label, _ in items:
             self.assertEqual(label, f'0:{int(float(t)):02d}')
+        self.assertNotIn('Three concept sites', self.home)  # the v1 grouped chapter is gone
+
+    def test_showreel_chapters_match_the_v2_cut_list(self):
+        # Task 52: every homepage chapter starts on a beat of the vendored v2 cut list (within a frame or so).
+        cut = json.loads((ROOT / 'docs/design/glass/reel-v2-chapters.json').read_text())
+        self.assertTrue(24.5 < cut['duration'] < 24.8, cut['duration'])
+        beats = [c['seconds'] for c in cut['chapters']]
+        times = [float(t) for t in re.findall(r'<li><button type="button" data-t="([\d.]+)">', self.home)]
+        self.assertEqual(len(times), 9)
+        for t in times:
+            self.assertTrue(any(abs(t - b) <= 0.01 for b in beats), t)
+        self.assertEqual(len(beats), len(times) + 1)  # only the closing logo beat (22.13 s) is dropped
+        self.assertNotIn(beats[-1], times)
+
+    def test_vendored_wide_reel_is_the_v2_cut(self):
+        # Task 52: read the MP4's movie header (mvhd) to prove the 24.67 s re-cut replaced the 22.2 s v1 file.
+        data = (ROOT / 'assets/glass/glass-reel-1600.mp4').read_bytes()
+
+        def boxes(start, end):
+            pos = start
+            while pos + 8 <= end:
+                size, kind = struct.unpack('>I4s', data[pos:pos + 8])
+                header = 8
+                if size == 1:
+                    size, header = struct.unpack('>Q', data[pos + 8:pos + 16])[0], 16
+                elif size == 0:
+                    size = end - pos
+                if size < header:
+                    break
+                yield kind, pos + header, pos + size
+                pos += size
+
+        moov = next((b, e) for k, b, e in boxes(0, len(data)) if k == b'moov')
+        body = next(b for k, b, e in boxes(*moov) if k == b'mvhd')
+        if data[body] == 1:
+            timescale, duration = struct.unpack('>IQ', data[body + 20:body + 32])
+        else:
+            timescale, duration = struct.unpack('>II', data[body + 12:body + 20])
+        seconds = duration / timescale
+        self.assertTrue(24.5 < seconds < 24.8, seconds)
 
     def test_every_homepage_image_and_video_reserves_its_space(self):
         parser = ImageCollector()
