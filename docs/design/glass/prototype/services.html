@@ -1,0 +1,287 @@
+<!doctype html>
+<html lang="en-AU">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="color-scheme" content="light">
+<meta name="theme-color" content="#F4F2ED">
+<meta name="description" content="New websites, redesigns and care plans for Sydney’s local service businesses. What is included, how long it takes and how we work.">
+<title>Services — New websites, redesigns and care plans | Cendavo</title>
+<link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
+<link rel="preload" href="/assets/fonts/archivo-var-latin.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="/glass.css">
+<link rel="stylesheet" href="/pages.css">
+<link rel="stylesheet" href="/glass-pages.css">
+<script src="/assets/vendor/gsap/gsap.min.js" defer></script>
+<script src="/assets/vendor/gsap/ScrollTrigger.min.js" defer></script>
+<script src="/assets/vendor/lenis/lenis.min.js" defer></script>
+<!-- glass.js sets .js / .js-motion before first paint; pages.js runs the page's own motion and video; glass-pages.js adds the 3D reveals. -->
+<script src="/glass.js"></script>
+<script src="/pages.js" defer></script>
+<script src="/glass-pages.js" defer></script>
+<script type="importmap">{"imports":{"three":"/assets/vendor/three/three.module.min.js","three/jsm/":"/assets/vendor/three/jsm/"}}</script>
+<script type="module" src="/gl-boot.js"></script>
+</head>
+<body data-page="services">
+<a class="skip" href="#main">Skip to main content</a>
+
+<div class="atmos" aria-hidden="true"><i class="f f1"></i><i class="f f2"></i><i class="f f3"></i><i class="f f4"></i></div>
+
+<header class="hdr" data-hdr>
+  <div class="hdr-pill lg" data-lg="pill">
+    <a class="brand" href="/" aria-label="Cendavo home">
+      <svg class="mark" viewBox="0 0 200 200" aria-hidden="true" focusable="false"><path d="M55.67 43.26C86.24 19.38 130.22 24.01 155.16 53.72L135.24 70.43C119.31 51.45 91.21 48.5 71.68 63.75Z"/><path d="M48.21 150.02C21.26 122.11 21.26 77.89 48.21 49.98L66.91 68.05C49.7 85.87 49.7 114.13 66.91 131.95Z"/><path d="M155.16 146.28C130.22 175.99 86.24 180.62 55.67 156.74L71.68 136.25C91.21 151.5 119.31 148.55 135.24 129.57Z"/></svg>
+      <span class="brand-word">Cendavo</span>
+    </a>
+    <nav class="nav" id="site-nav" aria-label="Main navigation">
+      <a href="/work.html">Work</a>
+      <a href="/services.html">Services</a>
+      <a href="/pricing.html">Pricing</a>
+      <a class="nav-extra" href="/demo/">Demo project</a>
+      <a href="/about.html">About</a>
+      <a href="/contact.html">Contact</a>
+      <a class="btn btn-ink nav-cta-m" href="/contact.html">Request a free consultation</a>
+    </nav>
+    <a class="btn btn-ink btn-sm hdr-cta" href="/contact.html" data-magnetic><span>Free consultation</span></a>
+    <button class="menu-btn" type="button" aria-controls="site-nav" aria-expanded="false" hidden>
+      <span class="menu-lines" aria-hidden="true"><i></i><i></i></span><span class="menu-label">Menu</span>
+    </button>
+  </div>
+</header>
+
+<main id="main" tabindex="-1">
+
+<!-- HERO -->
+<section class="pg-hero" aria-labelledby="sv-title">
+  <div class="pg-gl" data-gl data-gl-kind="panes" data-gl-video="loop-gl-desktop" data-gl-anchor=".sv-hero-media" data-gl-hide aria-hidden="true"></div>
+  <div class="sv-hero">
+    <div class="sv-hero-copy">
+      <h1 id="sv-title" class="pk" aria-label="Built new. Rebuilt properly. Looked after.">
+        <span class="ln" aria-hidden="true"><span class="lt">Built new.</span></span>
+        <span class="ln" aria-hidden="true"><span class="lt">Rebuilt properly.</span></span>
+        <span class="ln" aria-hidden="true"><span class="lt">Looked after.</span></span>
+      </h1>
+      <p class="pg-sub" data-hero-fade>Three ways we work with local service businesses. Most people start with a new site or a redesign, then keep us on to look after it.</p>
+    </div>
+    <figure class="photo sv-hero-media" data-gate><img src="/assets/images/barber-chair-1600.jpg" srcset="/assets/images/barber-chair-800.jpg 800w, /assets/images/barber-chair-1600.jpg 1600w" sizes="(max-width: 1023px) 100vw, 32vw" width="1600" height="1063" alt="Three black leather barber chairs in front of mirrors and a brick wall, lit by hanging lamps" fetchpriority="high" decoding="async"></figure>
+    <nav class="chap-nav" data-hero-fade aria-label="Services on this page">
+      <ul>
+        <li><a href="#new"><span class="n">New website</span><span class="f">No site yet, or one that was never finished</span></a></li>
+        <li><a href="#redesign"><span class="n">Redesign</span><span class="f">A site that looks dated or doesn’t bring in work</span></a></li>
+        <li><a href="#care"><span class="n">Care plan</span><span class="f">Updates, backups and small changes after launch</span></a></li>
+      </ul>
+    </nav>
+  </div>
+</section>
+
+<!-- NEW WEBSITE -->
+<section class="sec" id="new" aria-labelledby="new-title">
+  <div class="wrap chap">
+    <div class="chap-a">
+      <h2 id="new-title" class="h2">New website</h2>
+      <p class="lede-l">For businesses with no website, a one-page placeholder, or a site someone started and never finished. We plan the pages around how you win work, write the words with you and build it to bring in enquiries.</p>
+      <div class="vig vig-build" aria-hidden="true">
+        <div class="vb-win">
+          <div class="vb-bar"><i></i><i></i><i></i></div>
+          <div class="vb-page">
+            <div class="vb-wire">
+              <span class="w w-nav"></span><span class="w w-h1"></span><span class="w w-h2"></span><span class="w w-p"></span><span class="w w-btn"></span><span class="w w-img"></span>
+            </div>
+            <div class="vb-done">
+              <div class="vbd-nav"><b>Greenline</b><span>Projects</span><span>Services</span><em>Book a site visit</em></div>
+              <div class="vbd-h">Gardens built to be lived in.</div>
+              <p class="vbd-p">Paving, retaining walls, planting and lawns.</p>
+              <span class="vbd-btn">Book a site visit</span>
+              <img class="vbd-img" src="/assets/images/garden-path-800.jpg" width="1600" height="1067" alt="" loading="lazy" decoding="async">
+            </div>
+            <span class="vb-scan"></span>
+          </div>
+        </div>
+        <span class="vig-tag">Plan of the pages to finished page, concept</span>
+      </div>
+    </div>
+    <dl class="spec chap-b" data-stagger>
+      <div class="spec-row"><dt>Who it’s for</dt><dd>Sole traders and small teams who get most of their work by word of mouth and want somewhere good to send people.</dd></div>
+      <div class="spec-row"><dt>What’s included</dt><dd><ul class="tick">
+        <li>A plan of the pages, agreed before design starts</li>
+        <li>Design for phone first, then tablet and desktop</li>
+        <li>Words written with you, in plain language</li>
+        <li>Your photos, cropped and optimised</li>
+        <li>An enquiry form that sends to your inbox</li>
+        <li>Basic search setup: page titles, descriptions and a sitemap</li>
+        <li>Domain connection and launch</li>
+      </ul></dd></div>
+      <div class="spec-row"><dt>How long it takes</dt><dd>It depends on the size of the site, and most of all on how quickly the words and photos come together. Your quote includes a realistic timeline.</dd></div>
+      <div class="spec-row"><dt>What we need from you</dt><dd><ul class="tick">
+        <li>Time to talk about your business and your customers</li>
+        <li>Photos of your work, if you have them</li>
+        <li>Your logo, if you have one</li>
+        <li>Feedback on the design and the words when we send them</li>
+      </ul></dd></div>
+    </dl>
+  </div>
+</section>
+
+<!-- REDESIGN -->
+<section class="sec band-warm" id="redesign" aria-labelledby="re-title">
+  <div class="wrap chap">
+    <div class="chap-a">
+      <h2 id="re-title" class="h2">Redesign</h2>
+      <p class="lede-l">Keep your name, your domain and the trust you’ve built. Replace the dated look, the slow pages and the contact form nobody fills in.</p>
+      <div class="chap-media">
+        <figure class="sp"><div class="sp-frame"><div class="sp-scr">
+          <video data-auto data-vname="redesign video" muted loop playsinline preload="none" controls poster="/assets/video/cendavo-social-before-after-poster-540.jpg" width="540" height="960" aria-label="Redesign video" aria-describedby="clip-re-desc"><source src="/assets/video/cendavo-social-before-after-540.mp4" type="video/mp4"></video>
+        </div></div></figure>
+        <div>
+          <p class="vdesc" id="clip-re-desc">Harbourside Mobile Detailing, a fictional business: its dated site on a phone, then the phone-first redesign with one clear button, then the same comparison on our homepage. No sound.</p>
+          <p class="vnote">Concept projects · fictional businesses</p>
+          <button class="vt" type="button" data-vtoggle hidden>Play redesign video</button>
+        </div>
+      </div>
+    </div>
+    <div class="chap-b">
+      <dl class="spec" data-stagger>
+        <div class="spec-row"><dt>Who it’s for</dt><dd>Businesses whose site is several years old, hard to use on a phone, or embarrassing to hand out.</dd></div>
+        <div class="spec-row"><dt>What’s included</dt><dd><ul class="tick">
+          <li>A review of your current site: what works, what to cut</li>
+          <li>Everything in a new website, rebuilt on a fast setup</li>
+          <li>Your existing words and photos, kept or improved</li>
+          <li>Old page addresses redirected, so links and search listings keep working</li>
+          <li>A move off your old hosting, if you want one</li>
+        </ul></dd></div>
+        <div class="spec-row"><dt>How long it takes</dt><dd>Often a little quicker than a new site, because some of the content already exists. Your quote includes a realistic timeline.</dd></div>
+        <div class="spec-row"><dt>What we need from you</dt><dd><ul class="tick">
+          <li>Access to your current site, domain and hosting, or the name of whoever manages them</li>
+          <li>What customers ask you most often</li>
+          <li>Which parts of the old site you like, if any</li>
+        </ul></dd></div>
+      </dl>
+      <div class="redir lg" data-redir aria-hidden="true">
+        <div class="redir-h"><b>Old addresses, redirected</b><span class="tag">Example</span></div>
+        <ol>
+          <li><span class="r-old">/services.htm</span><span class="arr"></span><span class="r-new">/services/</span><span class="ok">Redirected</span></li>
+          <li><span class="r-old">/contact-us.php</span><span class="arr"></span><span class="r-new">/contact/</span><span class="ok">Redirected</span></li>
+          <li><span class="r-old">/gallery.html</span><span class="arr"></span><span class="r-new">/our-work/</span><span class="ok">Redirected</span></li>
+        </ol>
+      </div>
+      <p class="redir-cap">Illustration: old page addresses point to their new pages, so links and search listings keep working.</p>
+    </div>
+  </div>
+</section>
+
+<!-- CARE PLAN -->
+<section class="sec" id="care" aria-labelledby="care-title">
+  <div class="wrap care-grid">
+    <div class="care-a">
+      <h2 id="care-title" class="h2">Care plan</h2>
+      <p class="lede-l">A website isn’t finished at launch. Software needs updating, opening hours change, and someone needs to notice if the enquiry form stops working. On a care plan, that someone is us.</p>
+      <div class="month lg" data-month>
+        <div class="month-h"><h3>Every month</h3><span class="tag">What the plan covers</span></div>
+        <ul>
+          <li><span class="box" aria-hidden="true"><svg viewBox="0 0 16 16"><path d="M3 8.5l3 3 7-7"/></svg></span><b>Updates</b><span>Software and security updates applied and checked.</span></li>
+          <li><span class="box" aria-hidden="true"><svg viewBox="0 0 16 16"><path d="M3 8.5l3 3 7-7"/></svg></span><b>Backups</b><span>Copies of your site kept, so it can be restored if something breaks.</span></li>
+          <li><span class="box" aria-hidden="true"><svg viewBox="0 0 16 16"><path d="M3 8.5l3 3 7-7"/></svg></span><b>Form check</b><span>We check that enquiries from your site still reach your inbox.</span></li>
+          <li><span class="box" aria-hidden="true"><svg viewBox="0 0 16 16"><path d="M3 8.5l3 3 7-7"/></svg></span><b>Small changes</b><span>New hours, prices, photos or a staff change, done for you.</span></li>
+        </ul>
+      </div>
+    </div>
+    <div class="care-b chap-media">
+      <figure class="sp"><div class="sp-frame"><div class="sp-scr">
+        <video data-auto data-vname="care plan video" muted loop playsinline preload="none" controls poster="/assets/video/cendavo-social-care-plan-poster-540.jpg" width="540" height="960" aria-label="Care plan video" aria-describedby="clip-care-desc"><source src="/assets/video/cendavo-social-care-plan-540.mp4" type="video/mp4"></video>
+      </div></div></figure>
+      <div>
+        <p class="vdesc" id="clip-care-desc">What happens after launch: updates and backups, small changes such as new Saturday hours on the Fade &amp; Co concept, and someone to call when something needs changing. No sound.</p>
+        <p class="vnote">Concept projects · fictional businesses</p>
+        <button class="vt" type="button" data-vtoggle hidden>Play care plan video</button>
+      </div>
+    </div>
+    <dl class="care-facts" data-stagger>
+      <div><dt>Who it’s for</dt><dd>Owners who would rather spend their evenings on anything other than their website. It suits sites we built, and sites we take over after a review.</dd></div>
+      <div><dt>When it starts</dt><dd>The day your site goes live, or after a short check if we didn’t build it. We agree what counts as a small change when we quote, so there are no surprises.</dd></div>
+      <div><dt>What we need from you</dt><dd>An email when something changes in your business. That’s it.</dd></div>
+    </dl>
+  </div>
+</section>
+
+<!-- PROCESS -->
+<section class="sec band-warm" aria-labelledby="process-title">
+  <div class="wrap">
+    <div class="proc-head">
+      <h2 id="process-title" class="h2">How it works</h2>
+      <p>Five steps, one point of contact. You see and approve everything before it goes live.</p>
+      <figure class="photo proc-photo" data-clip><img src="/assets/images/garden-deck-1600.jpg" srcset="/assets/images/garden-deck-800.jpg 800w, /assets/images/garden-deck-1600.jpg 1600w" sizes="(max-width: 960px) 100vw, 48vw" width="1600" height="1067" alt="Timber deck steps leading down to a sunlit lawn beside a large tree" loading="lazy" decoding="async"></figure>
+    </div>
+    <div class="steps-wrap" data-line="steps">
+    <span class="steps-line" aria-hidden="true"><i data-line-fill></i></span>
+    <ol class="steps">
+      <li class="step"><span class="step-n" aria-hidden="true">01</span><h3>Discover</h3><p>You tell us about your business and customers in a free consultation. We ask the questions that shape the site.</p></li>
+      <li class="step"><span class="step-n" aria-hidden="true">02</span><h3>Design</h3><p>We design your key pages around your work. You review them and tell us what to change.</p></li>
+      <li class="step"><span class="step-n" aria-hidden="true">03</span><h3>Build</h3><p>We build the site so it reads properly on phones. You send photos and check the words.</p></li>
+      <li class="step"><span class="step-n" aria-hidden="true">04</span><h3>Launch</h3><p>We put the site live on your domain. You start sending customers to it.</p></li>
+      <li class="step"><span class="step-n" aria-hidden="true">05</span><h3>Look after</h3><p>If you choose a care plan, we keep the site up to date. You just ask when something needs changing.</p></li>
+    </ol>
+    </div>
+  </div>
+</section>
+
+<!-- FAQ -->
+<section class="sec" aria-labelledby="sv-faq-title">
+  <div class="wrap faq-grid">
+    <div class="faq-head">
+      <h2 id="sv-faq-title" class="h2">Questions owners ask us</h2>
+      <p>Something else on your mind? Ask it in your enquiry.</p>
+    </div>
+    <div class="faq">
+      <details><summary>Do I need my words and photos ready before we start?</summary><p>No. Most people don’t. We’ll ask you questions at the consultation and draft the words from your answers. If you don’t have good photos yet, we’ll tell you which ones would help most, and you can take many of them on a phone.</p></details>
+      <details><summary>Can I keep my current domain name?</summary><p>Yes. Your domain stays yours. We connect it to the new site and, on a redesign, redirect old page addresses so existing links keep working.</p></details>
+      <details><summary>Can I make changes to the site myself?</summary><p>If you want to, we’ll talk about it at the consultation and set things up so the parts you change often are easy to edit. Many owners prefer to send us an email instead, which is what the care plan is for.</p></details>
+      <details><summary>My site is with another company. Can you still help?</summary><p>Usually, yes. We’ll need access to the site, domain and hosting, or the details of whoever manages them. We’ll look at what you have before suggesting a redesign or a care plan.</p></details>
+      <details><summary>Do I have to take a care plan?</summary><p>No. It’s optional. If you’d rather look after the site yourself, we’ll hand everything over at launch and show you what needs regular attention.</p></details>
+      <details><summary>Do you only work with Sydney businesses?</summary><p>We’re based in Sydney and focus on local businesses here. If you’re somewhere else, get in touch anyway and we’ll tell you honestly whether we’re a good fit.</p></details>
+    </div>
+  </div>
+</section>
+
+<!-- CLOSING -->
+<section class="close" aria-labelledby="close-title">
+  <div class="close-media" aria-hidden="true"><img src="/assets/images/garden-path-1600.jpg" srcset="/assets/images/garden-path-800.jpg 800w, /assets/images/garden-path-1600.jpg 1600w" sizes="100vw" width="1600" height="1067" alt="" loading="lazy" decoding="async"></div>
+  <div class="wrap close-in">
+    <div class="close-panel lg lg-dark">
+      <h2 id="close-title" class="close-h"><span class="cl">Not sure which </span><span class="cl">one you need?</span></h2>
+      <div class="close-foot">
+        <p>That’s what the free consultation is for. Tell us what you have now and what you’d like it to do, and we’ll recommend the simplest option.</p>
+        <a class="btn btn-amber btn-lg" href="/contact.html">Request a free consultation</a>
+      </div>
+    </div>
+  </div>
+</section>
+
+</main>
+
+<button class="motion-btn motion-fab" type="button" data-motion-global hidden aria-pressed="false">Pause motion</button>
+
+<footer class="ftr">
+  <div class="wrap">
+    <div class="ftr-row">
+      <div class="ftr-brand">
+        <a class="brand" href="/">
+          <svg class="mark" viewBox="0 0 200 200" aria-hidden="true" focusable="false"><path d="M55.67 43.26C86.24 19.38 130.22 24.01 155.16 53.72L135.24 70.43C119.31 51.45 91.21 48.5 71.68 63.75Z"/><path d="M48.21 150.02C21.26 122.11 21.26 77.89 48.21 49.98L66.91 68.05C49.7 85.87 49.7 114.13 66.91 131.95Z"/><path d="M155.16 146.28C130.22 175.99 86.24 180.62 55.67 156.74L71.68 136.25C91.21 151.5 119.31 148.55 135.24 129.57Z"/></svg>
+          <span>Cendavo</span>
+        </a>
+        <p>Website design, redesign and care for local service businesses.<br>Sydney, Australia.<br><a class="ulink" href="mailto:cendavo.au@gmail.com">cendavo.au@gmail.com</a></p>
+      </div>
+      <nav class="ftr-links" aria-label="Footer navigation">
+        <a href="/">Home</a><a href="/work.html">Work</a><a href="/services.html">Services</a><a href="/pricing.html">Pricing</a><a href="/demo/">Demo project</a><a href="/about.html">About</a><a href="/contact.html">Contact</a>
+      </nav>
+    </div>
+    <div class="ftr-bottom">
+      <p>© 2026 Cendavo. The demonstration project uses sample data only.</p>
+      <p>Harbourside Mobile Detailing, Greenline Landscapes and Fade &amp; Co are fictional concept businesses.</p>
+    </div>
+  </div>
+  <div class="ftr-word" aria-hidden="true"><span data-word>Cendavo</span></div>
+</footer>
+
+<svg class="lg-defs" width="0" height="0" aria-hidden="true" focusable="false"><defs data-lg-defs></defs></svg>
+</body>
+</html>

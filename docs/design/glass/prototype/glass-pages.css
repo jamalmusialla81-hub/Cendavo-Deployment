@@ -1,0 +1,138 @@
+/* Cendavo — Liquid Glass inner pages. Loaded after glass.css and pages.css (the Daylight inner-page layouts).
+   Turns Daylight's paper panels into glass, adds the 3D hero moment layer and the film lens. */
+
+/* ---------- carried over from daylight.css: pieces the inner pages reuse ---------- */
+.btn-line{color:var(--ink);background:linear-gradient(160deg,rgba(255,255,255,.6),rgba(255,255,255,.3));-webkit-backdrop-filter:blur(12px) saturate(1.8);backdrop-filter:blur(12px) saturate(1.8);box-shadow:var(--g-shadow)}
+.reel-track{position:relative;flex:1;height:3px;border-radius:3px;background:rgba(14,14,13,.12);overflow:hidden}
+.reel-fill{position:absolute;inset:0;background:var(--ink);transform:scaleX(0);transform-origin:left}
+.film .reel-play{background:var(--ink);color:#fff}
+.film .reel-time{color:var(--ink-2)}
+.vig{position:relative;aspect-ratio:4/3.3;border-radius:18px;background:var(--warm);overflow:hidden;container-type:inline-size;box-shadow:0 0 0 1px rgba(14,14,13,.04) inset}
+.vig-tag{position:absolute;left:4cqw;bottom:4cqw;z-index:5;padding:.5em .85em;border-radius:999px;background:rgba(255,255,255,.92);font:600 max(11px,1.7cqw)/1 var(--display);color:var(--amber-ink);box-shadow:0 0 0 1px rgba(140,90,28,.15) inset}
+@media (max-width:860px){
+  .svc-list{grid-template-columns:1fr;gap:44px}
+}
+
+/* build: wireframe to finished */
+.vb-win{position:absolute;left:7%;right:7%;top:8%;bottom:-2%;border-radius:2.4cqw 2.4cqw 0 0;background:#fff;box-shadow:var(--lift);overflow:hidden}
+.vb-bar{display:flex;gap:1cqw;align-items:center;height:5.6cqw;padding:0 2.6cqw;background:#F4F3EF;border-bottom:1px solid var(--line)}
+.vb-bar i{width:1.6cqw;height:1.6cqw;border-radius:50%;background:#d6d3cc}
+.vb-page{position:absolute;inset:5.6cqw 0 0}
+.vb-wire,.vb-done{position:absolute;inset:0;padding:3cqw 4cqw}
+.vb-wire{background:#fff;background-image:linear-gradient(rgba(14,14,13,.05) 1px,transparent 1px),linear-gradient(90deg,rgba(14,14,13,.05) 1px,transparent 1px);background-size:4cqw 4cqw}
+.w{position:absolute;border:1px dashed rgba(140,90,28,.6);border-radius:.8cqw;background:rgba(217,164,65,.09)}
+.w-nav{left:4cqw;right:4cqw;top:3cqw;height:5cqw}
+.w-h1{left:4cqw;top:12cqw;width:54cqw;height:6.4cqw}
+.w-h2{left:4cqw;top:19.6cqw;width:40cqw;height:6.4cqw}
+.w-p{left:4cqw;top:29cqw;width:46cqw;height:3cqw}
+.w-btn{left:4cqw;top:35cqw;width:24cqw;height:6.4cqw;border-radius:99px}
+.w-img{left:4cqw;right:4cqw;top:45cqw;height:30cqw}
+.vb-done{background:#F7F5EF}
+.vbd-nav{display:flex;align-items:center;gap:3cqw;height:5cqw;font:500 2.3cqw/1 var(--body);color:#4a5049}
+.vbd-nav b{margin-right:auto;font:600 3.2cqw/1 Georgia,serif;color:#1f3b2c}
+.vbd-nav span{display:none}
+.vbd-nav em{font-style:normal;padding:1.2cqw 2.2cqw;border-radius:99px;background:#24412f;color:#fff;font-size:2cqw}
+.vbd-h{position:absolute;left:4cqw;top:11.4cqw;width:62cqw;font:400 6.6cqw/1.08 Georgia,"Times New Roman",serif;color:#1d2a22}
+.vbd-p{position:absolute;left:4cqw;top:28.6cqw;width:70cqw;font-size:2.5cqw;color:#4a5049}
+.vbd-btn{position:absolute;left:4cqw;top:35cqw;display:grid;place-items:center;width:26cqw;height:6.4cqw;border-radius:99px;background:#24412f;color:#fff;font:600 2.3cqw/1 var(--body)}
+.vbd-img{position:absolute;left:4cqw;right:4cqw;top:45cqw;width:calc(100% - 8cqw);height:30cqw;object-fit:cover;border-radius:.8cqw}
+.vb-scan{position:absolute;top:0;bottom:0;left:0;width:2px;background:var(--amber);box-shadow:0 0 0 4px rgba(217,164,65,.2);opacity:0}
+
+/* redesign: dated to modern */
+.vig-redo{perspective:140cqw}
+.vr-card{position:absolute;border-radius:2cqw;overflow:hidden}
+.vr-old{left:6%;top:9%;width:54%;padding:3cqw;background:#ffffe0;border:.7cqw outset #ccc;font:2.6cqw/1.3 "Times New Roman",serif;color:#000;transform:rotate(-5deg);filter:saturate(.6);opacity:.9;border-radius:0}
+.vr-old b{display:block;font:bold 4cqw/1.1 "Comic Sans MS",cursive;color:#c00;text-align:center}
+.vr-marq{display:block;margin:1.2cqw 0;text-align:center;background:#00f;color:#ff0;font:bold 2.4cqw/1.6 Arial,sans-serif}
+.vr-old p{margin-bottom:1.4cqw}
+.vr-old u{color:#00e}
+.vr-gif{position:absolute;right:2cqw;top:1.6cqw;padding:.4cqw 1cqw;background:#f00;color:#fff;font:bold 2cqw/1 Arial;transform:rotate(12deg)}
+.vr-new{right:5%;top:28%;width:66%;height:58%;background:#141312;color:#fff;box-shadow:var(--lift);display:grid;grid-template-columns:1.1fr 1fr}
+.vr-new img{width:100%;height:100%;object-fit:cover;grid-column:2;grid-row:1}
+.vr-copy{grid-column:1;grid-row:1;display:flex;flex-direction:column;justify-content:flex-end;gap:2cqw;padding:3.4cqw}
+.vr-copy small{display:flex;align-items:center;gap:1cqw;font:2cqw/1.2 var(--body);color:rgba(255,255,255,.82)}
+.vr-copy small i{width:1.4cqw;height:1.4cqw;border-radius:50%;background:#4ec27f}
+.vr-copy b{font:800 5.4cqw/.95 var(--display);font-stretch:68%;text-transform:uppercase;letter-spacing:-.01em}
+.vr-btn{display:grid;place-items:center;height:6.4cqw;border-radius:.8cqw;background:#a3341f;font:650 2.2cqw/1 var(--display)}
+
+/* care: update log */
+.log{position:absolute;left:7%;right:7%;top:8%;bottom:-2%;padding:4cqw 4.4cqw;border-radius:2.4cqw 2.4cqw 0 0;background:#fff;box-shadow:var(--lift)}
+.log-head{display:flex;align-items:center;justify-content:space-between;padding-bottom:3cqw;border-bottom:1px solid var(--line)}
+.log-head b{font:740 3.6cqw/1 var(--display);font-stretch:94%}
+.live{display:inline-flex;align-items:center;gap:1.2cqw;font:500 2.3cqw/1 var(--body);color:var(--mute)}
+.live i{width:1.6cqw;height:1.6cqw;border-radius:50%;background:var(--ok);box-shadow:0 0 0 .7cqw rgba(30,107,71,.15)}
+.log-list{list-style:none;margin:0;padding:0}
+.log-list li{display:grid;grid-template-columns:5.4cqw 1fr auto;align-items:center;gap:2cqw;height:10cqw;border-bottom:1px solid var(--line);font:500 2.9cqw/1.2 var(--body)}
+.log-list svg{width:5cqw;height:5cqw;padding:1cqw;border-radius:50%;background:rgba(30,107,71,.1);fill:none;stroke:var(--ok);stroke-width:2.4;stroke-linecap:round;stroke-linejoin:round}
+.log-list time{font-size:2.3cqw;color:var(--mute)}
+
+/* ---------- glass everywhere ---------- */
+body[data-page] main{position:relative}
+.band-warm{background:linear-gradient(180deg,rgba(255,255,255,0),rgba(255,255,255,.34) 18%,rgba(255,255,255,.34) 82%,rgba(255,255,255,0))}
+.film{background:transparent}
+.nav a[aria-current="page"]{color:var(--ink);background:rgba(255,255,255,.7);box-shadow:inset 0 -2px 0 var(--amber)}
+.photo{border-radius:24px;box-shadow:0 30px 60px -32px rgba(40,28,10,.45)}
+.photo::after{content:"";position:absolute;inset:0;border-radius:inherit;pointer-events:none;box-shadow:inset 0 1px 1px rgba(255,255,255,.55),inset 0 0 0 1px rgba(255,255,255,.22)}
+.chip{background:rgba(255,255,255,.6);-webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px)}
+/* panels that were white paper become frosted glass (class .lg is added in the markup) */
+.queue.lg,.redir.lg,.month.lg,.quote-paper.lg,.promise.lg,.ct-form.lg,.mount-msg.lg,.banner.lg,.vig.lg{--r:24px;--blur:22px;background:linear-gradient(160deg,rgba(255,255,255,.72),rgba(255,255,255,.5))}
+.ct-form.lg{--r:32px}
+.ct input,.ct select,.ct textarea{background:rgba(255,255,255,.75)}
+.q-card,.wk-demo-mini i{background:rgba(255,255,255,.82)}
+.vig{border-radius:24px}
+
+/* ---------- the 3D hero moment: a WebGL layer behind the hero, fading into the page ---------- */
+.pg-hero,.ct{position:relative;isolation:isolate}
+.pg-hero>*:not(.pg-gl),.ct>*:not(.pg-gl){position:relative;z-index:1}
+.pg-gl{position:absolute;z-index:0!important;top:calc(-1 * clamp(90px,10vh,120px));bottom:-60px;left:50%;width:100vw;margin-left:-50vw;pointer-events:none;
+  -webkit-mask:linear-gradient(180deg,#000 72%,transparent);mask:linear-gradient(180deg,#000 72%,transparent)}
+.pg-gl canvas{position:absolute;inset:0;width:100%!important;height:100%!important;opacity:0;transition:opacity 1.2s var(--e-out)}
+.pg-gl.is-live canvas{opacity:1}
+body[data-page] main{padding-top:clamp(90px,10vh,120px)}
+
+/* ---------- About: the launch film opens from a glass lens ---------- */
+.film-frame{clip-path:inset(0 round var(--lr,0px));transform:perspective(1600px) rotateX(var(--lrx,0deg)) scale(var(--ls,1));transform-origin:50% 50%}
+.film-lens-wrap{perspective:1600px}
+.film-frame .lens-rim{position:absolute;inset:0;border-radius:var(--lr,0px);pointer-events:none;opacity:var(--lo,0);z-index:2;
+  box-shadow:inset 0 0 0 1.5px rgba(255,255,255,.75),inset 0 2px 14px rgba(255,255,255,.45),inset 0 0 120px rgba(255,255,255,.15)}
+.film-ui{background:linear-gradient(160deg,rgba(255,255,255,.82),rgba(255,255,255,.62));-webkit-backdrop-filter:blur(18px) saturate(1.8);backdrop-filter:blur(18px) saturate(1.8);box-shadow:var(--g-shadow)}
+
+/* ---------- closing band: page photo under a dark glass panel ---------- */
+.close-media img{position:absolute;inset:-6%;width:112%;height:112%;object-fit:cover;filter:blur(2px) brightness(.85);transform:translate3d(0,var(--cy,0px),0)}
+.close-panel .btn-amber{flex:none}
+
+/* the WebGL layer never grows taller than a screen, so the glass object keeps its size on long mobile heroes */
+.pg-gl{max-height:calc(100svh + 120px)}
+/* global pause control (pages.js): glass pill, icon drawn in CSS so it still reads at icon size on phones */
+.motion-fab{gap:8px;border:0;padding-left:14px;color:var(--ink)}
+.motion-fab::before{content:"";flex:none;width:8px;height:10px;border-left:2.5px solid currentColor;border-right:2.5px solid currentColor}
+.motion-fab[aria-pressed="true"]::before{width:0;height:0;border:0;border-left:8px solid currentColor;border-top:5px solid transparent;border-bottom:5px solid transparent}
+@media (max-width:640px){.motion-fab{padding:0}}
+
+/* ---------- round 4: the 3D centrepiece leads each hero ---------- */
+/* hidden-anchor media steps back once the scene is live (it is shown in the scene instead) */
+.gl-lead [data-gate].sv-hero-media,.gl-lead .ab-photos{opacity:0!important;transition:opacity .8s var(--e-out)}
+.pg-gl{max-height:calc(140svh + 120px)}
+@media (min-width:1024px){
+  /* Work: the copy keeps the left; the right is open space for the glass slab with the phone in front of it */
+  .wk-hero-copy{grid-column:1 / 8}
+  .wk-clip{grid-column:8 / 13;min-height:min(520px,60vh);align-content:end;justify-items:start}
+  .wk-clip .sp{max-width:190px;transform:rotate(-3deg)}
+  .wk-clip>div{max-width:230px}
+}
+/* Pricing: the quote card itself is the 3D glass object, frosted sheets float behind it */
+.quote-desk{background:transparent}
+.quote{perspective:1400px}
+.quote-paper.lg{transform:rotateY(var(--qy,-14deg)) rotateX(var(--qx,6deg)) translateZ(0);transform-origin:50% 50%;box-shadow:var(--g-shadow),0 50px 80px -40px rgba(40,28,10,.45)}
+.quote-paper .q-total{transform:translateZ(0)}
+@media (max-width:760px){.quote-paper.lg{--qy:-6deg;--qx:4deg}}
+/* Work: the request-queue tile becomes a small glass mock of the queue */
+.wk-demo-mini{grid-template-columns:repeat(3,minmax(0,1fr))!important;align-items:stretch;gap:10px;padding:16px;background:linear-gradient(135deg,#cbdbe7 0%,#e9d6b4 100%)!important}
+.wk-demo-mini i{gap:7px;padding:10px 9px;border-radius:12px;background:linear-gradient(160deg,rgba(255,255,255,.82),rgba(255,255,255,.55));box-shadow:inset 0 1px 0 rgba(255,255,255,.9),0 6px 14px -8px rgba(40,30,10,.35)}
+.wk-demo-mini em{order:-1;margin:0 0 4px;padding:0;background:none;font:700 .8125rem/1.1 var(--display);color:var(--ink)}
+.wk-demo-mini em u{text-decoration:none;color:var(--amber-ink)}
+.wk-demo-mini b{display:block;width:auto!important;height:auto;padding:9px 8px;border-radius:9px;background:#fff;box-shadow:0 2px 6px -3px rgba(40,30,10,.25);font:600 .6875rem/1.25 var(--display);white-space:normal!important;color:var(--ink-2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+/* every video keeps its poster painted underneath until it has a frame */
+video[poster]{background-size:cover;background-position:center}
+.d-scr,.d-ph-scr{background:#e9e6df}
+@media (max-width:1023px){.wk-clip{padding-top:min(52vw,360px)}}

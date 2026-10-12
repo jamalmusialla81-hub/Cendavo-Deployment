@@ -1,0 +1,192 @@
+<!doctype html>
+<html lang="en-AU">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="color-scheme" content="light">
+<meta name="theme-color" content="#F4F2ED">
+<meta name="description" content="Cendavo is a small Sydney studio that designs, builds and looks after websites for local service businesses.">
+<title>About — Cendavo</title>
+<link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
+<link rel="preload" href="/assets/fonts/archivo-var-latin.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="/glass.css">
+<link rel="stylesheet" href="/pages.css">
+<link rel="stylesheet" href="/glass-pages.css">
+<script src="/assets/vendor/gsap/gsap.min.js" defer></script>
+<script src="/assets/vendor/gsap/ScrollTrigger.min.js" defer></script>
+<script src="/assets/vendor/lenis/lenis.min.js" defer></script>
+<!-- glass.js sets .js / .js-motion before first paint; pages.js runs the page's own motion and video; glass-pages.js adds the 3D reveals. -->
+<script src="/glass.js"></script>
+<script src="/pages.js" defer></script>
+<script src="/glass-pages.js" defer></script>
+<script type="importmap">{"imports":{"three":"/assets/vendor/three/three.module.min.js","three/jsm/":"/assets/vendor/three/jsm/"}}</script>
+<script type="module" src="/gl-boot.js"></script>
+</head>
+<body data-page="about">
+<a class="skip" href="#main">Skip to main content</a>
+
+<div class="atmos" aria-hidden="true"><i class="f f1"></i><i class="f f2"></i><i class="f f3"></i><i class="f f4"></i></div>
+
+<header class="hdr" data-hdr>
+  <div class="hdr-pill lg" data-lg="pill">
+    <a class="brand" href="/" aria-label="Cendavo home">
+      <svg class="mark" viewBox="0 0 200 200" aria-hidden="true" focusable="false"><path d="M55.67 43.26C86.24 19.38 130.22 24.01 155.16 53.72L135.24 70.43C119.31 51.45 91.21 48.5 71.68 63.75Z"/><path d="M48.21 150.02C21.26 122.11 21.26 77.89 48.21 49.98L66.91 68.05C49.7 85.87 49.7 114.13 66.91 131.95Z"/><path d="M155.16 146.28C130.22 175.99 86.24 180.62 55.67 156.74L71.68 136.25C91.21 151.5 119.31 148.55 135.24 129.57Z"/></svg>
+      <span class="brand-word">Cendavo</span>
+    </a>
+    <nav class="nav" id="site-nav" aria-label="Main navigation">
+      <a href="/work.html">Work</a>
+      <a href="/services.html">Services</a>
+      <a href="/pricing.html">Pricing</a>
+      <a class="nav-extra" href="/demo/">Demo project</a>
+      <a href="/about.html">About</a>
+      <a href="/contact.html">Contact</a>
+      <a class="btn btn-ink nav-cta-m" href="/contact.html">Request a free consultation</a>
+    </nav>
+    <a class="btn btn-ink btn-sm hdr-cta" href="/contact.html" data-magnetic><span>Free consultation</span></a>
+    <button class="menu-btn" type="button" aria-controls="site-nav" aria-expanded="false" hidden>
+      <span class="menu-lines" aria-hidden="true"><i></i><i></i></span><span class="menu-label">Menu</span>
+    </button>
+  </div>
+</header>
+
+<main id="main" tabindex="-1">
+
+<!-- HERO -->
+<section class="pg-hero" aria-labelledby="ab-title">
+  <div class="pg-gl" data-gl data-gl-kind="photos" data-gl-video="loop-gl-desktop" data-gl-anchor=".ab-photos" data-gl-hide aria-hidden="true"></div>
+  <div class="ab-hero">
+    <div class="ab-hero-copy">
+      <h1 id="ab-title" class="pk pk-m" aria-label="A small Sydney studio for local service businesses.">
+        <span class="ln" aria-hidden="true"><span class="lt">A small Sydney studio</span></span>
+        <span class="ln" aria-hidden="true"><span class="lt">for local service</span></span>
+        <span class="ln" aria-hidden="true"><span class="lt">businesses.</span></span>
+      </h1>
+      <p class="pg-sub" data-hero-fade>Cendavo designs, builds and looks after websites for tradespeople, cleaners, detailers, barbers and other local operators. Why? Because good businesses lose work to weak websites: pages that crawl on a phone, photos that hide the work, and no clear way to get in touch.</p>
+    </div>
+    <div class="ab-photos" data-gate aria-hidden="true">
+      <figure class="photo ab-p1"><img src="/assets/images/barber-shave-800.jpg" srcset="/assets/images/barber-shave-800.jpg 800w, /assets/images/barber-shave-1600.jpg 1600w" sizes="(max-width: 1023px) 60vw, 26vw" width="1600" height="1067" alt="" decoding="async"></figure>
+      <figure class="photo ab-p3"><img src="/assets/images/detail-wax-800.jpg" width="1600" height="1067" alt="" decoding="async"></figure>
+      <figure class="photo ab-p2"><img src="/assets/images/garden-wall-800.jpg" srcset="/assets/images/garden-wall-800.jpg 800w, /assets/images/garden-wall-1600.jpg 1600w" sizes="(max-width: 1023px) 60vw, 26vw" width="1600" height="1067" alt="" decoding="async"></figure>
+    </div>
+  </div>
+</section>
+
+<!-- HOW WE THINK -->
+<section class="sec band-warm" aria-labelledby="ab-think-title">
+  <div class="wrap think">
+    <div class="think-a">
+      <h2 id="ab-think-title" class="h2">How we think</h2>
+      <p class="lede-l">Four ideas shape every site we design. They are simple on purpose: each one is about helping a customer decide to get in touch with you.</p>
+      <figure class="photo" data-clip><img src="/assets/images/barber-cut-1600.jpg" srcset="/assets/images/barber-cut-800.jpg 800w, /assets/images/barber-cut-1600.jpg 1600w" sizes="(max-width: 960px) 100vw, 30vw" width="1600" height="1067" alt="A barber trimming the back of a customer’s hair with scissors and a comb" loading="lazy" decoding="async"></figure>
+    </div>
+    <ul class="think-list" data-stagger>
+      <li><h3>Built for the phone first</h3><p>Many of your customers will look you up on a phone, often in a hurry. We design for that small screen first, then scale up for tablets and desktops.</p></li>
+      <li><h3>Your real work up front</h3><p>Photos of jobs you have actually done say more than any stock image. We put your work, your services and the areas you cover where people see them straight away.</p></li>
+      <li><h3>One clear next step on every page</h3><p>Every page ends with one obvious way to get in touch, so nobody has to hunt for a phone number or a form.</p></li>
+      <li><h3>Fast and accessible by default</h3><p>Pages that load quickly, read clearly and work with a keyboard or a screen reader. We build that in from the first page, not as an extra at the end.</p></li>
+    </ul>
+  </div>
+</section>
+
+<!-- LAUNCH FILM -->
+<section class="film" data-film aria-labelledby="film-title">
+  <div class="wrap film-head">
+    <h2 id="film-title" class="h2">Cendavo in 20 seconds</h2>
+    <p>What we make, start to finish: built new, rebuilt properly, looked after.</p>
+  </div>
+  <div class="film-frame" data-film-lens><span class="lens-rim" aria-hidden="true"></span>
+    <video data-auto data-vname="film" muted loop playsinline preload="none" controls poster="/assets/video/cendavo-launch-poster-1600.jpg" width="1600" height="900" aria-label="Cendavo in 20 seconds" aria-describedby="film-desc" data-vsrc="/assets/video/cendavo-launch-vertical-720.mp4" data-vposter="/assets/video/cendavo-launch-vertical-poster-720.jpg">
+      <source src="/assets/video/cendavo-launch-1600.mp4" type="video/mp4">
+    </video>
+    <div class="film-ui" data-film-ui hidden>
+      <button class="reel-play" type="button" data-film-play>Play film</button>
+      <span class="reel-track" aria-hidden="true"><span class="reel-fill"></span></span>
+      <span class="reel-time" aria-hidden="true">0:00 / 0:20</span>
+    </div>
+  </div>
+  <ol class="film-chapters" data-chapters aria-label="Film chapters">
+    <li><button type="button" data-t="0"><span class="bar" aria-hidden="true"><i></i></span><span class="t">0:00</span>Your work is excellent</button></li>
+    <li><button type="button" data-t="5"><span class="bar" aria-hidden="true"><i></i></span><span class="t">0:05</span>Websites for local businesses</button></li>
+    <li><button type="button" data-t="8"><span class="bar" aria-hidden="true"><i></i></span><span class="t">0:08</span>Built new</button></li>
+    <li><button type="button" data-t="11"><span class="bar" aria-hidden="true"><i></i></span><span class="t">0:11</span>Rebuilt properly</button></li>
+    <li><button type="button" data-t="14"><span class="bar" aria-hidden="true"><i></i></span><span class="t">0:14</span>Looked after</button></li>
+    <li><button type="button" data-t="17"><span class="bar" aria-hidden="true"><i></i></span><span class="t">0:17</span>Request a consultation</button></li>
+  </ol>
+  <p class="film-cap"><span id="film-desc">The lines “Your work is excellent. Your website should say so.” and “Websites for Sydney’s local service businesses”, then pages from this website and the concept projects under “Built new”, “Rebuilt properly” and “Looked after”, ending on the Cendavo logo and “Request a free consultation”. No sound.</span> <span class="cap-note">The businesses in it are concept projects and fictional.</span></p>
+</section>
+
+<!-- HOW WE BUILD -->
+<section class="sec" aria-labelledby="ab-build-title">
+  <div class="wrap build">
+    <div class="build-head">
+      <h2 id="ab-build-title" class="h2">How we build</h2>
+      <p>The technical choices behind every site, in plain terms. They keep pages quick for your customers and running costs low for you.</p>
+    </div>
+    <ul class="build-list" data-stagger>
+      <li><b>Static sites on Cloudflare.</b><span>Modern static pages served from Cloudflare’s global network: quick to load, with few moving parts to break or attack, and low running costs.</span></li>
+      <li><b>Accessible markup.</b><span>Real headings, labelled forms, visible focus and readable contrast, so the site works with a keyboard and a screen reader.</span></li>
+      <li><b>Self-hosted fonts.</b><span>Fonts are served from your own site rather than a third-party font service, so pages load faster and visitors aren’t passed to anyone else.</span></li>
+      <li><b>No tracking scripts by default.</b><span>This site loads none, and we don’t add analytics to yours unless you ask for them.</span></li>
+    </ul>
+    <p class="promise lg">Every project starts with a fixed quote: the scope and one fixed price in writing. Your domain and content stay yours, we explain everything in plain language, and the care plan is optional. <a class="ulink" href="/pricing.html">What every project includes</a></p>
+  </div>
+</section>
+
+<!-- WHO -->
+<section class="sec band-warm" aria-labelledby="who-title">
+  <div class="wrap who-head">
+    <h2 id="who-title" class="h2">Built for the businesses that keep Sydney running</h2>
+    <p>If customers find you on their phone and then call, book or ask for a quote, we can help.</p>
+  </div>
+  <ul class="who-row" data-stagger>
+    <li><figure><div class="photo"><img src="/assets/images/clean-living-800.jpg" srcset="/assets/images/clean-living-800.jpg 800w, /assets/images/clean-living-1600.jpg 1600w" sizes="(max-width: 960px) 50vw, 20vw" width="1600" height="900" alt="A cleaner mopping the floor of a bright living room" loading="lazy" decoding="async"></div><figcaption>Cleaners</figcaption></figure></li>
+    <li><figure><div class="photo"><img src="/assets/images/trade-panel-800.jpg" srcset="/assets/images/trade-panel-800.jpg 800w, /assets/images/trade-panel-1600.jpg 1600w" sizes="(max-width: 960px) 50vw, 20vw" width="1600" height="1200" alt="An electrician in gloves testing a switchboard with probes" loading="lazy" decoding="async"></div><figcaption>Electricians and trades</figcaption></figure></li>
+    <li><figure><div class="photo"><img src="/assets/images/barber-cut-800.jpg" srcset="/assets/images/barber-cut-800.jpg 800w, /assets/images/barber-cut-1600.jpg 1600w" sizes="(max-width: 960px) 50vw, 20vw" width="1600" height="1067" alt="A barber trimming the back of a client’s hair with scissors" loading="lazy" decoding="async"></div><figcaption>Barbers</figcaption></figure></li>
+    <li><figure><div class="photo"><img src="/assets/images/garden-lawn-800.jpg" srcset="/assets/images/garden-lawn-800.jpg 800w, /assets/images/garden-lawn-1600.jpg 1600w" sizes="(max-width: 960px) 50vw, 20vw" width="1600" height="1067" alt="A landscaped backyard with a stone wall, pergola and lawn" loading="lazy" decoding="async"></div><figcaption>Landscapers</figcaption></figure></li>
+    <li><figure><div class="photo"><img src="/assets/images/detail-wax-800.jpg" srcset="/assets/images/detail-wax-800.jpg 800w, /assets/images/detail-wax-1600.jpg 1600w" sizes="(max-width: 960px) 100vw, 20vw" width="1600" height="1067" alt="A detailer fitting protective film over the headlight of a grey car" loading="lazy" decoding="async"></div><figcaption>Mobile detailers</figcaption></figure></li>
+  </ul>
+</section>
+
+<!-- CLOSING -->
+<section class="close" aria-labelledby="close-title">
+  <div class="close-media" aria-hidden="true"><img src="/assets/images/detail-headlight-1600.jpg" srcset="/assets/images/detail-headlight-800.jpg 800w, /assets/images/detail-headlight-1600.jpg 1600w" sizes="100vw" width="1600" height="1075" alt="" loading="lazy" decoding="async"></div>
+  <div class="wrap close-in">
+    <div class="close-panel lg lg-dark">
+      <h2 id="close-title" class="close-h"><span class="cl">Tell us about </span><span class="cl">your business.</span></h2>
+      <div class="close-foot">
+        <p>A short free consultation is the easiest way to find out whether we’re a good fit. If a simpler option or another provider would suit you better, we’ll say so.</p>
+        <a class="btn btn-amber btn-lg" href="/contact.html">Request a free consultation</a>
+      </div>
+    </div>
+  </div>
+</section>
+
+</main>
+
+<button class="motion-btn motion-fab" type="button" data-motion-global hidden aria-pressed="false">Pause motion</button>
+
+<footer class="ftr">
+  <div class="wrap">
+    <div class="ftr-row">
+      <div class="ftr-brand">
+        <a class="brand" href="/">
+          <svg class="mark" viewBox="0 0 200 200" aria-hidden="true" focusable="false"><path d="M55.67 43.26C86.24 19.38 130.22 24.01 155.16 53.72L135.24 70.43C119.31 51.45 91.21 48.5 71.68 63.75Z"/><path d="M48.21 150.02C21.26 122.11 21.26 77.89 48.21 49.98L66.91 68.05C49.7 85.87 49.7 114.13 66.91 131.95Z"/><path d="M155.16 146.28C130.22 175.99 86.24 180.62 55.67 156.74L71.68 136.25C91.21 151.5 119.31 148.55 135.24 129.57Z"/></svg>
+          <span>Cendavo</span>
+        </a>
+        <p>Website design, redesign and care for local service businesses.<br>Sydney, Australia.<br><a class="ulink" href="mailto:cendavo.au@gmail.com">cendavo.au@gmail.com</a></p>
+      </div>
+      <nav class="ftr-links" aria-label="Footer navigation">
+        <a href="/">Home</a><a href="/work.html">Work</a><a href="/services.html">Services</a><a href="/pricing.html">Pricing</a><a href="/demo/">Demo project</a><a href="/about.html">About</a><a href="/contact.html">Contact</a>
+      </nav>
+    </div>
+    <div class="ftr-bottom">
+      <p>© 2026 Cendavo. The demonstration project uses sample data only.</p>
+      <p>Harbourside Mobile Detailing, Greenline Landscapes and Fade &amp; Co are fictional concept businesses.</p>
+    </div>
+  </div>
+  <div class="ftr-word" aria-hidden="true"><span data-word>Cendavo</span></div>
+</footer>
+
+<svg class="lg-defs" width="0" height="0" aria-hidden="true" focusable="false"><defs data-lg-defs></defs></svg>
+</body>
+</html>
