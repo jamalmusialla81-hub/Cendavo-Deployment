@@ -10,6 +10,17 @@ ROOT = Path(__file__).resolve().parents[1]
 # Night Shift Task 31: the public business address, written out here rather than imported from the code under test.
 CONTACT_EMAIL = 'cendavo.au@gmail.com'
 MAIL_LINK = f'<a class="mail" href="mailto:{CONTACT_EMAIL}">{CONTACT_EMAIL}</a>'
+# Night Shift Task 49: the homepage's one schema.org block, the only inline <script> element allowed on the site.
+LD_JSON = re.compile(r'<script type="application/ld\+json">([^<]*)</script>')
+
+
+def without_structured_data(route, html):
+    """Return the page with its JSON-LD block removed: exactly one in <head> on the homepage, none anywhere else."""
+    expected = 1 if route == 'index.html' else 0
+    assert len(LD_JSON.findall(html)) == expected and html.count('<script type="application/ld+json"') == expected, route
+    if expected:
+        assert LD_JSON.search(html).end() <= html.index('</head>'), route
+    return LD_JSON.sub('', html)
 
 
 class ContactEmailTests(unittest.TestCase):
@@ -88,7 +99,7 @@ class SiteBuildTests(unittest.TestCase):
                 self.assertIn('href="/demo/"', html)
                 self.assertIn('href="/contact/"', html)
                 self.assertIn('name="viewport"', html)
-                self.assertFalse(re.search(r'<script[^>]*>\s*[^<\s]', html))
+                self.assertFalse(re.search(r'<script[^>]*>\s*[^<\s]', without_structured_data(route, html)))
 
     def test_demo_is_clearly_sample_only(self):
         demo = (OUT / 'demo/index.html').read_text()
@@ -1237,7 +1248,8 @@ def visible_text(html):
 
 HEADERS = ("/*\n  X-Content-Type-Options: nosniff\n  Referrer-Policy: strict-origin-when-cross-origin\n  X-Frame-Options: DENY\n"
            "  Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self'; font-src 'self'; img-src 'self' data:; "
-           "connect-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'\n")
+           "connect-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'\n"
+           "  Strict-Transport-Security: max-age=31536000\n  Permissions-Policy: camera=(), microphone=(), geolocation=()\n")
 
 
 class InnerPageTests(unittest.TestCase):
@@ -1478,7 +1490,7 @@ class InnerPageTests(unittest.TestCase):
         for route in self.ROUTES:
             with self.subTest(route=route):
                 html = self.html[route]
-                self.assertNotRegex(html, r'<script(?![^>]*\bsrc=)')
+                self.assertNotRegex(without_structured_data(route, html), r'<script(?![^>]*\bsrc=)')
                 self.assertNotIn(' style="', html)
                 self.assertNotIn('<style', html)
         self.assertEqual((OUT / '_headers').read_text(), HEADERS)
@@ -2371,7 +2383,7 @@ class LiquidGlassTests(unittest.TestCase):
     def test_no_inline_script_import_map_or_style_and_the_csp_is_unchanged(self):
         for route, html in self.html.items():
             with self.subTest(route=route):
-                self.assertNotRegex(html, r'<script(?![^>]*\bsrc=)')
+                self.assertNotRegex(without_structured_data(route, html), r'<script(?![^>]*\bsrc=)')
                 self.assertNotIn('importmap', html)
                 self.assertNotIn('type="module"', html)  # the scene is imported by glass-boot.js, never a module tag
                 self.assertNotIn(' style="', html)
@@ -2547,9 +2559,6 @@ class GlassPolishTests(unittest.TestCase):
         self.assertIn('.close-loop{display:none}', phones.split('\n}\n', 1)[0])
         self.assertNotIn('close-loop', (OUT / 'contact/index.html').read_text())
 
-
-if __name__ == '__main__':
-    unittest.main()
 
 
 class SecondCritiqueFixTests(unittest.TestCase):
@@ -4579,3 +4588,116 @@ class PerformanceTask48Tests(unittest.TestCase):
         # The page transition names the pill itself, never the header around it.
         self.assertIn('.site-header .nav{view-transition-name:site-header}', self.css['site.css'])
         self.assertNotIn('.site-header{view-transition-name', self.css['site.css'])
+
+
+class SeoAndHeaderTests(unittest.TestCase):
+    """Night Shift Task 49: homepage JSON-LD, robots.txt sitemap line, sitemap lastmod and two security headers."""
+    BASE = 'https://cendavo-deployment.pages.dev'
+    FORBIDDEN_KEYS = {'address', 'aggregateRating', 'review', 'reviews', 'sameAs', 'founder', 'telephone'}
+
+    @classmethod
+    def setUpClass(cls):
+        build()
+        cls.home = (OUT / 'index.html').read_text()
+
+    def structured(self):
+        import json
+        blocks = LD_JSON.findall(self.home)
+        self.assertEqual(len(blocks), 1)
+        return blocks[0], json.loads(blocks[0])
+
+    def test_homepage_has_one_professional_service_block_in_head(self):
+        head = self.home.split('</head>', 1)[0]
+        self.assertEqual(head.count('<script type="application/ld+json">'), 1)
+        self.assertEqual(self.home.count('application/ld+json'), 1)
+        _, data = self.structured()
+        self.assertEqual(data['@context'], 'https://schema.org')
+        self.assertEqual(data['@type'], 'ProfessionalService')
+        self.assertEqual(data['name'], 'Cendavo')
+        self.assertEqual(data['url'], self.BASE + '/')
+        self.assertEqual(data['email'], CONTACT_EMAIL)
+        area = str(data['areaServed'])
+        for place in ('Sydney', 'NSW', 'Australia'):
+            self.assertIn(place, area)
+        services = [s.lower() for s in data['serviceType']]
+        self.assertEqual(services, ['website design', 'website redesign', 'website care'])
+
+    def test_structured_data_claims_no_address_ratings_or_concept_clients(self):
+        raw, data = self.structured()
+
+        def keys(value):
+            if isinstance(value, dict):
+                for k, v in value.items():
+                    yield k
+                    yield from keys(v)
+            elif isinstance(value, list):
+                for v in value:
+                    yield from keys(v)
+        found = set(keys(data))
+        self.assertFalse(found & self.FORBIDDEN_KEYS, found & self.FORBIDDEN_KEYS)
+        self.assertNotIn('Review', raw)
+        self.assertNotIn('Rating', raw)
+        for name in ('harbourside', 'greenline', 'fade'):
+            self.assertNotIn(name, raw.lower())
+        self.assertNotIn('<', raw)  # json.dumps output with '<' escaped: nothing can close the script element early
+
+    def test_structured_data_escapes_markup_and_is_built_from_constants(self):
+        import json
+        import scripts.build_site as site
+        source = (ROOT / 'scripts/build_site.py').read_text()
+        self.assertIn('json.dumps(', source)
+        self.assertEqual(source.count('<script type="application/ld+json">'), 1)
+        self.assertIn("'url': BASE_URL + '/'", source)
+        self.assertIn("'email': CONTACT_EMAIL", source)
+        original = site.DESCRIPTIONS['index']
+        try:
+            site.DESCRIPTIONS['index'] = '</script><script>alert(1)</script>'
+            block = site.structured_data()
+        finally:
+            site.DESCRIPTIONS['index'] = original
+        inner = block[len('<script type="application/ld+json">'):-len('</script>')]
+        self.assertNotIn('<', inner)
+        self.assertEqual(json.loads(inner)['description'], '</script><script>alert(1)</script>')
+
+    def test_no_other_page_carries_structured_data(self):
+        pages = [p for p in OUT.rglob('*.html') if p != OUT / 'index.html' and 'assets' not in p.parts]
+        self.assertIn(OUT / '404.html', pages)
+        self.assertGreaterEqual(len(pages), 7)
+        for page in pages:
+            with self.subTest(page=str(page.relative_to(OUT))):
+                self.assertNotIn('ld+json', page.read_text())
+
+    def test_robots_points_at_the_sitemap(self):
+        self.assertEqual((OUT / 'robots.txt').read_text(), f'User-agent: *\nAllow: /\nSitemap: {self.BASE}/sitemap.xml\n')
+
+    def test_every_sitemap_entry_has_one_shared_valid_lastmod(self):
+        from datetime import date
+        sitemap = (OUT / 'sitemap.xml').read_text()
+        entries = re.findall(r'<url>(.*?)</url>', sitemap)
+        self.assertEqual(len(entries), 7)
+        values = []
+        for entry in entries:
+            with self.subTest(entry=entry):
+                self.assertEqual(entry.count('<lastmod>'), 1)
+                values.append(re.search(r'<lastmod>([^<]+)</lastmod>', entry).group(1))
+        self.assertEqual(len(set(values)), 1)
+        self.assertRegex(values[0], r'^\d{4}-\d{2}-\d{2}$')
+        self.assertLessEqual(date.fromisoformat(values[0]), date.today())
+        self.assertNotIn('404', sitemap)
+
+    def test_headers_add_hsts_and_permissions_policy_and_keep_the_rest(self):
+        headers = (OUT / '_headers').read_text()
+        lines = headers.splitlines()
+        self.assertEqual(lines[:5], HEADERS.splitlines()[:5])
+        self.assertIn("  Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self'; font-src 'self'; "
+                      "img-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'", lines)
+        self.assertIn('  Strict-Transport-Security: max-age=31536000', lines)
+        self.assertIn('  Permissions-Policy: camera=(), microphone=(), geolocation=()', lines)
+        self.assertNotIn('includeSubDomains', headers)
+        self.assertNotIn('preload', headers)
+        self.assertNotIn('interest-cohort', headers)  # retired FLoC feature, left out on purpose
+        self.assertEqual(len(lines), 7)
+
+
+if __name__ == '__main__':
+    unittest.main()

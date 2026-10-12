@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """Build the zero-dependency Cloudflare Pages static site."""
+from datetime import date
 from html import escape
+import json
 from pathlib import Path
 import re
 import shutil
@@ -143,6 +145,26 @@ def head_meta(key, title, desc):
     return ''.join(meta)
 
 
+def structured_data():
+    """The homepage's schema.org identity (Night Shift Task 49), built only from the constants above.
+
+    Deliberately minimal: no address, telephone, founder, ratings, reviews or sameAs links, and the fictional concept
+    projects never appear in it. json.dumps output with every '<' escaped can never close the script element early; the
+    browser treats application/ld+json as data and never runs it, so the CSP's script-src 'self' still applies."""
+    data = {'@context': 'https://schema.org', '@type': 'ProfessionalService', 'name': 'Cendavo', 'url': BASE_URL + '/',
+            'email': CONTACT_EMAIL, 'description': DESCRIPTIONS['index'],
+            'areaServed': {'@type': 'City', 'name': 'Sydney, NSW, Australia'},
+            'serviceType': ['Website design', 'Website redesign', 'Website care']}
+    return '<script type="application/ld+json">' + json.dumps(data, ensure_ascii=False).replace('<', '\\u003c') + '</script>'
+
+
+# Security headers. HSTS stays without includeSubDomains or preload: both are hard to undo once a custom domain is chosen.
+HEADERS = ("/*\n  X-Content-Type-Options: nosniff\n  Referrer-Policy: strict-origin-when-cross-origin\n  X-Frame-Options: DENY\n"
+           "  Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self'; font-src 'self'; img-src 'self' data:; "
+           "connect-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'\n"
+           "  Strict-Transport-Security: max-age=31536000\n  Permissions-Policy: camera=(), microphone=(), geolocation=()\n")
+
+
 IMG_TAG = re.compile(r'<img\b[^>]*>')
 
 
@@ -185,15 +207,17 @@ def build():
             # desktop row fits without wrapping. The footer keeps every link.
             optional = ' class="nav-optional"' if href in HEADER_OPTIONAL else ''
             header_links += f'<a{optional} href="{href}"{current}>{label}</a>'
-        html = f'''<!doctype html><html lang="en-AU"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="light"><meta name="theme-color" content="#FFFFFF"><meta name="description" content="{desc}"><title>{title}</title>{head_meta(key, title, desc)}<link rel="icon" href="/assets/favicon.svg" type="image/svg+xml"><link rel="preload" href="/assets/fonts/archivo-var-latin.woff2" as="font" type="font/woff2" crossorigin><link rel="stylesheet" href="/assets/site.css">{GLASS_STYLE}{page_styles(key)}{boot_script(key)}</head><body><a class="skip-link" href="#main">Skip to main content</a>{ATMOSPHERE}<header class="site-header"><div class="wrap nav"><a class="brand" href="/" aria-label="Cendavo home">{MARK}CENDAVO</a>{MOTION_TOGGLE if key in GL_PAGES else ''}<button class="menu" type="button" data-menu aria-label="Toggle menu" aria-controls="site-nav" aria-expanded="false"><span aria-hidden="true">☰</span></button><nav class="nav-links" id="site-nav" data-nav aria-label="Main navigation">{header_links}</nav><a class="button small" href="/contact/">Request a free consultation</a></div></header><main id="main" tabindex="-1">{page}</main><footer class="footer"><div class="wrap"><div class="footer-row"><div><a class="brand" href="/">{MARK}CENDAVO</a><p>Website design, redesign and care for local service businesses.<br>Sydney, Australia.<br>{MAIL_LINK}</p></div><nav class="footer-links" aria-label="Footer navigation">{links}</nav></div><div class="footer-bottom"><p>© 2026 Cendavo. The demonstration project uses sample data only.</p><p>Harbourside Mobile Detailing, Greenline Landscapes and Fade &amp; Co are fictional concept businesses.</p></div></div>{FOOTER_SIGNATURE}</footer><script src="/assets/site.js" defer></script>{PAGE_SCRIPTS.get(key, '')}{shell_scripts(key)}{GLASS_DEFS if key in MOTION_PAGES else ''}</body></html>'''
+        html = f'''<!doctype html><html lang="en-AU"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="light"><meta name="theme-color" content="#FFFFFF"><meta name="description" content="{desc}"><title>{title}</title>{head_meta(key, title, desc)}<link rel="icon" href="/assets/favicon.svg" type="image/svg+xml"><link rel="preload" href="/assets/fonts/archivo-var-latin.woff2" as="font" type="font/woff2" crossorigin><link rel="stylesheet" href="/assets/site.css">{GLASS_STYLE}{page_styles(key)}{boot_script(key)}{structured_data() if key == 'index' else ''}</head><body><a class="skip-link" href="#main">Skip to main content</a>{ATMOSPHERE}<header class="site-header"><div class="wrap nav"><a class="brand" href="/" aria-label="Cendavo home">{MARK}CENDAVO</a>{MOTION_TOGGLE if key in GL_PAGES else ''}<button class="menu" type="button" data-menu aria-label="Toggle menu" aria-controls="site-nav" aria-expanded="false"><span aria-hidden="true">☰</span></button><nav class="nav-links" id="site-nav" data-nav aria-label="Main navigation">{header_links}</nav><a class="button small" href="/contact/">Request a free consultation</a></div></header><main id="main" tabindex="-1">{page}</main><footer class="footer"><div class="wrap"><div class="footer-row"><div><a class="brand" href="/">{MARK}CENDAVO</a><p>Website design, redesign and care for local service businesses.<br>Sydney, Australia.<br>{MAIL_LINK}</p></div><nav class="footer-links" aria-label="Footer navigation">{links}</nav></div><div class="footer-bottom"><p>© 2026 Cendavo. The demonstration project uses sample data only.</p><p>Harbourside Mobile Detailing, Greenline Landscapes and Fade &amp; Co are fictional concept businesses.</p></div></div>{FOOTER_SIGNATURE}</footer><script src="/assets/site.js" defer></script>{PAGE_SCRIPTS.get(key, '')}{shell_scripts(key)}{GLASS_DEFS if key in MOTION_PAGES else ''}</body></html>'''
         if '{{' in html:
             raise ValueError(f'unreplaced placeholder in {source.name}')
         dest = OUT / ('index.html' if key == 'index' else '404.html' if key == NOT_FOUND else f'{key}/index.html')
         dest.parent.mkdir(parents=True, exist_ok=True)
         dest.write_text(html)
-    (OUT / '_headers').write_text('/*\n  X-Content-Type-Options: nosniff\n  Referrer-Policy: strict-origin-when-cross-origin\n  X-Frame-Options: DENY\n  Content-Security-Policy: default-src \'self\'; script-src \'self\'; style-src \'self\'; font-src \'self\'; img-src \'self\' data:; connect-src \'self\'; object-src \'none\'; base-uri \'self\'; frame-ancestors \'none\'\n')
-    (OUT / 'robots.txt').write_text('User-agent: *\nAllow: /\n')
-    (OUT / 'sitemap.xml').write_text('<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">' + ''.join(f'<url><loc>{BASE_URL}{href}</loc></url>' for _,href in NAV) + '</urlset>')
+    (OUT / '_headers').write_text(HEADERS)
+    (OUT / 'robots.txt').write_text(f'User-agent: *\nAllow: /\nSitemap: {BASE_URL}/sitemap.xml\n')
+    # lastmod is the build date: every page is rebuilt on every deploy.
+    lastmod = date.today().isoformat()
+    (OUT / 'sitemap.xml').write_text('<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">' + ''.join(f'<url><loc>{BASE_URL}{href}</loc><lastmod>{lastmod}</lastmod></url>' for _, href in NAV) + '</urlset>')
     print(f'Built {len(list((ROOT / "pages").glob("*.html")))} pages in {OUT}')
 
 
