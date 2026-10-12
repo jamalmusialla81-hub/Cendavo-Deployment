@@ -1603,6 +1603,7 @@ class DemoScriptTests(unittest.TestCase):
 SITE = Path(__file__).resolve().parents[1] / 'assets' / 'site.js'
 GLASS = Path(__file__).resolve().parents[1] / 'assets' / 'glass.js'
 GLASS_BOOT = Path(__file__).resolve().parents[1] / 'assets' / 'glass-boot.js'
+GLASS_PAGE = Path(__file__).resolve().parents[1] / 'assets' / 'glass-page.js'
 
 # glass-boot.js: which environments import the scene, and when. import() is replaced by a recording stub (vm scripts have
 # no module loader); everything else runs as shipped.
@@ -1611,6 +1612,7 @@ const source = fs.readFileSync(process.argv[1], 'utf8').replace('import(SCENE)',
 const settle = () => new Promise(resolve => setImmediate(resolve));
 async function run(env) {
   const host = element('host');
+  if (env.kind) host.setAttribute('data-gl-kind', env.kind);
   const imports = [], idle = [], timers = [], contexts = [];
   const doc = { readyState: env.complete ? 'complete' : 'interactive', querySelector: s => (s === '[data-gl]' && !env.noHost ? host : null),
     createElement: tag => ({ tag, getContext: kind => { contexts.push(kind); return env.noWebGL ? null : {}; } }) };
@@ -1646,7 +1648,12 @@ async function run(env) {
   const cases = { desktop, complete: { ...desktop, complete: true }, unknownDevice: { width: 1440, height: 900, fine: true, reduce: false },
     reduced: { ...desktop, reduce: true }, saveData: { ...desktop, saveData: true }, narrow: { ...desktop, width: 760 },
     lowMemory: { ...desktop, memory: 2 }, fourCores: { ...desktop, cores: 4 }, noWebGL: { ...desktop, noWebGL: true },
-    noHost: { ...desktop, noHost: true }, fail: { ...desktop, fail: true } };
+    noHost: { ...desktop, noHost: true }, fail: { ...desktop, fail: true },
+    slab: { ...desktop, kind: 'slab' }, panes: { ...desktop, kind: 'panes', complete: true }, unknownKind: { ...desktop, kind: 'photos' },
+    pathKind: { ...desktop, kind: '/evil.js' }, protoKind: { ...desktop, kind: 'constructor' },
+    slabReduced: { ...desktop, kind: 'slab', reduce: true }, panesSaveData: { ...desktop, kind: 'panes', saveData: true },
+    slabNarrow: { ...desktop, kind: 'slab', width: 760 }, panesLowMemory: { ...desktop, kind: 'panes', memory: 2 },
+    slabFourCores: { ...desktop, kind: 'slab', cores: 4 }, panesNoWebGL: { ...desktop, kind: 'panes', noWebGL: true } };
   const out = {};
   for (const [name, env] of Object.entries(cases)) out[name] = await run(env);
   console.log(JSON.stringify(out));
@@ -1787,7 +1794,71 @@ class GlassShellScriptTests(unittest.TestCase):
         js = GLASS_BOOT.read_text(encoding='utf-8')
         for banned in ('URLSearchParams', 'location', '?poster', 'http', 'importmap'):
             self.assertNotIn(banned, js)
-        self.assertIn("const SCENE = '/assets/glass-scene.js';", js)
+        self.assertIn("const MODULES = { home: '/assets/glass-scene.js', slab: '/assets/glass-page.js', panes: '/assets/glass-page.js' };", js)
+
+    def test_inner_page_scenes_come_from_a_fixed_list_and_respect_the_same_guards(self):
+        # Task 39: Work (slab) and Services (panes) import the inner-page scene after load and idle; any other kind, including
+        # a path or an Object.prototype key, imports nothing. Reduced motion, Save-Data, narrow, low-end and no WebGL never do.
+        r = self.node_json(GLASS_BOOT_SCRIPT, GLASS_BOOT)
+        for name in ('slab', 'panes'):
+            with self.subTest(case=name):
+                self.assertIsNone(r[name]['error'])
+                self.assertEqual(r[name]['beforeLoad'], 0)
+                self.assertEqual(r[name]['imports'], ['/assets/glass-page.js'])
+                self.assertEqual(r[name]['started'], {'host': 'host', 'shared': True})
+        for name in ('unknownKind', 'pathKind', 'protoKind', 'slabReduced', 'panesSaveData', 'slabNarrow', 'panesLowMemory',
+                     'slabFourCores', 'panesNoWebGL'):
+            with self.subTest(case=name):
+                self.assertIsNone(r[name]['error'])
+                self.assertEqual(r[name]['imports'], [])
+                self.assertIsNone(r[name]['started'])
+                if name != 'panesNoWebGL':
+                    self.assertEqual(r[name]['contexts'], [])
+
+    def test_inner_page_scene_joins_the_shared_pause_motion_fan_out(self):
+        # Task 39: glass-page.js's lifecycle, imported as the real module (three.js loads in Node without a DOM). With
+        # glass.js's fan-out installed first, Pause motion still reaches the other listener and stops the scene; the tab
+        # hidden or the hero off screen stop it too; and it never replaces an onPauseChange that is already there.
+        script = r'''
+const { pathToFileURL } = require('url');
+(async () => {
+  const m = await import(pathToFileURL(process.argv[1]).href);
+  const listeners = {};
+  const doc = { hidden: false, addEventListener: (t, fn) => { (listeners[t] = listeners[t] || []).push(fn); } };
+  const other = [];
+  const G = { paused: false, pauseFns: [p => other.push(p)] };
+  const glassHandler = p => G.pauseFns.forEach(fn => fn(p));
+  G.onPauseChange = glassHandler;   // as glass.js installs it
+  const runs = [];
+  const life = m.lifecycle(G, doc, on => runs.push(on));
+  const steps = [];
+  const step = name => steps.push([name, life.running, runs.slice()]);
+  step('before first frame');
+  life.ready(); step('ready');
+  G.paused = true; G.onPauseChange(true); step('paused');
+  G.paused = false; G.onPauseChange(false); step('resumed');
+  doc.hidden = true; listeners.visibilitychange.forEach(fn => fn()); step('tab hidden');
+  doc.hidden = false; listeners.visibilitychange.forEach(fn => fn()); step('tab visible');
+  life.view(false); step('off screen');
+  life.view(true); step('on screen');
+  const alone = { paused: false };
+  m.lifecycle(alone, doc, () => {});
+  console.log(JSON.stringify({ steps, other, kept: G.onPauseChange === glassHandler, fns: G.pauseFns.length,
+    aloneFanOut: typeof alone.onPauseChange === 'function' && alone.pauseFns.length === 1, kinds: m.KINDS, panes: m.PANES.map(p => p[1]) }));
+})();
+'''
+        r = self.node_json(script, GLASS_PAGE)
+        self.assertEqual(r['steps'], [
+            ['before first frame', False, []], ['ready', True, [True]], ['paused', False, [True, False]],
+            ['resumed', True, [True, False, True]], ['tab hidden', False, [True, False, True, False]],
+            ['tab visible', True, [True, False, True, False, True]], ['off screen', False, [True, False, True, False, True, False]],
+            ['on screen', True, [True, False, True, False, True, False, True]]])
+        self.assertEqual(r['other'], [True, False])
+        self.assertTrue(r['kept'])
+        self.assertEqual(r['fns'], 2)
+        self.assertTrue(r['aloneFanOut'])
+        self.assertEqual(r['kinds'], ['slab', 'panes'])
+        self.assertEqual(r['panes'], ['New website', 'Redesign', 'Care plan'])
 
     def test_nav_pill_hides_on_scroll_down_and_returns_on_up_focus_and_menu(self):
         r = self.node_json(SHELL_SCRIPT, SITE)

@@ -1,16 +1,21 @@
-// Liquid Glass hero boot (homepage only, deferred). The hero ships a still render of the glass logo (CSS poster on
+// Liquid Glass hero boot (homepage, Work and Services; deferred). The hero ships a still render of the glass logo (CSS poster on
 // [data-gl]); this decides whether the live WebGL version replaces it. Never with reduced motion, Save-Data, small screens
 // (760px and below), low-end devices (under 4 GB memory or 4 cores or fewer) or without WebGL: those visitors keep the
 // still. Otherwise the scene module (three.js r170, about 800 KB) is imported only after the page has loaded and gone
 // idle, so it never competes with the headline or the first paint. A failed import or start leaves the still in place.
+// Which module loads comes from a fixed list: no data-gl-kind is the homepage scene, slab (Work) and panes (Services) the
+// inner-page scene; any other kind imports nothing. No path is ever read from the page.
 (() => {
   const win = window, doc = document;
-  const SCENE = '/assets/glass-scene.js';
+  const MODULES = { home: '/assets/glass-scene.js', slab: '/assets/glass-page.js', panes: '/assets/glass-page.js' };
   const wantsGL = env => !env.reduce && !env.saveData && !env.narrow && !env.lowEnd && env.webgl;
   const G = win.__glass = win.__glass || { paused: false, heroP: 0, pointer: { x: 0, y: 0 } };
   G.wantsGL = wantsGL;
   const host = doc.querySelector('[data-gl]');
   if (!host) return;
+  const kind = host.getAttribute('data-gl-kind') || 'home';
+  const SCENE = Object.prototype.hasOwnProperty.call(MODULES, kind) ? MODULES[kind] : null;
+  if (!SCENE) return;
   const mq = query => Boolean(win.matchMedia?.(query).matches);
   const nav = win.navigator || {};
   const env = {

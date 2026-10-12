@@ -19,6 +19,16 @@
 
 /* Page hero: the H1 is plain text in line masks (motion.js lifts the lines through them; without it they simply show). */
 .pg-hero{padding:clamp(40px,6vw,96px) 0 clamp(56px,6vw,96px)}
+/* Liquid Glass page scene (Task 39, Work and Services): glass-page.js draws into this aria-hidden host behind the hero,
+   only on capable desktops without reduced motion or Save-Data. It never takes clicks, so the copy, links and video
+   controls in front keep working. With data-gl-hide, .gl-lead fades the anchor's media once the scene is live; the media
+   stays in the DOM and the accessibility tree, and every other visitor keeps it as it is. */
+.pg-hero:has(>.pg-gl){position:relative;isolation:isolate}
+.pg-hero:has(>.pg-gl)>.wrap{position:relative;z-index:1}
+.pg-gl{position:absolute;inset:0;z-index:0;pointer-events:none;overflow:hidden;
+  -webkit-mask:linear-gradient(180deg,transparent,#000 12%,#000 72%,transparent);mask:linear-gradient(180deg,transparent,#000 12%,#000 72%,transparent)}
+.pg-gl canvas{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
+@media(prefers-reduced-motion:no-preference){.gl-lead .sv-hero-media{opacity:0}}
 .pk{max-width:none;margin:0;font-size:clamp(2.7rem,1rem + 5.6vw,7rem);font-weight:820;font-stretch:84%;line-height:.9;letter-spacing:-.035em}
 .pk-m{font-size:clamp(2.5rem,1rem + 4.4vw,5.8rem)}
 .ln{display:block;overflow:hidden;padding:0 .08em .07em 0;margin-bottom:-.07em}

@@ -405,6 +405,8 @@ INDEX_GSAP_TAGS = GSAP_TAGS[:2]
 # The glass shell's scripts: Lenis and glass.js on the motion pages, the WebGL boot on the homepage only.
 GLASS_TAGS = ['<script src="/assets/vendor/lenis/lenis.min.js" defer></script>', '<script src="/assets/glass.js" defer></script>']
 GLASS_BOOT_TAG = '<script src="/assets/glass-boot.js" defer></script>'
+GL_HOOKS = {'data-gl', 'data-gl-kind', 'data-gl-video', 'data-gl-anchor', 'data-gl-hide'}  # the scene host (Task 39)
+GL_ROUTES = ('index.html', 'work/index.html', 'services/index.html')  # pages with a WebGL scene host (Task 39)
 DETAILS_TAG = GSAP_TAGS[3]
 # Network, storage and markup-injection APIs no motion script may use; autoAlpha (visibility:hidden), snap (scroll
 # hijacking) and preventDefault (swallowing a visitor's key or click) are banned too.
@@ -822,11 +824,12 @@ class DesignSystemTests(unittest.TestCase):
                 for tag in HOME_GSAP_TAGS:
                     self.assertEqual(html.count(tag), 1 if route in MOTION_ROUTES and tag in gsap_tags else 0)
                 # Liquid Glass (Task 37): Lenis and glass.js follow the page scripts on every motion page; the WebGL boot
-                # follows them on the homepage only. Contact, Demo and 404 load neither.
+                # follows them on the homepage, Work and Services (Task 39). Contact, Demo and 404 load neither.
                 for tag in GLASS_TAGS:
                     self.assertEqual(html.count(tag), 1 if route in MOTION_ROUTES else 0)
-                self.assertEqual(html.count(GLASS_BOOT_TAG), 1 if route == 'index.html' else 0)
+                self.assertEqual(html.count(GLASS_BOOT_TAG), 1 if route in GL_ROUTES else 0)
                 self.assertEqual(html.count('glass-scene.js'), 0)  # imported by glass-boot.js only, never a <script>
+                self.assertEqual(html.count('glass-page.js'), 0)
                 self.assertEqual(html.count(DETAILS_TAG), 0)
                 self.assertNotIn('details.js', html)
                 self.assertEqual(html.count(HOME_TAG), 1 if route == 'index.html' else 0)
@@ -835,7 +838,7 @@ class DesignSystemTests(unittest.TestCase):
                 self.assertEqual(html.count('scenes.js'), 1 if route in SCENES_ROUTES else 0)
                 if route in MOTION_ROUTES:
                     tags = (gsap_tags + ([SCENES_TAG] if route in SCENES_ROUTES else []) + ([REEL_TAG] if route in REEL_ROUTES else [])
-                            + ([HOME_TAG] if route == 'index.html' else []) + GLASS_TAGS + ([GLASS_BOOT_TAG] if route == 'index.html' else []))
+                            + ([HOME_TAG] if route == 'index.html' else []) + GLASS_TAGS + ([GLASS_BOOT_TAG] if route in GL_ROUTES else []))
                     positions = [html.index(tag) for tag in tags]
                     self.assertEqual(positions, sorted(positions))
                     self.assertGreater(positions[0], html.index('</footer>'))
@@ -1057,7 +1060,10 @@ class DesignSystemTests(unittest.TestCase):
                         with self.subTest(css=name, selectors=selectors.strip()[:60]):
                             # Top-level selectors only: commas inside :is(...) do not split a selector.
                             parts = [part.strip() for part in re.sub(r'\([^()]*\)', '()', selectors).split(',')]
-                            self.assertTrue(all(part.startswith('.ph-wait ') for part in parts), selectors)
+                            # Task 39: or .gl-lead, which only glass-page.js sets, after its scene has drawn the anchor's
+                            # media in WebGL (and never with reduced motion, so the guard is belt and braces).
+                            self.assertTrue(all(part.startswith(('.ph-wait ', '.gl-lead ')) for part in parts), selectors)
+                self.assertNotIn('.gl-lead', re.sub(r'/\*.*?\*/', '', unguarded, flags=re.S))
 
     def test_layout_basics(self):
         for selector, css in (('.button{', self.css), ('.menu{', self.css), ('.compare-button{', self.home_css),
@@ -2283,7 +2289,7 @@ class WorkArtDirectionTests(unittest.TestCase):
                 for name in ('width', 'height', 'srcset', 'sizes'):
                     self.assertTrue(attrs.get(name), name)
         # Motion: only the existing hooks, and one device bench per project.
-        self.assertTrue(set(re.findall(r'\s(data-[a-z-]+)', self.work)) <= set(MOTION_HOOKS) | set(REEL_HOOKS) | {'data-ph-fade', 'data-src'})
+        self.assertTrue(set(re.findall(r'\s(data-[a-z-]+)', self.work)) <= set(MOTION_HOOKS) | set(REEL_HOOKS) | {'data-ph-fade', 'data-src'} | GL_HOOKS)
         for slug in ('harbourside', 'greenline', 'fade-co'):
             self.assertEqual(self.article(slug, self.work).count(' data-bench='), 1)
 
@@ -2403,7 +2409,7 @@ class LiquidGlassTests(unittest.TestCase):
             shipped = (OUT / 'assets' / path.name).read_text()
             source = path.read_text()
             with self.subTest(script=path.name):
-                if path.name == 'glass-scene.js' or '`' in source:
+                if path.name in ('glass-scene.js', 'glass-page.js') or '`' in source:
                     self.assertEqual(shipped, source)
                 else:
                     self.assertEqual(shipped, strip_js(source))
@@ -2412,7 +2418,7 @@ class LiquidGlassTests(unittest.TestCase):
                     for line in shipped.splitlines():
                         self.assertTrue(any(line == candidate or candidate.endswith('*/ ' + line) for candidate in lines), line)
                 if node:
-                    module = ['--input-type=module'] if path.name == 'glass-scene.js' else []
+                    module = ['--input-type=module'] if path.name in ('glass-scene.js', 'glass-page.js') else []
                     result = subprocess.run(['node', *module, '--check'], input=shipped, capture_output=True, text=True)
                     self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(strip_js('a();\n  // note\n  /* block\n   still */ b();\n/* one */\n  c(); // kept\n'), 'a();\nb();\nc(); // kept\n')
@@ -3548,3 +3554,69 @@ class DaylightInnerPageTests(unittest.TestCase):
                 self.assertEqual(main.count('data-motion-toggle'), 1 if 'data-loop' in main else 0)
         self.assertIn('data-loop', self.html['work/index.html'])
         self.assertIn('data-loop', self.html['services/index.html'])
+
+
+class GlassPageSceneTests(unittest.TestCase):
+    """Liquid Glass inner pages, part 1 (Task 39): Work and Services each get one aria-hidden WebGL scene host behind the hero,
+    fitted to a hero element, imported by glass-boot.js from a fixed list (tests/test_demo_js.py covers when). The media it
+    stands in for stays in the page; the module imports only vendored three and glass-scene.js by relative path."""
+
+    PAGES = {'work/index.html': ('slab', '.wk-clip', False), 'services/index.html': ('panes', '.sv-hero-media', True)}
+
+    @classmethod
+    def setUpClass(cls):
+        build()
+        cls.html = {route: (OUT / route).read_text() for route in cls.PAGES}
+        cls.module = (OUT / 'assets/glass-page.js').read_text()
+        cls.pages_css = (OUT / 'assets/pages.css').read_text()
+
+    def test_one_aria_hidden_host_per_page_anchored_inside_its_hero(self):
+        for route, (kind, anchor, hide) in self.PAGES.items():
+            with self.subTest(route=route):
+                main = main_of(self.html[route])
+                self.assertEqual(main.count(' data-gl '), 1)
+                hero = re.search(r'<section class="pg-hero[^"]*".*?</section>', main, re.S).group(0)
+                host = re.search(r'<div class="pg-gl" data-gl data-gl-kind="([a-z]+)"[^>]*></div>', hero)
+                self.assertIsNotNone(host)
+                self.assertEqual(host.group(1), kind)
+                tag = host.group(0)
+                self.assertIn(f'data-gl-anchor="{anchor}"', tag)
+                self.assertIn('aria-hidden="true"', tag)
+                self.assertNotIn('role=', tag)
+                self.assertRegex(hero, r'class="[^"]*\b' + re.escape(anchor[1:]) + r'\b')
+                self.assertEqual('data-gl-hide' in tag, hide)
+                self.assertTrue(main.index(tag) < main.index('<h1'))  # behind the copy, before it in source order
+
+    def test_the_media_it_stands_in_for_stays_in_the_page(self):
+        services = main_of(self.html['services/index.html'])
+        media = re.search(r'<figure class="photo sv-hero-media".*?<img ([^>]+)>.*?</figure>', services, re.S).group(1)
+        self.assertIn('alt="Three black leather barber chairs', media)
+        self.assertIn('fetchpriority="high"', media)
+        work = main_of(self.html['work/index.html'])
+        clip = re.search(r'<div class="clip wk-clip".*?</div>\n</div>', work, re.S).group(0)
+        self.assertRegex(clip, r'<video class="sp-video"[^>]* controls [^>]*aria-label="Three signs video"')
+        self.assertIn('data-reel-toggle', clip)
+        # Only a motion-guarded .gl-lead rule hides it, and only on Services; the canvas never takes clicks.
+        guarded = without_blocks(self.pages_css, MOTION_GUARD)[1]
+        self.assertIn('.gl-lead .sv-hero-media{opacity:0}', ''.join(guarded))
+        self.assertRegex(self.pages_css, r'\.pg-gl\{[^}]*pointer-events:none')
+        self.assertRegex(self.pages_css, r'\.pg-gl canvas\{[^}]*pointer-events:none')
+        self.assertIn(".classList.add('gl-lead')", self.module)
+
+    def test_module_imports_only_by_relative_path_and_shares_pause_motion(self):
+        imports = re.findall(r"^import [^;]*? from '([^']+)';", self.module, re.M)
+        self.assertEqual(imports, ['./vendor/three/three.module.min.js', './glass-scene.js'])
+        self.assertNotRegex(self.module, r"from 'three|from '/|import\(")
+        for banned in ('http', 'fetch(', 'XMLHttpRequest', 'innerHTML', 'eval(', 'localStorage', 'preserveDrawingBuffer', 'preload = \'auto\''):
+            self.assertNotIn(banned, self.module)
+        # Pause motion: joins the shared fan-out; never replaces a handler glass.js already installed.
+        self.assertIn('(G.pauseFns = G.pauseFns || []).push(set);', self.module)
+        self.assertNotRegex(self.module, r'(?<!if \(!G\.onPauseChange\) )G\.onPauseChange =')
+        self.assertIn("canvas.setAttribute('aria-hidden', 'true');", self.module)
+        self.assertIn('setAnimationLoop(null)', self.module)
+        self.assertEqual(self.module, (ROOT / 'assets/glass-page.js').read_text())  # modules ship as written
+        self.assertLessEqual(len(self.module.encode()), 24 * 1024)
+        # Videos the scene may play come from a fixed map, never from page data.
+        self.assertRegex(self.module, r"const LOOP = \{ 'loop-gl-desktop': '/assets/video/loop-gl-desktop' \};")
+        self.assertTrue((OUT / 'assets/video/loop-gl-desktop.mp4').is_file())
+        self.assertTrue((OUT / 'assets/video/loop-gl-desktop-poster.jpg').is_file())

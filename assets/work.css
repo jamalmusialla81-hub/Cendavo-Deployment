@@ -2,8 +2,8 @@
    desktop loop, reel.js), three case studies with their device benches (kit.css), the demonstration project and the
    closing band. Loaded only on /work/, after pages.css. */
 .wk-grid{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));column-gap:24px;align-items:center}
-.wk-hero-copy{grid-column:1/9}
-.wk-clip{grid-column:9/13;grid-template-columns:minmax(0,1fr);justify-items:start;gap:16px;margin-top:0}
+.wk-hero-copy{grid-column:1/8}
+.wk-clip{grid-column:8/13;grid-template-columns:minmax(0,1fr);justify-items:start;gap:16px;margin-top:0}
 .wk-index{list-style:none;margin-top:clamp(8px,2vw,24px);margin-bottom:0;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:24px}
 .wk-tile a{display:grid;gap:6px;border-radius:16px;text-decoration:none}
 .wk-tile-img{position:relative;display:block;aspect-ratio:4/3;margin-bottom:10px;overflow:hidden;border-radius:14px;background:var(--warm-2)}

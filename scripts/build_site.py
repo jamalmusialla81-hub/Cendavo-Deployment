@@ -72,8 +72,9 @@ PAGE_SCRIPTS = {'index': GSAP_ONLY + REEL + '<script src="/assets/home.js" defer
 # Liquid Glass shell (Task 37). Every page loads glass.css after site.css (glass nav pill, colour-field atmosphere, glass
 # panels, glass footer) and the small shell in site.js (menu, nav hide/show). The motion pages add Lenis smooth scrolling
 # and glass.js (pointer light, Chromium edge refraction, the drifting atmosphere), after their page scripts; Contact, Demo
-# and the 404 page do not (the form, the demo app and plain scrolling stay as they are). Only the homepage loads
-# glass-boot.js, which decides after load and idle whether to import the WebGL hero (assets/glass-scene.js).
+# and the 404 page do not (the form, the demo app and plain scrolling stay as they are). The homepage, Work and Services
+# load glass-boot.js, which decides after load and idle whether to import the WebGL hero (assets/glass-scene.js on the
+# homepage, the inner-page scene assets/glass-page.js on Work and Services, Task 39).
 GLASS_STYLE = '<link rel="stylesheet" href="/assets/glass.css">'
 ATMOSPHERE = '<div class="atmos" aria-hidden="true"><i></i><i></i><i></i><i></i></div>'
 GLASS_MOTION = '<script src="/assets/vendor/lenis/lenis.min.js" defer></script><script src="/assets/glass.js" defer></script>'
@@ -81,7 +82,8 @@ GLASS_BOOT = '<script src="/assets/glass-boot.js" defer></script>'
 # Where glass.js builds its SVG displacement filters (Chromium only); empty and invisible otherwise.
 GLASS_DEFS = '<svg class="lg-defs" width="0" height="0" aria-hidden="true" focusable="false"><defs data-lg-defs></defs></svg>'
 # First-party classic scripts ship without whole-line comments and indentation (see strip_js). ES modules are copied as is.
-STRIP_SKIP = {'glass-scene.js'}
+STRIP_SKIP = {'glass-scene.js', 'glass-page.js'}
+GL_PAGES = ('index', 'work', 'services')
 
 
 def strip_js(text):
@@ -106,7 +108,7 @@ def strip_js(text):
 
 
 def shell_scripts(key):
-    return (GLASS_MOTION if key in MOTION_PAGES else '') + (GLASS_BOOT if key == 'index' else '')
+    return (GLASS_MOTION if key in MOTION_PAGES else '') + (GLASS_BOOT if key in GL_PAGES else '')
 
 
 def boot_script(key):
