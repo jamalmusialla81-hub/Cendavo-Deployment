@@ -3719,9 +3719,11 @@ class GlassPageSceneTests(unittest.TestCase):
 
     def test_the_media_it_stands_in_for_stays_in_the_page(self):
         services = main_of(self.html['services/index.html'])
-        media = re.search(r'<figure class="photo sv-hero-media".*?<img ([^>]+)>.*?</figure>', services, re.S).group(1)
-        self.assertIn('alt="Three black leather barber chairs', media)
-        self.assertIn('fetchpriority="high"', media)
+        # Task 45: the Services media is three static CSS glass panes (aria-hidden: the chapter links name the services).
+        media = re.search(r'<div class="sv-hero-media sv-panes" data-ph-media aria-hidden="true">(.*?)</div></div>', services, re.S).group(1)
+        self.assertEqual(re.findall(r'<b>([^<]+)</b>', media), ['New website', 'Redesign', 'Care plan'])
+        self.assertEqual(media.count('<div class="sv-pane">'), 3)
+        self.assertNotIn('<img', media)
         work = main_of(self.html['work/index.html'])
         clip = re.search(r'<div class="clip wk-clip".*?</div>\n</div>', work, re.S).group(0)
         self.assertRegex(clip, r'<video class="sp-video"[^>]* controls [^>]*aria-label="Three signs video"')
@@ -4090,3 +4092,140 @@ class GlassHeroAndReelTests(unittest.TestCase):
                 self.assertTrue(colours)
                 for colour in colours:
                     self.assertTrue(hsl_saturation(colour) <= 0.30 or opacity <= 0.25, (colour, opacity))
+
+
+class CleanPanesWhiteTypeAndWordExitTests(unittest.TestCase):
+    """Task 45 (owner-mandated): the Services panes are clean white glass with no photo inside or behind them, fanned so each
+    title reads, with a static CSS version for phones and fallbacks; the homepage marquee type is white frosted glass with a
+    separate rim, its pills ride centred on their photo tiles in one strip; the hero's CENDAVO name leaves early in the exit.
+    paneLayout and heroPose's word are checked numerically in tests/test_demo_js.py."""
+
+    @classmethod
+    def setUpClass(cls):
+        build()
+        cls.page = (OUT / 'assets/glass-page.js').read_text()
+        cls.scene = (OUT / 'assets/glass-scene.js').read_text()
+        cls.services_css = (OUT / 'assets/services.css').read_text()
+        cls.home_css = (OUT / 'assets/home.css').read_text()
+        cls.home = main_of((OUT / 'index.html').read_text())
+        cls.services = main_of((OUT / 'services/index.html').read_text())
+
+    def test_scene_panes_load_no_photo(self):
+        branch = self.page.split("} else if (kind === 'panes') {", 1)[1].split("} else if (kind === 'sheets') {", 1)[0]
+        for banned in ('barber-chair', 'img(', 'TextureLoader', 'back.add', '.jpg'):
+            self.assertNotIn(banned, branch)
+        self.assertNotIn('barber-chair', self.page)
+
+    def test_css_panes_are_clean_fanned_and_fit_a_phone(self):
+        self.assertNotIn('barber-chair', self.services)
+        self.assertNotIn('fetchpriority', self.services)  # no hero photo left to prioritise; the H1 leads
+        base = base_rules(self.services_css)
+        narrow = media_blocks(self.services_css, 'max-width:1023px')
+        for css in (base, narrow):
+            for selector in ('.sv-pane', '.sv-pane:nth-child(2)', '.sv-pane:nth-child(3)'):
+                for rule in rules_for(css, selector):
+                    self.assertNotRegex(rule, r'url\(|background-image|gradient')  # white glass only, never a photo
+        pane = rules_for(base, '.sv-pane')[0]
+        self.assertIn('position:absolute', pane)
+        self.assertIn('aspect-ratio:16/10', pane)
+        self.assertIn('overflow:hidden', pane)
+
+        def geometry(css, fallback=None):
+            def pct(selector, prop):
+                rule = ''.join(rules_for(css, selector))
+                found = re.search(rf'(?:^|;){prop}:([\d.]+)%', rule)
+                return float(found.group(1)) if found else (fallback(selector, prop) if fallback else 0.0)
+            return pct
+
+        desk = geometry(base)
+        phone = geometry(narrow, desk)
+        # Container aspect (height / width): 4/5 on desktop, 4/3 below 1024px; a pane is 16/10.
+        self.assertIn('aspect-ratio:4/5', rules_for(base, '.sv-hero-media')[0])
+        self.assertIn('aspect-ratio:4/3', ''.join(rules_for(narrow, '.sv-hero-media')))
+        for name, pct, box in (('desktop', desk, 5 / 4), ('phone', phone, 3 / 4)):
+            with self.subTest(layout=name):
+                width = pct('.sv-pane', 'width')
+                height = width * 10 / 16 / box  # pane height as a % of the container's height
+                tops = [pct(s, 'top') for s in ('.sv-pane', '.sv-pane:nth-child(2)', '.sv-pane:nth-child(3)')]
+                lefts = [pct(s, 'left') for s in ('.sv-pane', '.sv-pane:nth-child(2)', '.sv-pane:nth-child(3)')]
+                self.assertTrue(tops[0] < tops[1] < tops[2])
+                self.assertTrue(lefts[0] < lefts[1] < lefts[2])
+                for i in (0, 1):
+                    self.assertGreaterEqual(tops[i + 1] - tops[i], 0.4 * height)  # 40%+ of each covered pane shows
+                self.assertLessEqual(tops[2] + height, 100)
+                self.assertLessEqual(lefts[2] + width, 100)  # never wider than its box: no sideways scroll
+        # At 390px nothing in the narrow rules is wider than the phone.
+        for px in re.findall(r'(?<![-\w])(?:min-)?width:(\d+)px', narrow):
+            self.assertLessEqual(int(px), 390)
+        self.assertIn('max-width:600px', ''.join(rules_for(narrow, '.sv-hero-media')))
+        # No new motion: the panes only take part in the existing guarded opening (.ph-wait, data-ph-media).
+        self.assertNotIn('animation', self.services_css)
+        self.assertNotIn('transition', ''.join(rules_for(base, '.sv-pane')))
+        reduced = media_blocks(self.services_css, 'prefers-reduced-transparency:reduce')
+        self.assertIn('.sv-pane{background-color:#FBFAF7;-webkit-backdrop-filter:none;backdrop-filter:none}', reduced)
+
+    def test_marquee_type_is_white_frosted_glass_with_a_separate_rim(self):
+        base = base_rules(self.home_css)
+        fill = [rule for rule in rules_for(base, '.mq-type') if 'background' in rule]
+        self.assertEqual(len(fill), 1)
+        gradient = re.search(r'background:linear-gradient\(([^;]*)\)(?:;|$)', fill[0]).group(1)
+        self.assertNotIn('var(--ink)', gradient)
+        self.assertNotIn('#3A3530', gradient.upper())
+        colours = re.findall(r'#[0-9A-Fa-f]{6}', gradient)
+        self.assertGreaterEqual(len(colours), 2)
+        self.assertNotIn('rgba(', gradient)
+        for colour in colours:
+            self.assertGreaterEqual(luminance(colour), 0.8, colour)
+        video = ''.join(rules_for(base, '.mq-video'))
+        self.assertLessEqual(float(re.search(r'(?:^|;)opacity:([\d.]+)', video).group(1)), 0.25)
+        # The rim is its own masked layer on the same --mqx (set once on the wrapper both inherit from).
+        rim = ''.join(rules_for(base, '.mq-rim'))
+        for prop in ('-webkit-mask', 'mask'):
+            self.assertIn(f'{prop}:url("/assets/glass/marquee-type-rim.svg") var(--mqx) ', rim)
+            self.assertIn(f'{prop}:url("/assets/glass/marquee-type.svg") var(--mqx) 50%/auto 100% repeat-x', fill[0])
+        self.assertIn('--mqx:0px', rules_for(base, '.mq-word')[0])
+        self.assertTrue((OUT / 'assets/glass/marquee-type-rim.svg').is_file())
+        rim_svg = (OUT / 'assets/glass/marquee-type-rim.svg').read_text()
+        self.assertIn('fill="none" stroke="#000"', rim_svg)
+        self.assertEqual(re.search(r'viewBox="[^"]+"', rim_svg).group(0),
+                         re.search(r'viewBox="[^"]+"', (OUT / 'assets/glass/marquee-type.svg').read_text()).group(0))
+        # No filter on the moving type or its parent: nothing repaints a blur every frame.
+        for selector in ('.mq-type', '.mq-word', '.mq-rim'):
+            for rule in rules_for(self.home_css, selector):
+                self.assertNotRegex(rule, r'(?:^|;)(?:-webkit-)?(?:backdrop-)?filter:', selector)
+        self.assertIn('<div class="mq-word" aria-hidden="true"><div class="mq-rim"></div><div class="mq-type"><video class="mq-video"', self.home)
+        js = (OUT / 'assets/home.js').read_text()
+        self.assertIn("type = $('.mq-word')", js)
+        self.assertIn("type.style.setProperty('--mqx'", js)
+
+    def test_marquee_pills_ride_centred_on_their_tiles_in_one_strip(self):
+        section = re.search(r'<section class="marq" aria-label="What we make">(.*?)</section>', self.home, re.S).group(1)
+        self.assertIn('<p class="sr-only">New websites, redesigns and care plans.</p>', section)  # the words, once, for screen readers
+        self.assertEqual(section.count('data-marquee'), 1)
+        self.assertNotIn('mq-pills', section)
+        self.assertNotIn('mq-pills', self.home_css)
+        strip = re.search(r'<div class="mq-photos" data-marquee>(.*?)</div>', section, re.S).group(1)
+        tiles = re.findall(r'<span class="mq-tile">(.*?)</span></span>', strip, re.S)
+        self.assertEqual(len(tiles), 12)  # two identical runs of six, so the loop is seamless
+        self.assertEqual(tiles[:6], tiles[6:])
+        for tile in tiles:
+            self.assertRegex(tile, r'^(?:<picture>.*?</picture>|<img [^>]*>)<span class="mq-pill lg">[^<]+$')
+        self.assertEqual(section.count('class="mq-pill'), 12)
+        base = base_rules(self.home_css)
+        self.assertIn('position:relative', rules_for(base, '.mq-tile')[0])
+        pill = rules_for(base, '.mq-tile .mq-pill')[0]
+        for needle in ('position:absolute', 'left:50%', 'top:50%', 'transform:translate(-50%,-50%)', 'max-width:calc(100% - 24px)'):
+            self.assertIn(needle, pill)
+
+    def test_hero_name_leaves_cleanly(self):
+        self.assertIn('export function heroPose(', self.scene)
+        self.assertIn('wordOut(pose.word);', self.scene)
+        out = self.scene.split('function wordOut(v) {', 1)[1].split('\n  }', 1)[0]
+        for needle in ('wordPivot.visible = v > 0.001;', 'wordPivot.scale.setScalar(v);', 'wordBack.hm.material.opacity = v;', 'wordBack.sm.material.opacity = v;'):
+            self.assertIn(needle, out)
+        # The glass is never faded by opacity or switched to transparent (no recompile, no flicker).
+        self.assertNotIn('transparent', out)
+        self.assertNotIn('wordGlass', out)
+        frame = self.scene.split('function frame(dt) {', 1)[1].split('\n  }', 1)[0]
+        self.assertNotIn('transparent', frame)
+        self.assertNotRegex(self.scene, r'wordGlass\.(?:transparent|opacity)\s*=')

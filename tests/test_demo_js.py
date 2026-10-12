@@ -144,7 +144,7 @@ function run(env) {
     '.gcard': many('card', 2), '.c-book': [book], '.slot-pick': [slot], '.hero': [element('hero')], '[data-motion-toggle]': [toggle],
     '[data-rise]': [below('rise0'), element('riseOnScreen')], '.reel-frame': [element('reelFrame')], '.reel-panel': [below('reelPanel')],
     '.teaser-card': [below('teaser0'), below('teaser1'), below('teaser2')], '.compare-frame': [below('glassFrame')], '.band-panel': [below('bandPanel')],
-    '.band': [element('band')], '.gp-1': [element('phone1')], '.marq': [element('marq')], '.mq-type': [element('mqType')], '[data-marquee]': many('track', 2) };
+    '.band': [element('band')], '.gp-1': [element('phone1')], '.marq': [element('marq')], '.mq-word': [element('mqWord')], '[data-marquee]': many('track', 1) };
   const doc = { documentElement: root, querySelector: s => (parts[s] || [])[0] || null, querySelectorAll: s => parts[s] || [] };
   const { win } = makeWindow(env, { requestAnimationFrame: () => 1, cancelAnimationFrame() {} });
   let log = null;
@@ -1911,6 +1911,68 @@ const { pathToFileURL } = require('url');
         self.assertLessEqual(r['YAW'], 0.56)
         self.assertLessEqual(r['yaw'], r['YAW'] + 1e-9)
         self.assertGreaterEqual(r['scaleEnd'], 1.15 * r['scaleRest'])
+
+    def test_hero_exit_takes_the_name_away_before_it_ghosts(self):
+        # Task 45: heroPose's word (the CENDAVO name's share, 1..0) is whole until e = 0.2, gone from e = 0.5, never grows back
+        # in between and never leaves 0..1, at any time, pointer position or intro state.
+        script = r'''
+const { pathToFileURL } = require('url');
+(async () => {
+  const m = await import(pathToFileURL(process.argv[1]).href);
+  const out = { min: 1, max: 0, early: 1, late: 0, rises: 0, typed: true };
+  for (let t = 0; t <= 60; t += 0.5) for (const px of [-1, 0, 1]) for (const k of [0, 0.5, 1]) {
+    let prev = Infinity;
+    for (let i = 0; i <= 200; i++) {
+      const e = i / 200, w = m.heroPose(e, t, px, -px, k).word;
+      if (typeof w !== 'number' || Number.isNaN(w)) out.typed = false;
+      out.min = Math.min(out.min, w); out.max = Math.max(out.max, w);
+      if (e <= 0.2) out.early = Math.min(out.early, w);
+      if (e >= 0.5) out.late = Math.max(out.late, w);
+      if (w > prev + 1e-12) out.rises++;
+      prev = w;
+    }
+  }
+  console.log(JSON.stringify(out));
+})();
+'''
+        r = self.node_json(script, GLASS_SCENE)
+        self.assertTrue(r['typed'])
+        self.assertGreaterEqual(r['min'], 0)
+        self.assertLessEqual(r['max'], 1)
+        self.assertEqual(r['early'], 1)
+        self.assertEqual(r['late'], 0)
+        self.assertEqual(r['rises'], 0)
+
+    def test_services_panes_fan_so_every_title_reads(self):
+        # Task 45: glass-page.js's paneLayout, imported as the real module (pure, no GPU). Fanned out (f = 1), in pane units:
+        # pane 1 is highest and furthest left, pane 3 lowest, furthest right and nearest; each pane the next one covers
+        # keeps at least 40% of its height, its top 40% (the number and title) clear. Folded (f = 0) they stack.
+        script = r'''
+const { pathToFileURL } = require('url');
+(async () => {
+  const m = await import(pathToFileURL(process.argv[1]).href);
+  console.log(JSON.stringify({ pane: m.PANE, open: [0, 1, 2].map(i => m.paneLayout(i, 1)), shut: [0, 1, 2].map(i => m.paneLayout(i, 0)) }));
+})();
+'''
+        r = self.node_json(script, GLASS_PAGE)
+        h, w = r['pane']['h'], r['pane']['w']
+        self.assertEqual((w, h), (3.2, 2.0))
+        p = r['open']
+        self.assertTrue(p[0]['y'] > p[1]['y'] > p[2]['y'])
+        self.assertTrue(p[0]['x'] < p[1]['x'] < p[2]['x'])
+        self.assertTrue(p[0]['z'] < p[1]['z'] < p[2]['z'])
+        for i in (0, 1):
+            with self.subTest(pane=i + 1):
+                top, next_top = p[i]['y'] + h / 2, p[i + 1]['y'] + h / 2
+                shown = top - next_top  # the next pane is in front and lower: this much of pane i stays clear
+                self.assertGreaterEqual(shown, 0.4 * h)
+                self.assertLessEqual(next_top, top - 0.4 * h)  # its title strip is never under the next pane
+                self.assertLess(abs(p[i + 1]['x'] - p[i]['x']), w)  # still a stack: the panes overlap sideways
+        for q in r['shut']:
+            self.assertEqual((q['x'], q['y'], q['z']), (0, 0, 0))
+        source = GLASS_PAGE.read_text()
+        self.assertIn('const L = paneLayout(i, f);', source)
+        self.assertIn('g.position.set(L.x, L.y, L.z);', source)
 
     def test_hero_screens_are_sharp_and_the_dark_one_stays_clear_of_the_name(self):
         # Task 44: the screens' mip bias is low (refracted content, not mush); the name is milky white frosted glass; and in

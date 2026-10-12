@@ -157,10 +157,11 @@
     if (panel && below(panel)) gsap.fromTo(panel, { y: 40, opacity: 0 }, { y: 0, opacity: 1, duration: 1, ease: OUT, clearProps: 'opacity,transform', scrollTrigger: once(panel) });
   };
 
-  // Marquee: the photo strip, the pills and the type's mask glide continuously (transform and a mask offset), faster for
-  // a moment while the page scrolls quickly; only while the strip is on screen and Pause motion is off.
+  // Marquee: the photo strip (each pill rides on its tile) and the type's masks glide continuously (a transform, and one
+  // --mqx offset shared by the white type and its rim), faster for a moment while the page scrolls quickly; only while
+  // the strip is on screen and Pause motion is off.
   const marquee = () => {
-    const strip = $('.marq'), type = $('.mq-type');
+    const strip = $('.marq'), type = $('.mq-word');
     if (!strip) return () => {};
     const tracks = $$('[data-marquee]').map(el => ({ el, dir: Number(el.dataset.marquee) || 1, x: 0 }));
     let inView = false, boost = 0, frame = 0, last = 0, mx = 0;

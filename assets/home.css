@@ -92,13 +92,20 @@
    plays, ink shows through), then glass pills sliding over a strip of real photos. Decorative and aria-hidden; a
    visually hidden line says the same. home.js moves the mask and the two tracks (transform) and Pause motion stops them. */
 .marq{overflow:hidden;padding-block:clamp(56px,7vw,112px)}
-.mq-type{--mqx:0px;position:relative;height:clamp(64px,10vw,150px);overflow:hidden;background:linear-gradient(120deg,var(--ink),#3A3530 60%,var(--ink));-webkit-mask:url("/assets/glass/marquee-type.svg") var(--mqx) 50%/auto 100% repeat-x;mask:url("/assets/glass/marquee-type.svg") var(--mqx) 50%/auto 100% repeat-x}
-.mq-video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+/* Task 45: white frosted-glass type on the light base: a light fill with the footage only faintly through it, over a
+   separate rim layer (the same letters as an outline, the same --mqx) that gives the edges contrast. No filter on the
+   moving layers, so nothing repaints a blur every frame. */
+.mq-word{--mqx:0px;position:relative;height:clamp(64px,10vw,150px)}
+.mq-rim,.mq-type{position:absolute;inset:0;overflow:hidden}
+.mq-rim{background:linear-gradient(180deg,rgba(112,100,84,.6),rgba(36,30,22,.82));-webkit-mask:url("/assets/glass/marquee-type-rim.svg") var(--mqx) calc(50% + 1px)/auto 100% repeat-x;mask:url("/assets/glass/marquee-type-rim.svg") var(--mqx) calc(50% + 1px)/auto 100% repeat-x}
+.mq-type{background:linear-gradient(180deg,#FFFFFF,#EEF1F4 55%,#F8F9FA);-webkit-mask:url("/assets/glass/marquee-type.svg") var(--mqx) 50%/auto 100% repeat-x;mask:url("/assets/glass/marquee-type.svg") var(--mqx) 50%/auto 100% repeat-x}
+.mq-video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:.18}
 .mq-strip{position:relative;height:clamp(150px,16vw,210px);margin-top:clamp(20px,3vw,36px)}
-.mq-photos,.mq-pills{position:absolute;left:0;display:flex;width:max-content}
-.mq-photos{top:0;bottom:0;gap:10px}
-.mq-photos img{flex:none;width:auto;height:100%;aspect-ratio:3/2;object-fit:cover;border-radius:18px}
-.mq-pills{top:50%;gap:12px;margin-top:-26px}
+/* one strip: each pill rides centred on its own photo tile, so it never straddles a gap */
+.mq-photos{position:absolute;left:0;top:0;bottom:0;display:flex;gap:10px;width:max-content}
+.mq-tile{position:relative;flex:none;height:100%}
+.mq-photos img{display:block;flex:none;width:auto;height:100%;aspect-ratio:3/2;object-fit:cover;border-radius:18px}
+.mq-tile .mq-pill{position:absolute;left:50%;top:50%;max-width:calc(100% - 24px);transform:translate(-50%,-50%);padding-block:8px;line-height:1.15;text-align:center;white-space:normal}
 .mq-pill{display:inline-flex;align-items:center;min-height:52px;padding:0 22px;border-radius:999px;font:620 1rem/1 var(--font-display);white-space:nowrap}
 
 /* Concept projects: three cards of uneven size (a wide lead card, two tall ones, the last set lower). The photo turns into

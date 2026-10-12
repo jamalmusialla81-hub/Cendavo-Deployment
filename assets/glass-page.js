@@ -5,7 +5,8 @@
    With data-gl-hide the hero adds .gl-lead and CSS fades that element's media, which stays in the DOM and the
    accessibility tree. Kinds (anything else draws nothing):
      slab  - Work: a frosted glass slab at an angle, the Greenline concept loop playing behind it; the DOM phone stays in front
-     panes - Services: three stacked glass panes (New website / Redesign / Care plan) fanning out, upper panes further back
+     panes - Services: three stacked clean white glass panes (New website / Redesign / Care plan) fanning out, upper panes
+             further back (paneLayout); nothing behind them but the colour field, never a photo (Task 45)
      sheets - Pricing: two frosted sheets and a warm disc behind the HTML quote card, which stays in front as text
      photos - About: a big glass C with the three studio photos floating behind it, feathered to soft ovals (Task 44; the
               DOM collage steps back)
@@ -24,6 +25,14 @@ const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 export const KINDS = ['slab', 'panes', 'sheets', 'photos', 'mark'];
 export const PANES = [['01', 'New website', 'Planned, written and built'], ['02', 'Redesign', 'Same name, a better first impression'],
   ['03', 'Care plan', 'Updates, backups and small changes']];
+/* Task 45: where pane i (0..2) sits at fan-out f (0..1), in pane units (a pane is 3.2 x 2.0). Pane 1 is highest, furthest
+   left and furthest back; pane 3 lowest, furthest right and nearest. Each step down is 1.2 (60% of a pane's height), so a
+   covered pane always shows its top strip, where its number, title and line sit. Pure, so it is tested in Node. */
+export const PANE = { w: 3.2, h: 2.0 };
+export function paneLayout(i, f) {
+  const d = i - 1;
+  return { x: d * 1.0 * f, y: -d * 1.2 * f, z: d * 0.6 * f, ry: d * 0.1 * f };
+}
 const LOOP = { 'loop-gl-desktop': '/assets/video/loop-gl-desktop' }; // the only video a page can ask for
 /* the only photos the About and Contact scenes draw: [src, x, y, z, yaw]; never read from the page */
 export const PHOTOS = { photos: [['/assets/images/barber-shave-800.jpg', -1.2, 0.9, -2.6, 0.12], ['/assets/images/detail-wax-800.jpg', 1.5, 1.2, -3.8, -0.1],
@@ -58,9 +67,10 @@ function slabGeo(w, h, r, d, bevel) {
 /* the pane titles repeat the visible HTML headings and chapter links; the canvas is aria-hidden */
 function labelTexture(num, title, sub) {
   const c = document.createElement('canvas'); c.width = 1024; c.height = 640; const x = c.getContext('2d');
-  x.fillStyle = '#8C5A1C'; x.font = '700 54px Archivo, Arial, sans-serif'; x.fillText(num, 70, 130);
-  x.fillStyle = '#0E0E0D'; x.font = '800 132px Archivo, Arial, sans-serif'; x.fillText(title, 64, 300);
-  x.fillStyle = 'rgba(14,14,13,0.66)'; x.font = '400 46px "Atkinson Hyperlegible", Arial, sans-serif'; x.fillText(sub, 70, 390);
+  /* all text sits in the top half of the label, so it stays readable on a pane covered by the next one */
+  x.fillStyle = '#8C5A1C'; x.font = '700 50px Archivo, Arial, sans-serif'; x.fillText(num, 70, 96);
+  x.fillStyle = '#0E0E0D'; x.font = '800 124px Archivo, Arial, sans-serif'; x.fillText(title, 64, 222);
+  x.fillStyle = 'rgba(14,14,13,0.66)'; x.font = '400 44px "Atkinson Hyperlegible", Arial, sans-serif'; x.fillText(sub, 70, 296);
   const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4; return t;
 }
 
@@ -157,15 +167,13 @@ export function start(host, shared) {
   } else if (kind === 'panes') {
     PANES.forEach((d) => {
       const g = new THREE.Group();
-      g.add(new THREE.Mesh(slabGeo(3.2, 2.0, 0.2, 0.08, 0.07), glass));
+      g.add(new THREE.Mesh(slabGeo(PANE.w, PANE.h, 0.2, 0.08, 0.07), glass));
       /* the label sits just in front of its pane as a normal transparent layer (drawn after the glass), so it stays crisp */
       const lab = new THREE.Mesh(new THREE.PlaneGeometry(3.0, 1.875), new THREE.MeshBasicMaterial({ map: labelTexture(...d), transparent: true, depthWrite: false, toneMapped: false }));
       lab.position.z = 0.13; g.add(lab);
       obj.add(g); parts.push(g);
     });
-    const ph = new THREE.Mesh(roundedRect(3.4, 2.26, 0.12), new THREE.MeshBasicMaterial({ map: img('/assets/images/barber-chair-800.jpg'), toneMapped: false }));
-    ph.position.set(1.6, 1.0, -6.5); back.add(ph);
-    unitH = 3.6;
+    unitH = 4.6; // the fanned stack: one pane plus two steps of 1.2, with room for the drift
   } else if (kind === 'sheets') {
     const sheet = slabGeo(3.0, 3.8, 0.24, 0.1, 0.08); // one geometry, one material, two meshes
     [[1.3, 0.9, -1.4, 0.22], [-1.1, -0.7, -2.6, -0.16]].forEach(([x, y, z, r]) => {
@@ -234,8 +242,9 @@ export function start(host, shared) {
     if (kind === 'photos') parts.forEach((g, i) => { g.position.z = rest[i] + Math.sin(t * 0.4 + i * 2) * 0.12; }); // a slow depth breath
     else parts.forEach((g, i) => {
       const f = easeOut(clamp((intro - 0.3 - i * 0.18) / 2, 0, 1));
-      g.position.set((i - 1) * 0.8 * f, (1 - i) * 0.95 * f, (i - 1) * 0.75 * f); // upper panes sit further back, so every title stays clear
-      g.rotation.set(0, (i - 1) * 0.1 * f + Math.sin(t * 0.3 + i) * 0.03, 0);
+      const L = paneLayout(i, f); // upper panes sit further back and higher, so every title stays clear
+      g.position.set(L.x, L.y, L.z);
+      g.rotation.set(0, L.ry + Math.sin(t * 0.3 + i) * 0.03, 0);
     });
     sweep.position.set(Math.cos(t * 0.45) * 6, 3 + Math.sin(t * 0.3) * 2, 4 + Math.sin(t * 0.45) * 3);
     camera.position.x = damp(camera.position.x, sm.px * 0.25, 3, dt);

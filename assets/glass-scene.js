@@ -49,9 +49,13 @@ export function heroLayout(aspect) {
 
 /* The lockup's pose: e is the hero's eased exit progress (0..1), t the time, px/py the pointer (-1..1), k the eased intro
    (1 once it has arrived). On exit the idle sway and the pointer fade out, so the C settles square to the camera and grows
-   while the reel section rises over it: no tilt back, no edge-on turn, no smear. Pure (no three.js), so it is tested in Node. */
+   while the reel section rises over it: no tilt back, no edge-on turn, no smear. Task 45: word (1..0) takes the CENDAVO name
+   away early in the exit (whole until e = 0.2, gone by e = 0.5), before it grows into the hero's feathered foot and turns
+   into a ghost over the next heading. Pure (no three.js), so it is tested in Node. */
+export const WORD_OUT = [0.2, 0.5];
 export function heroPose(e, t, px, py, k = 1) {
   const calm = 1 - e;
+  const w = clamp((e - WORD_OUT[0]) / (WORD_OUT[1] - WORD_OUT[0]), 0, 1);
   const yaw = clamp(-0.5 * (1 - k) + (Math.sin(t * 0.28) * 0.1 + px * 0.2) * calm, -YAW, YAW);
   const markYaw = clamp(yaw + Math.sin(t * 0.33 + 1) * 0.08 * calm, -C_YAW, C_YAW) - yaw; // relative to the lockup
   return {
@@ -60,7 +64,8 @@ export function heroPose(e, t, px, py, k = 1) {
     scale: (0.84 + 0.16 * k) * (1 + 0.22 * e),
     x: 1 - e * 0.45, // a share of the layout's x: the lockup drifts toward the centre
     y: -(1 - k) * 1.3 + Math.sin(t * 0.6) * 0.05 * calm - e * 0.1,
-    z: e * 0.8
+    z: e * 0.8,
+    word: 1 - w * w * (3 - 2 * w)
   };
 }
 
@@ -245,6 +250,14 @@ export function start(host, shared) {
   }
   backing(MARK, [24, 24, 135, 152], 3.5 * 135 / 152, markPivot, 0.5, 0.45);
   const wordBack = backing([WORD_PATH], WORD_VB, wordW, wordPivot, 0.3, 0.5);
+  /* Task 45: the name leaves by shrinking back into the depth while its halo and shadow fade (their blend materials honour
+     opacity); the glass itself is never made transparent, so it neither recompiles nor flickers. Hidden at 0. */
+  function wordOut(v) {
+    wordPivot.visible = v > 0.001;
+    wordPivot.scale.setScalar(v);
+    wordPivot.position.z = -(1 - v) * 1.5;
+    wordBack.hm.material.opacity = v; wordBack.sm.material.opacity = v;
+  }
   /* the name's shadow is a soft contact shadow below the letters, not a glow around them */
   wordBack.sm.position.set(0.04, -0.42, -0.35); wordBack.sm.scale.set(1.02, 0.55, 1);
   wordPivot.rotation.set(WORD.rx, WORD.ry, 0); // only a slight tilt, so the letters never smear
@@ -296,6 +309,7 @@ export function start(host, shared) {
     logo.position.set(L.logo.x * pose.x, L.logo.y + pose.y, pose.z);
     logo.rotation.set(pose.tilt, pose.yaw, 0);
     markPivot.rotation.y = pose.markYaw;
+    wordOut(pose.word);
     sweep.position.set(Math.cos(t * 0.45) * 6, 3 + Math.sin(t * 0.3) * 2, 4 + Math.sin(t * 0.45) * 3);
     placeScreen('gl', sm.p, t, 0);
     placeScreen('hb', sm.p, t, 1);
