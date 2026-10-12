@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="en-AU">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="color-scheme" content="light">
+<meta name="theme-color" content="#FFFFFF">
+<meta name="description" content="Tell us about your business and request a free consultation. We reply by email.">
+<title>Contact — Request a free consultation | Cendavo</title>
+<link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
+<link rel="preload" href="/assets/fonts/archivo-var-latin.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="/daylight.css">
+<link rel="stylesheet" href="/pages.css">
+<script src="/assets/vendor/gsap/gsap.min.js" defer></script>
+<script src="/assets/vendor/gsap/ScrollTrigger.min.js" defer></script>
+<!-- daylight.js sets .js / .js-motion before first paint; pages.js (deferred) runs this page's motion and video. -->
+<script src="/daylight.js"></script>
+<script src="/pages.js" defer></script>
+</head>
+<body data-page="contact">
+<a class="skip" href="#main">Skip to main content</a>
+
+<header class="hdr">
+  <div class="hdr-in">
+    <a class="brand" href="/" aria-label="Cendavo home">
+      <svg class="mark" viewBox="0 0 200 200" aria-hidden="true" focusable="false"><path d="M55.67 43.26C86.24 19.38 130.22 24.01 155.16 53.72L135.24 70.43C119.31 51.45 91.21 48.5 71.68 63.75Z"/><path d="M48.21 150.02C21.26 122.11 21.26 77.89 48.21 49.98L66.91 68.05C49.7 85.87 49.7 114.13 66.91 131.95Z"/><path d="M155.16 146.28C130.22 175.99 86.24 180.62 55.67 156.74L71.68 136.25C91.21 151.5 119.31 148.55 135.24 129.57Z"/></svg>
+      <span>Cendavo</span>
+    </a>
+    <nav class="nav" id="site-nav" aria-label="Main navigation">
+      <a href="/work/">Work</a>
+      <a href="/services/">Services</a>
+      <a href="/pricing/">Pricing</a>
+      <a class="nav-extra" href="/demo/">Demo project</a>
+      <a href="/about/">About</a>
+      <a href="/contact/" aria-current="page">Contact</a>
+      <a class="btn btn-ink nav-cta-m" href="/contact/">Request a free consultation</a>
+    </nav>
+    <a class="btn btn-ink btn-sm hdr-cta" href="/contact/">Request a free consultation</a>
+    <button class="menu-btn" type="button" aria-controls="site-nav" aria-expanded="false" hidden>
+      <span class="menu-lines" aria-hidden="true"><i></i><i></i></span><span class="menu-label">Menu</span>
+    </button>
+  </div>
+</header>
+
+<main id="main" tabindex="-1">
+
+<section class="ct" aria-labelledby="ct-title">
+  <div class="ct-side">
+    <h1 id="ct-title" class="pk" aria-label="Tell us about your business.">
+      <span class="ln" aria-hidden="true"><span class="lt">Tell us about</span></span>
+      <span class="ln" aria-hidden="true"><span class="lt">your business.</span></span>
+    </h1>
+    <p class="pg-sub" data-hero-fade>A new website, a redesign of the one you have, or someone to look after it. A few sentences is enough. You don’t need a brief, a budget or any technical knowledge.</p>
+    <div class="ct-next">
+      <h2>What happens next</h2>
+      <ol class="ct-steps">
+        <li><span class="ct-n" aria-hidden="true">1</span><div><b>You send the form.</b><span>It takes about two minutes.</span></div></li>
+        <li><span class="ct-n" aria-hidden="true">2</span><div><b>We reply by email</b><span>with any questions, and to arrange a short free consultation.</span></div></li>
+        <li><span class="ct-n" aria-hidden="true">3</span><div><b>If it’s a good fit, you get a fixed quote.</b><span>No obligation. Work only starts if you say yes.</span></div></li>
+      </ol>
+    </div>
+    <p class="ct-mail">Prefer email? Write to <a class="mail" href="mailto:cendavo.au@gmail.com">cendavo.au@gmail.com</a></p>
+  </div>
+  <div class="ct-form">
+    <h2 class="ct-form-h">Your enquiry</h2>
+    <!-- Form markup reproduced exactly from the production contact page (ids, names, data-enquiry, aria-describedby, .field-error[data-error-for], honeypot, privacy note, status). The prototype's pages.js prevents submission and shows a demo notice. -->
+<form data-enquiry class="form" method="post" novalidate><p class="notice">Fields marked <span class="req" aria-hidden="true">*</span> are required.</p>
+<div class="field-row"><div class="field"><label for="enquiry-name">Name <span class="req" aria-hidden="true">*</span></label><input id="enquiry-name" name="name" type="text" autocomplete="name" required maxlength="100" aria-describedby="enquiry-name-error"><p class="field-error" id="enquiry-name-error" data-error-for="name"></p></div><div class="field"><label for="enquiry-email">Email <span class="req" aria-hidden="true">*</span></label><input id="enquiry-email" name="email" type="email" autocomplete="email" required maxlength="254" aria-describedby="enquiry-email-error"><p class="field-error" id="enquiry-email-error" data-error-for="email"></p></div></div>
+<div class="field-row"><div class="field"><label for="enquiry-phone">Phone <span class="optional">(optional)</span></label><input id="enquiry-phone" name="phone" type="tel" autocomplete="tel" maxlength="30" aria-describedby="enquiry-phone-error"><p class="field-error" id="enquiry-phone-error" data-error-for="phone"></p></div><div class="field"><label for="enquiry-business">Business name <span class="optional">(optional)</span></label><input id="enquiry-business" name="business" type="text" autocomplete="organization" maxlength="120" aria-describedby="enquiry-business-error"><p class="field-error" id="enquiry-business-error" data-error-for="business"></p></div></div>
+<div class="field-row"><div class="field"><label for="enquiry-website">Current website <span class="optional">(optional)</span></label><input id="enquiry-website" name="website" type="text" inputmode="url" autocomplete="url" maxlength="200" placeholder="e.g. example.com.au" aria-describedby="enquiry-website-error"><p class="field-error" id="enquiry-website-error" data-error-for="website"></p></div><div class="field"><label for="enquiry-service">What do you need? <span class="req" aria-hidden="true">*</span></label><div class="select"><select id="enquiry-service" name="service" required aria-describedby="enquiry-service-error"><option value="">Choose a service</option><option value="website-design">A new website</option><option value="website-redesign">A redesign of my current website</option><option value="maintenance">Ongoing website maintenance</option><option value="not-sure">Not sure yet</option></select></div><p class="field-error" id="enquiry-service-error" data-error-for="service"></p></div></div>
+<div class="field"><label for="enquiry-message">About your project <span class="req" aria-hidden="true">*</span></label><textarea id="enquiry-message" name="message" required minlength="10" maxlength="2000" aria-describedby="enquiry-message-hint enquiry-message-error"></textarea><p class="field-hint" id="enquiry-message-hint">What does your business do, and what should the website help with? 10 to 2000 characters.</p><p class="field-error" id="enquiry-message-error" data-error-for="message"></p></div>
+<div class="hp" aria-hidden="true"><label for="enquiry-company-url">Leave this field empty</label><input id="enquiry-company-url" name="company_url" type="text" tabindex="-1" autocomplete="off"></div>
+<div class="form-foot"><button class="button large" type="submit">Send enquiry</button><p class="form-promise">A person reads every enquiry and replies in plain language, with no hard sell.</p><p class="notice" id="enquiry-privacy">We use your name, email, optional phone, business and website details and your message only to reply to this enquiry. They are stored in a Cloudflare database used by Cendavo and also emailed to Cendavo through our email delivery provider, Resend. They are not added to mailing lists or sold, and you can ask us to delete them at any time by emailing <a class="mail" href="mailto:cendavo.au@gmail.com">cendavo.au@gmail.com</a>.</p></div></form><p data-enquiry-status class="status" role="status"></p>
+  </div>
+</section>
+
+</main>
+
+<footer class="ftr">
+  <div class="wrap">
+    <div class="ftr-row">
+      <div class="ftr-brand">
+        <a class="brand" href="/">
+          <svg class="mark" viewBox="0 0 200 200" aria-hidden="true" focusable="false"><path d="M55.67 43.26C86.24 19.38 130.22 24.01 155.16 53.72L135.24 70.43C119.31 51.45 91.21 48.5 71.68 63.75Z"/><path d="M48.21 150.02C21.26 122.11 21.26 77.89 48.21 49.98L66.91 68.05C49.7 85.87 49.7 114.13 66.91 131.95Z"/><path d="M155.16 146.28C130.22 175.99 86.24 180.62 55.67 156.74L71.68 136.25C91.21 151.5 119.31 148.55 135.24 129.57Z"/></svg>
+          <span>Cendavo</span>
+        </a>
+        <p>Website design, redesign and care for local service businesses.<br>Sydney, Australia.<br><a class="ulink" href="mailto:cendavo.au@gmail.com">cendavo.au@gmail.com</a></p>
+      </div>
+      <nav class="ftr-links" aria-label="Footer navigation">
+        <a href="/">Home</a><a href="/work/">Work</a><a href="/services/">Services</a><a href="/pricing/">Pricing</a><a href="/demo/">Demo project</a><a href="/about/">About</a><a href="/contact/">Contact</a>
+      </nav>
+    </div>
+    <div class="ftr-bottom">
+      <p>© 2026 Cendavo. The demonstration project uses sample data only.</p>
+      <p>Harbourside Mobile Detailing, Greenline Landscapes and Fade &amp; Co are fictional concept businesses.</p>
+    </div>
+  </div>
+  <div class="ftr-word" aria-hidden="true"><span data-word>Cendavo</span></div>
+</footer>
+
+</body>
+</html>

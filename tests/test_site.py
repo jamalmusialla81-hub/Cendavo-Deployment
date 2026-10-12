@@ -2756,11 +2756,10 @@ class SocialClipTests(unittest.TestCase):
                 self.assertEqual(main.count(CLIP_CAPTION), VIDEOS_PER_ROUTE.get(route, 0) if route != 'index.html' else 0)
 
 
-# Daylight (Task 33): the real hero loops are larger than the plan's 500 KB target. Their sizes are recorded here so the owner
-# can decide (re-encode, or accept them: they start only after the page has loaded and gone idle, in view, and never with
-# reduced motion or Save-Data). Any change to either file fails the test until this record is updated.
+# Daylight (Task 33): the hero loops were re-encoded by the supervisor (two-pass H.264, phone cut at 520 px wide) and now
+# fit the plan's 500 KB target, which is enforced.
 HERO_LOOP_TARGET = 500 * 1024
-HERO_LOOP_RECORDED = {'loop-hb-desktop.mp4': 832666, 'loop-hb-phone.mp4': 889461}
+HERO_LOOPS = ('loop-hb-desktop.mp4', 'loop-hb-phone.mp4')
 FIRST_LOAD_BUDGET = 650 * 1024
 
 
@@ -2833,12 +2832,10 @@ class DaylightTests(unittest.TestCase):
         self.assertIn('object-fit:cover', rules_for(base, '.hd-video')[0])
         self.assertIn('aspect-ratio:76/62', rules_for(base, '.rig')[0])
 
-    def test_hero_loop_files_are_within_target_or_recorded(self):
-        for name, recorded in HERO_LOOP_RECORDED.items():
+    def test_hero_loop_files_are_within_target(self):
+        for name in HERO_LOOPS:
             with self.subTest(video=name):
-                size = (OUT / 'assets/video' / name).stat().st_size
-                if size > HERO_LOOP_TARGET:
-                    self.assertEqual(size, recorded, f'{name} is {size} bytes, over the 500 KB target: record it for the owner')
+                self.assertLessEqual((OUT / 'assets/video' / name).stat().st_size, HERO_LOOP_TARGET)
 
     def test_first_load_stays_within_650_kb(self):
         # Everything a first visit downloads before the hero videos: the HTML, linked CSS, every script (GSAP included), the
