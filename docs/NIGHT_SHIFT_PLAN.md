@@ -302,3 +302,31 @@ Supervisor review of the Task 44 build (`docs/design/glass/critique2/`): the cal
 2. **Marquee** (`home-d-3.jpg`): the film-filled "New websites · Redesigns" type still reads as grey stone. Use white frosted-glass type (light fill, bright rim, subtle footage visible only faintly) on the light base, high contrast against it; pills sit centred on photo tiles, not straddling gaps.
 3. **Hero exit** (`home-d-1.jpg`): mid-exit the CENDAVO wordmark becomes a washed-out ghost smear over the "Twenty seconds" section — fade it out cleanly before it overlaps the next section's heading, or keep it crisp until it leaves.
 Small, focused; same budgets and tests. **30-minute builder clock. Never `cd` in Bash.**
+
+## Phase 2 — critical fixes from docs/AUDIT_2026-10-13.md (OWNER-MANDATED; profile `site`)
+The owner's brief: preserve the existing architecture, identity and strong elements; fix genuine defects first; no fake functionality; no fabricated proof; reduced motion and accessibility preserved. Each task is small (30-minute builder clock): focused tests between edits, full suite once. **Never `cd` in Bash.**
+
+### Task 46 — hero fit, Pause motion control, before/after grip
+1. Home hero must fit and stay readable at 360×780, 390×844, 430×932, 768×1024, 1024×768, 1440×900, 1920×1080, 844×390 landscape and 1440 at 150% zoom: both CTAs above the fold at every portrait/desktop size (landscape: headline + primary CTA above the fold), headline never overlapped by the 3D stage, cards, caption or wordmark; the "On screen" caption never covers a CTA (at 768 it currently intercepts clicks on "See concept projects"); at 1024 the wordmark is never clipped ("CENDAVC") and no doubled/ghost frame shows while the scene settles; at 1920 the "Booked" card doesn't crowd the headline. Use responsive composition (container/aspect queries, short-viewport `@media (max-height: …)` rules), not just scaling. Add a test that computes element rects at these viewports (Node layout harness or build-time CSS assertions) where feasible.
+2. Pause motion: move it out of the floating corner into the header/nav pill (desktop and mobile) so it can never cover content; label and icon reflect state ("Pause motion" ⏸ / "Play motion" ▶) with `aria-pressed` in sync, including the reduced-motion/Save-Data initial state. Keep one control per page with motion.
+3. Before/after: the visible round grip/seam must be draggable with mouse and touch (pointer events on the frame drive the existing range input, which stays the accessible control and source of truth); grip fully visible at 0 and 100 (inset/clamp); keep the one-time intro sweep and keyboard behaviour.
+
+### Task 47 — enquiry robustness, form UX, accessibility
+1. Contact privacy text: remove the claim that enquiries are emailed via Resend; say only what is always true (stored securely with Cloudflare; read by a person). Flag the wording for owner review in the follow-ups.
+2. No-JS: add a `<noscript>` notice above the form with the email address (cendavo.au@gmail.com) as the way to enquire; give the form no POST target that silently loses input (e.g. keep `method="post"` but `action` pointing nowhere is not acceptable — prefer removing method/action so nothing submits without JS, plus the notice).
+3. Honeypot hardening: the hidden field gets `autocomplete="off"`, `tabindex="-1"`, `aria-hidden`, and a name browsers won't autofill; keep the silent bot response.
+4. `makeKey` must not crash when `crypto` is missing (fallback to Math.random-based key).
+5. Field errors clear/re-validate on input/blur once a field has been corrected.
+6. Demo: `#export-demo` contrast ≥ 4.5:1; visible focus on the date input's calendar control; mobile home project-title links ≥ 24 px target; unique accessible names for Work regions (include the project name); lock page scroll while the mobile menu is open; reel heading never reveals after its paragraph.
+Tests for each.
+
+### Task 48 — performance
+1. LCP: hero subheading/copy must not be held at opacity 0 (`.ph-wait`) — animate transform/clip only, or show copy immediately, so LCP ≈ first headline paint on `/`, `/services/`, `/pricing/`, `/work/`. Keep the entrance feel.
+2. `/work/`: the hero social video must not download before the load event (start after load/idle and in view); fix the hero CLS (0.045) from copy/index movement — reserve sizes.
+3. WebGL: inner pages must not fetch SVGLoader/BufferGeometryUtils/glass-scene unless used (split the shared glass material/helpers into a small module); remove the throwaway feature-test WebGL context (test cheaply or reuse the real one); home hero should hold ~60 fps on an M-series laptop (reduce draw calls / merge geometry / adaptive DPR) without visible quality loss.
+4. GSAP: sleep the ticker (`gsap.ticker.sleep()`/`wake()` or equivalent) when Pause motion is on and never run it under reduced motion; ScrollTrigger refresh on wake.
+5. Investigate the glass nav backdrop blur not rendering (headless repro: a fixed test div blurs, `.nav` doesn't — check ancestors for `filter`, `opacity < 1`, `mask`, `will-change`, `contain` that break backdrop-filter) and fix the root cause so content under the header is blurred.
+Budgets: no regressions in existing size tests.
+
+### Task 49 — SEO and headers
+JSON-LD `ProfessionalService` (name Cendavo, url, email cendavo.au@gmail.com, areaServed Sydney NSW Australia, serviceType: website design, redesign, website care; NO address, NO ratings/reviews) on the homepage; `robots.txt` gets `Sitemap: <site>/sitemap.xml`; sitemap entries get `lastmod` (build date); `_headers` adds `Strict-Transport-Security: max-age=31536000` and a restrictive `Permissions-Policy` (camera=(), microphone=(), geolocation=(), interest-cohort=()). Concept projects must not appear as real clients in any structured data. Tests.
