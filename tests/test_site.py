@@ -191,6 +191,19 @@ def without_blocks(css, opener):
     return ''.join(kept), removed
 
 
+VT_KEYFRAMES = re.compile(r'@keyframes vt-[\w-]*\{')
+VT_RULE = re.compile(r'::view-transition-[a-z]+\([^)]*\)(?:,::view-transition-[a-z]+\([^)]*\))*\{[^}]*\}')
+
+
+def without_view_transitions(css):
+    """css without Night Shift Task 29's page-transition rules: @keyframes vt-* blocks, rules whose selectors are all
+    ::view-transition-* pseudo-elements, and the reduced-motion block left empty once those are gone. Those rules are the
+    one place CSS animation is allowed; ViewTransitionAndDetailTests pins them, so every other check stays as strict."""
+    while (match := VT_KEYFRAMES.search(css)):
+        css = without_blocks(css, match.group(0))[0]
+    return VT_RULE.sub('', css).replace('@media(prefers-reduced-motion:reduce){}', '')
+
+
 def luminance(hex_colour):
     channels = [int(hex_colour.lstrip('#')[i:i + 2], 16) / 255 for i in (0, 2, 4)]
     r, g, b = [c / 12.92 if c <= 0.04045 else ((c + 0.055) / 1.055) ** 2.4 for c in channels]
@@ -263,16 +276,26 @@ class ImageCollector(HTMLParser):
 
 CONCEPT_LABEL = 'Concept project · fictional business'
 SHOWREEL_CAPTION = 'Showreel · concept projects, fictional businesses'
+# Night Shift Task 29: the caption under each social clip (Services and Work).
+CLIP_CAPTION = 'Concept projects · fictional businesses'
 GSAP_TAGS = ['<script src="/assets/vendor/gsap/gsap.min.js" defer></script>',
              '<script src="/assets/vendor/gsap/ScrollTrigger.min.js" defer></script>',
-             '<script src="/assets/motion.js" defer></script>']
+             '<script src="/assets/motion.js" defer></script>',
+             '<script src="/assets/details.js" defer></script>']
 HOME_TAG = '<script src="/assets/home.js" defer></script>'
-# Pages that show device or quote mockups and so load the shared mockup kit (kit.css).
-KIT_ROUTES = ['index.html', 'work/index.html', 'pricing/index.html']
+# Task 29: the shared silent-video controller, only on the pages that show video.
+REEL_TAG = '<script src="/assets/reel.js" defer></script>'
+REEL_ROUTES = ['index.html', 'work/index.html', 'services/index.html']
+# Pages that show device or quote mockups (or, on Services, the phone-framed clips) and so load the mockup kit (kit.css).
+KIT_ROUTES = ['index.html', 'work/index.html', 'services/index.html', 'pricing/index.html']
 # Pages with GSAP motion (Night Shift Task 10; About added in Task 15). Contact (the enquiry form) and Demo (the browser app) stay static.
 MOTION_ROUTES = ['index.html', 'work/index.html', 'services/index.html', 'pricing/index.html', 'about/index.html']
 STATIC_ROUTES = ['contact/index.html', 'demo/index.html']
+# Night Shift Task 29: <video> elements per built page (the showreel on /, social clips on /services/ and /work/).
+VIDEOS_PER_ROUTE = {'index.html': 1, 'services/index.html': 2, 'work/index.html': 1}
 MOTION_HOOKS = ('data-ph', 'data-reveal', 'data-parallax', 'data-devices', 'data-rise', 'data-work', 'data-intro')
+# Hooks for reel.js (Task 28 showreel, Task 29 clips); playback, not motion, so they may appear wherever a video is.
+REEL_HOOKS = ('data-reel', 'data-reel-toggle')
 # Network, storage and markup-injection APIs no motion script may use; autoAlpha (visibility:hidden), snap (scroll
 # hijacking) and preventDefault (swallowing a visitor's key or click) are banned too.
 MOTION_SCRIPT_BANS = ('fetch(', 'XMLHttpRequest', 'innerHTML', 'http', 'localStorage', 'autoAlpha', 'snap', 'preventDefault',
@@ -624,15 +647,17 @@ class DesignSystemTests(unittest.TestCase):
                 self.assertAlmostEqual(int(attrs['height']) / int(attrs['width']), height / width, delta=0.01 * height / width)
 
     def test_home_script_is_small_isolated_and_safe(self):
-        # GSAP, then ScrollTrigger, then motion.js (then home.js on /): deferred, in that order, only on the motion pages.
+        # GSAP, then ScrollTrigger, then motion.js, then details.js (then reel.js where there is video, then home.js on /):
+        # deferred, in that order, only on the motion pages.
         for route in self.ROUTES:
             with self.subTest(route=route):
                 html = (OUT / route).read_text()
                 for tag in GSAP_TAGS:
                     self.assertEqual(html.count(tag), 1 if route in MOTION_ROUTES else 0)
                 self.assertEqual(html.count(HOME_TAG), 1 if route == 'index.html' else 0)
+                self.assertEqual(html.count(REEL_TAG), 1 if route in REEL_ROUTES else 0)
                 if route in MOTION_ROUTES:
-                    tags = GSAP_TAGS + ([HOME_TAG] if route == 'index.html' else [])
+                    tags = GSAP_TAGS + ([REEL_TAG] if route in REEL_ROUTES else []) + ([HOME_TAG] if route == 'index.html' else [])
                     positions = [html.index(tag) for tag in tags]
                     self.assertEqual(positions, sorted(positions))
                     self.assertGreater(positions[0], html.index('</footer>'))
@@ -642,7 +667,7 @@ class DesignSystemTests(unittest.TestCase):
                     self.assertNotIn('motion', html.lower())
         for name in ('gsap.min.js', 'ScrollTrigger.min.js', 'LICENSE.txt'):
             self.assertTrue((OUT / 'assets/vendor/gsap' / name).is_file())
-        budgets = {'home.js': 12 * 1024, 'motion.js': 8 * 1024, 'motion-boot.js': 1024}
+        budgets = {'home.js': 12 * 1024, 'motion.js': 8 * 1024, 'motion-boot.js': 1024, 'details.js': 6 * 1024, 'reel.js': 3 * 1024}
         scripts = {}
         for name, budget in budgets.items():
             path = OUT / 'assets' / name
@@ -664,7 +689,7 @@ class DesignSystemTests(unittest.TestCase):
         self.assertIn('controls.hidden = false', js)
         self.assertIn("setAttribute('aria-pressed'", js)
         # Motion is optional and only runs for people who have not asked for reduced motion.
-        for name in ('home.js', 'motion.js'):
+        for name in ('home.js', 'motion.js', 'details.js'):
             with self.subTest(script=name):
                 self.assertIn('if (!gsap || !ScrollTrigger)', scripts[name])
                 self.assertIn('gsap.matchMedia()', scripts[name])
@@ -676,16 +701,25 @@ class DesignSystemTests(unittest.TestCase):
         self.assertIn("const SKIP_EVENTS = ['keydown', 'pointerdown', 'wheel', 'touchstart'];", js)
         self.assertIn('window.addEventListener(type, onSkip, { passive: true })', js)
         self.assertIn('window.removeEventListener(type, onSkip)', js)
-        # Night Shift Task 28: no pinned project sequence any more; the showreel controller needs no GSAP and observes the
-        # video's visibility instead of listening to scroll.
-        self.assertNotIn('pin:', js)
-        self.assertNotIn('PIN_', js)
-        self.assertNotIn("addEventListener('scroll'", js)
-        self.assertIn("const NARROW = '(max-width: 640px)';", js)
-        self.assertIn('new window.IntersectionObserver(', js)
-        self.assertIn("video.removeAttribute('controls')", js)
-        self.assertIn('toggle.hidden = false', js)
-        self.assertNotIn('autoplay', js)
+        # Night Shift Task 28: no pinned project sequence any more. Task 29: the video controller moved to reel.js, shared
+        # by every page with video; it needs no GSAP and observes each video's visibility instead of listening to scroll.
+        reel = scripts['reel.js']
+        for name in ('home.js', 'reel.js', 'details.js'):
+            with self.subTest(script=name):
+                self.assertNotIn('pin:', scripts[name])
+                self.assertNotIn('PIN_', scripts[name])
+                self.assertNotIn("addEventListener('scroll'", scripts[name])
+                self.assertNotIn('autoplay', scripts[name])
+        for needle in ('[data-reel]', 'IntersectionObserver', 'removeAttribute', 'video.play(', 'video.pause('):
+            with self.subTest(gone_from_home=needle):
+                self.assertNotIn(needle, js.replace("doc.querySelector('[data-reel]')", ''))  # home.js only finds the frame
+        for needle in ('window.gsap', 'gsap.', 'ScrollTrigger'):  # playback needs no GSAP (only its comment names it)
+            self.assertNotIn(needle, reel)
+        self.assertIn("const NARROW = '(max-width: 640px)';", reel)
+        self.assertIn('new window.IntersectionObserver(', reel)
+        self.assertIn("video.removeAttribute('controls')", reel)
+        self.assertIn('toggle.hidden = false', reel)
+        self.assertIn("document.querySelectorAll('[data-reel]').forEach(", reel)
         # Magnetic buttons: fine pointers only, clamped to 6px or less.
         motion = scripts['motion.js']
         self.assertIn("(hover: hover) and (pointer: fine)", motion)
@@ -697,7 +731,7 @@ class DesignSystemTests(unittest.TestCase):
         self.assertIn("mm.add(MOTION + ' and (min-width: 1081px)'", motion)
         self.assertIn("addEventListener('toggle', onToggle)", motion)
         # Layout properties are never tweened (media-query features such as min-width are not tween properties).
-        for name in ('home.js', 'motion.js'):
+        for name in ('home.js', 'motion.js', 'details.js'):
             with self.subTest(script=name):
                 self.assertNotRegex(scripts[name], r'(?<![-\w])(height|width|top|left|right|bottom|margin|padding)\s*:\s*[-\d\'"]')
 
@@ -764,11 +798,13 @@ class DesignSystemTests(unittest.TestCase):
 
     def test_first_party_javascript_budget_per_page(self):
         # Motion pages may spend up to 20 KB of first-party script (GSAP excluded); Contact and Demo keep the 15 KB cap.
+        # Night Shift Task 29 raises the homepage alone to 25 KB (the plan's ceiling): it is the one page that loads every
+        # motion script (motion.js, details.js, reel.js and home.js), measured at about 24.1 KB when the cap was raised.
         for route in self.ROUTES:
             with self.subTest(route=route):
                 sources = re.findall(r'<script src="(/assets/[^"]+)"', (OUT / route).read_text())
                 own = [src for src in sources if not src.startswith('/assets/vendor/')]
-                budget = 20 * 1024 if route in MOTION_ROUTES else 15 * 1024
+                budget = 25 * 1024 if route == 'index.html' else 20 * 1024 if route in MOTION_ROUTES else 15 * 1024
                 self.assertLessEqual(sum((OUT / src.lstrip('/')).stat().st_size for src in own), budget)
 
     def test_home_stylesheet_loads_only_on_homepage(self):
@@ -790,7 +826,7 @@ class DesignSystemTests(unittest.TestCase):
 
     def test_motion_is_guarded_and_compositor_only(self):
         for name, css in (('site.css', self.css), ('home.css', self.home_css), ('pages.css', self.pages_css), ('kit.css', self.kit_css)):
-            unguarded, guarded = without_blocks(css, MOTION_GUARD)
+            unguarded, guarded = without_blocks(without_view_transitions(css), MOTION_GUARD)
             if name == 'site.css':
                 self.assertTrue(guarded)
             for word in ('transition', 'animation', '@keyframes'):
@@ -806,7 +842,7 @@ class DesignSystemTests(unittest.TestCase):
         # Content stays visible without JS, if GSAP fails, and with reduced motion: CSS never hides it.
         for name, css in (('site.css', self.css), ('home.css', self.home_css), ('pages.css', self.pages_css), ('kit.css', self.kit_css)):
             with self.subTest(css=name):
-                unguarded, guarded = without_blocks(css, MOTION_GUARD)
+                unguarded, guarded = without_blocks(without_view_transitions(css), MOTION_GUARD)
                 guarded = re.sub(r'/\*.*?\*/', '', ''.join(guarded), flags=re.S)
                 for hook in ('data-rise', 'data-hero-fade') + MOTION_HOOKS:
                     self.assertNotIn(hook, css)
@@ -937,12 +973,13 @@ class DesignSystemTests(unittest.TestCase):
         self.assertIn('.faq-list{grid-column:6/-1;max-width:none}', self.pages_css)
 
     def test_every_page_class_has_a_css_rule(self):
-        # The homepage loads site.css + home.css; inner pages load site.css + pages.css; /, /work/ and /pricing/ add kit.css.
+        # The homepage loads site.css + home.css; inner pages load site.css + pages.css; /, /work/, /services/ and /pricing/
+        # add kit.css.
         pages = Path(__file__).resolve().parents[1] / 'pages'
         checked = 0
         for page in pages.glob('*.html'):
             css = self.css + (self.home_css if page.stem == 'index' else self.pages_css)
-            if page.stem in ('index', 'work', 'pricing'):
+            if page.stem in ('index', 'work', 'services', 'pricing'):
                 css += self.kit_css
             classes = set()
             for attribute in re.findall(r'class="([^"]*)"', page.read_text()):
@@ -1281,9 +1318,10 @@ class ImagePerformanceAndSharingTests(unittest.TestCase):
             with self.subTest(route=route):
                 main = main_of(self.html[route])
                 self.assertEqual(main.count('<picture>'), len(parser.images))
-                # Task 28: the showreel's <video> has the one other <source> on the site (an mp4, on the homepage only).
+                # Task 28: the showreel's <video> has the one other kind of <source> (an mp4); Task 29 adds one per social clip
+                # (two on Services, one on Work).
                 video_sources = re.findall(r'<source src="[^"]+\.mp4" type="video/mp4">', main)
-                self.assertEqual(len(video_sources), 1 if route == 'index.html' else 0)
+                self.assertEqual(len(video_sources), VIDEOS_PER_ROUTE.get(route, 0))
                 self.assertEqual(main.count('<source '), len(parser.images) + len(video_sources))
         self.assertGreaterEqual(total, 40)
 
@@ -1528,7 +1566,7 @@ class AboutPageTests(unittest.TestCase):
         self.assertEqual(re.findall(r'<link rel="stylesheet" href="([^"]+)">', self.head), ['/assets/site.css', '/assets/pages.css'])
         scripts = re.findall(r'<script src="([^"]+)"', self.html)
         self.assertEqual(scripts, ['/assets/motion-boot.js', '/assets/site.js', '/assets/vendor/gsap/gsap.min.js',
-                                   '/assets/vendor/gsap/ScrollTrigger.min.js', '/assets/motion.js'])
+                                   '/assets/vendor/gsap/ScrollTrigger.min.js', '/assets/motion.js', '/assets/details.js'])
         self.assertNotIn('data-intro', self.html)
         # Night Shift Task 23: About opens like Work, Services and Pricing (headline line masks, staggered photo reveal).
         self.assertEqual(self.main.count(' data-ph '), 1)
@@ -1951,7 +1989,7 @@ class WorkArtDirectionTests(unittest.TestCase):
                 for name in ('width', 'height', 'srcset', 'sizes'):
                     self.assertTrue(attrs.get(name), name)
         # Motion: only the existing hooks, and still one device stage per project.
-        self.assertTrue(set(re.findall(r'\s(data-[a-z-]+)', self.work)) <= set(MOTION_HOOKS) | {'data-ph-fade'})
+        self.assertTrue(set(re.findall(r'\s(data-[a-z-]+)', self.work)) <= set(MOTION_HOOKS) | set(REEL_HOOKS) | {'data-ph-fade'})
         for slug in ('harbourside', 'greenline', 'fade-co'):
             self.assertEqual(self.article(slug, self.work).count(' data-devices'), 1)
 
@@ -2104,9 +2142,13 @@ class ServicesCareBandTests(unittest.TestCase):
         facts = re.search(r'<dl class="care-facts">(.*?)</dl>', care, re.S).group(1)
         self.assertEqual(re.findall(r'<div><dt>([^<]+)</dt><dd>[^<]+</dd></div>', facts),
                          ['Who it’s for', 'When it starts', 'What we need from you'])
+        # Night Shift Task 29 (owner): the band's one figure is the care-plan clip in a phone frame (a video, no photo).
+        clip = re.search(r'<div class="clip" data-reel>\s*<figure class="clip-fig">.*?</figure>', care, re.S)
+        self.assertIsNotNone(clip)
+        self.assertIn('cendavo-social-care-plan-540.mp4', clip.group(0))
         for banned in ('<img', '<picture', '<figure', 'data-reveal', 'garden-wall'):
             with self.subTest(banned=banned):
-                self.assertNotIn(banned, care)
+                self.assertNotIn(banned, care.replace(clip.group(0), ''))
         self.assertNotIn('garden-wall', self.services)
         self.assertNotIn('.care-photo', self.pages_css)
         # No price for the care plan: it is still unconfirmed.
@@ -2334,8 +2376,7 @@ class ShowreelMarkupTests(unittest.TestCase):
                 html = (OUT / route).read_text()
                 self.assertNotIn('<iframe', html)
                 self.assertNotIn('<audio', html)
-                if route != 'index.html':
-                    self.assertNotIn('<video', html)
+                self.assertEqual(html.count('<video'), VIDEOS_PER_ROUTE.get(route, 0))  # Task 29: clips on Services and Work
         tag = re.search(r'<video ([^>]*)>', self.section.group(1)).group(1)
         attrs = dict(re.findall(r'([a-z-]+)(?:="([^"]*)")?', tag))
         for flag in ('muted', 'loop', 'playsinline', 'controls'):
@@ -2371,7 +2412,7 @@ class ShowreelMarkupTests(unittest.TestCase):
         self.assertIn('aspect-ratio:16/9', rules_for(base, '.reel-frame')[0])
         phone = media_blocks(self.home_css, 'max-width:640px')
         self.assertIn('aspect-ratio:9/16', rules_for(phone, '.reel-frame')[0])
-        self.assertIn("const NARROW = '(max-width: 640px)';", (OUT / 'assets/home.js').read_text())  # same breakpoint as the CSS
+        self.assertIn("const NARROW = '(max-width: 640px)';", (OUT / 'assets/reel.js').read_text())  # same breakpoint as the CSS
         video = rules_for(base, '.reel-video')[0]
         for needle in ('width:100%', 'height:100%', 'object-fit:cover'):
             self.assertIn(needle, video)
@@ -2388,3 +2429,203 @@ class ShowreelMarkupTests(unittest.TestCase):
         self.assertEqual(headers, HEADERS)
         self.assertIn("default-src 'self'", headers)
         self.assertNotIn('media-src', headers)
+
+
+class ViewTransitionAndDetailTests(unittest.TestCase):
+    """Night Shift Task 29: cross-document page transitions, the cursor ring, card tilt, push-in and light sweep. Behaviour
+    is tested in tests/test_demo_js.py; these tests cover the CSS, markup and script constants."""
+    ROUTES = SiteBuildTests.ROUTES + ['404.html']
+    SHEETS = ('site.css', 'home.css', 'pages.css', 'kit.css')
+    EASE = 'cubic-bezier(.7,0,.2,1)'
+
+    @classmethod
+    def setUpClass(cls):
+        build()
+        cls.css = {name: (OUT / 'assets' / name).read_text() for name in cls.SHEETS}
+        cls.html = {route: (OUT / route).read_text() for route in cls.ROUTES}
+        cls.details = (OUT / 'assets/details.js').read_text()
+
+    def test_page_transitions_are_opt_in_quick_and_off_with_reduced_motion(self):
+        site = self.css['site.css']
+        unguarded, guarded = without_blocks(site, MOTION_GUARD)
+        guarded = ''.join(guarded)
+        # Opted in only inside the no-preference guard, so with reduced motion the browser navigates without a transition.
+        self.assertIn('@view-transition{navigation:auto}', guarded)
+        self.assertNotIn('@view-transition', unguarded)
+        self.assertIn(f'::view-transition-old(root){{animation:vt-out 450ms {self.EASE} both}}', guarded)
+        self.assertIn(f'::view-transition-new(root){{animation:vt-in 450ms {self.EASE} both}}', guarded)
+        self.assertIn(f'::view-transition-group(page-title){{animation-duration:450ms;animation-timing-function:{self.EASE}}}', guarded)
+        # The wipe animates compositor-friendly properties only.
+        keyframes = re.findall(r'@keyframes (vt-[\w-]+)\{((?:[^{}]*\{[^{}]*\})*)\}', site)
+        self.assertEqual(sorted(name for name, _ in keyframes), ['vt-in', 'vt-out'])
+        for name, body in keyframes:
+            with self.subTest(keyframes=name):
+                for prop in re.findall(r'([a-z-]+):', body):
+                    self.assertIn(prop, ('transform', 'clip-path'))
+        # Belt and braces: if a transition does start with reduced motion on, nothing in it animates.
+        reduce = re.findall(r'@media\(prefers-reduced-motion:reduce\)\{(.*?)\}\}', site, re.S)
+        self.assertEqual(reduce, ['::view-transition-group(*),::view-transition-old(*),::view-transition-new(*){animation:none!important'])
+        # No other stylesheet animates anything, and no CSS animation exists outside the page transition.
+        for name in self.SHEETS:
+            with self.subTest(css=name):
+                rest = without_view_transitions(self.css[name])
+                self.assertNotIn('animation', rest)
+                self.assertNotIn('@keyframes', rest)
+                if name != 'site.css':
+                    self.assertNotIn('view-transition', self.css[name])
+
+    def test_transition_names_live_in_css_and_name_one_element_per_page(self):
+        named = {}
+        for name in self.SHEETS:
+            for selectors, body in re.findall(r'([^{}]+)\{([^{}]*)\}', self.css[name]):
+                for value in re.findall(r'view-transition-name:([\w-]+)', body):
+                    named[value] = selectors.strip()
+        # The header stays put; each page's one H1 morphs into the next page's.
+        self.assertEqual(named, {'site-header': '.site-header', 'page-title': 'main h1'})
+        for route, html in self.html.items():
+            with self.subTest(route=route):
+                self.assertNotIn('view-transition', html)  # never inline (style-src 'self')
+                self.assertEqual(html.count('class="site-header"'), 1)
+                self.assertEqual(len(re.findall(r'<h1[\s>]', main_of(html))), 1)
+                self.assertEqual(len(re.findall(r'<h1[\s>]', html)), 1)
+
+    def test_no_script_tweens_a_variable_font_axis(self):
+        # The strategist dropped the hero's font-stretch snap (it would re-lay out the headline every frame): no script
+        # animates or sets a font axis.
+        for path in sorted((OUT / 'assets').glob('*.js')):
+            js = path.read_text()
+            with self.subTest(script=path.name):
+                for banned in ('fontStretch', 'fontVariationSettings', 'font-stretch', 'font-variation', 'fontWeight'):
+                    self.assertNotIn(banned, js)
+
+    def test_cursor_ring_never_hides_the_native_cursor_or_takes_clicks(self):
+        for name in self.SHEETS:
+            with self.subTest(css=name):
+                self.assertNotRegex(self.css[name], r'cursor:\s*none')
+        unguarded, guarded = without_blocks(self.css['site.css'], MOTION_GUARD)
+        self.assertNotIn('cursor-ring', unguarded)
+        ring = rules_for(''.join(guarded), '.cursor-ring')
+        self.assertEqual(len(ring), 1)
+        for needle in ('position:fixed', 'pointer-events:none', 'width:0', 'height:0'):
+            self.assertIn(needle, ring[0])
+        self.assertIn('pointer-events:none', rules_for(''.join(guarded), '.cursor-ring span')[0])
+        for name in ('home.css', 'pages.css', 'kit.css'):
+            self.assertNotIn('cursor-ring', self.css[name])
+        # Created by details.js only (aria-hidden), never in the markup.
+        self.assertIn("ring.setAttribute('aria-hidden', 'true')", self.details)
+        for route, html in self.html.items():
+            self.assertNotIn('cursor-ring', html)
+
+    def test_card_tilt_is_small_fine_pointer_only_and_focus_gets_no_tilt(self):
+        tilt = re.search(r'const MAX_TILT = (\d+(?:\.\d+)?);', self.details)
+        self.assertIsNotNone(tilt)
+        self.assertLessEqual(float(tilt.group(1)), 6)
+        self.assertIn('const PERSPECTIVE = 900;', self.details)
+        self.assertIn('Math.max(-MAX_TILT, Math.min(MAX_TILT, value))', self.details)
+        fine = self.details.split("mm.add(MOTION + ' and (hover: hover) and (pointer: fine)'", 1)
+        self.assertEqual(len(fine), 2)
+        self.assertNotIn('rotation', fine[0])  # every tilt sits inside the fine-pointer, motion-allowed branch
+        self.assertIn("$$('.teaser-card, .wk-tile')", fine[1])
+        self.assertNotIn('focus', fine[1])  # keyboard focus gets the CSS push-in and sweep, never the tilt
+        # Push-in and sweep: guarded, scoped to .motion, transform-only, on hover and keyboard focus.
+        for name, needle in (('home.css', '.motion .teaser-card:is(:hover,:focus-within) .teaser-img img{transform:scale(1.06)}'),
+                             ('site.css', '.motion :is(.teaser-img,.wk-tile-img)::after{'),
+                             ('site.css', '.motion :is(.teaser-card:hover,.teaser-card:focus-within,.wk-tile a:hover,.wk-tile a:focus-visible) :is(.teaser-img,.wk-tile-img)::after{transform:translateX(101%);transition:transform 900ms var(--ease)}')):
+            with self.subTest(css=name, rule=needle[:50]):
+                unguarded, guarded = without_blocks(self.css[name], MOTION_GUARD)
+                self.assertIn(needle, ''.join(guarded))
+                self.assertNotIn(needle, unguarded)
+        guarded = ''.join(without_blocks(self.css['site.css'], MOTION_GUARD)[1])
+        sweep = re.search(r'\n\.motion :is\(\.teaser-img,\.wk-tile-img\)::after\{([^}]*)\}', guarded).group(1)
+        self.assertIn('pointer-events:none', sweep)
+        self.assertNotIn('transition', sweep)  # it snaps back unseen instead of sweeping in reverse
+        # The homepage cards wipe in with the shared, staggered clip-path reveal.
+        home = main_of(self.html['index.html'])
+        self.assertEqual(home.count('<figure class="teaser-img" data-reveal>'), 3)
+
+
+class SocialClipTests(unittest.TestCase):
+    """Night Shift Task 29 (owner): the three silent social videos, each in the mockup kit's phone frame, with a caption, a
+    visible text description and the shared Pause/Play button. Playback is tested in tests/test_demo_js.py."""
+    CLIPS = {'services/index.html': [('before-after', 'Play redesign video'), ('care-plan', 'Play care plan video')],
+             'work/index.html': [('3-signs', 'Play three signs video')]}
+
+    @classmethod
+    def setUpClass(cls):
+        build()
+        cls.main = {route: main_of((OUT / route).read_text()) for route in SiteBuildTests.ROUTES + ['404.html']}
+
+    def clips(self, route):
+        return re.findall(r'<div class="clip[^"]*" data-reel>(.*?<div class="clip-side">.*?</div>)\s*</div>', self.main[route], re.S)
+
+    def test_each_clip_is_a_silent_framed_video_with_native_controls_until_js(self):
+        for route, expected in self.CLIPS.items():
+            clips = self.clips(route)
+            self.assertEqual(len(clips), len(expected), route)
+            for clip, (slug, button) in zip(clips, expected):
+                with self.subTest(route=route, clip=slug):
+                    self.assertEqual(clip.count('<video'), 1)
+                    self.assertRegex(clip, r'^\s*<figure class="clip-fig"><div class="phone clip-phone"><div class="phone-screen"><video ')
+                    tag = re.search(r'<video ([^>]*)>', clip).group(1)
+                    attrs = dict(re.findall(r'([a-z-]+)(?:="([^"]*)")?', tag))
+                    for flag in ('muted', 'loop', 'playsinline', 'controls'):
+                        self.assertIn(flag, attrs)
+                    self.assertNotIn('autoplay', tag)
+                    self.assertNotIn('src', attrs)
+                    self.assertEqual(attrs['preload'], 'none')
+                    self.assertEqual((attrs['width'], attrs['height']), ('540', '960'))
+                    self.assertEqual(attrs['poster'], f'/assets/video/cendavo-social-{slug}-poster-540.jpg')
+                    source = f'/assets/video/cendavo-social-{slug}-540.mp4'
+                    self.assertEqual(re.findall(r'<source ([^>]*)>', clip), [f'src="{source}" type="video/mp4"'])
+                    for path in (attrs['poster'], source):
+                        self.assertTrue((OUT / path.lstrip('/')).is_file(), path)
+                    # A visible one-sentence alternative (WCAG 1.2.1), linked to the video.
+                    desc = re.search(rf'<p class="clip-desc" id="{re.escape(attrs["aria-describedby"])}">([^<]+)</p>', clip)
+                    self.assertIsNotNone(desc)
+                    self.assertGreaterEqual(len(desc.group(1)), 60)
+                    self.assertTrue(desc.group(1).endswith('No sound.'))
+                    self.assertTrue(attrs['aria-label'].endswith('video'))
+                    self.assertIn(f'<figcaption class="clip-cap">{CLIP_CAPTION}</figcaption>', clip)
+                    self.assertIn(f'<button class="clip-toggle" type="button" data-reel-toggle hidden>{button}</button>', clip)
+                    self.assertLess(clip.index('</video>'), clip.index('<button'))
+        ids = re.findall(r'aria-describedby="(clip-[\w-]+)"', ''.join(self.main.values()))
+        self.assertEqual(len(ids), len(set(ids)))
+
+    def test_clips_sit_where_the_owner_asked(self):
+        services = self.main['services/index.html']
+        redesign = re.search(r'<section class="pg-sec bone" id="redesign".*?</section>', services, re.S).group(0)
+        self.assertIn('cendavo-social-before-after-540.mp4', re.search(r'<div class="chap-head">.*?</dl>', redesign, re.S).group(0))
+        care = re.search(r'<section class="care-band" id="care".*?</section>', services, re.S).group(0)
+        self.assertIn('cendavo-social-care-plan-540.mp4', care)
+        self.assertLess(care.index('care-title'), care.index('<video'))
+        self.assertLess(care.index('<video'), care.index('Every month'))
+        work = self.main['work/index.html']
+        intro = re.search(r'<section class="wk-hero".*?<ul class="wrap wk-index">', work, re.S).group(0)
+        self.assertIn('cendavo-social-3-signs-540.mp4', intro)
+        self.assertLess(intro.index('wk-hero-sub'), intro.index('<video'))
+        for route, html in self.main.items():
+            with self.subTest(route=route):
+                self.assertEqual(html.count('<video'), VIDEOS_PER_ROUTE.get(route, 0))
+
+    def test_clip_styles_never_crop_and_keep_a_visible_focus(self):
+        kit = base_rules((OUT / 'assets/kit.css').read_text())
+        video = rules_for(kit, '.clip-video')[0]
+        for needle in ('width:100%', 'height:100%', 'object-fit:contain'):
+            self.assertIn(needle, video)
+        toggle = rules_for(kit, '.clip-toggle')[0]
+        self.assertGreaterEqual(int(re.search(r'min-height:(\d+)px', toggle).group(1)), 44)
+        self.assertIn('background:var(--ink)', toggle)
+        self.assertIn('color:var(--bone)', toggle)
+        self.assertIn('outline:2px solid var(--bone)', rules_for(kit, '.clip-toggle:focus-visible')[0])
+        self.assertIn('box-shadow:0 0 0 6px var(--ink)', rules_for(kit, '.clip-toggle:focus-visible')[0])  # visible on bone too
+
+    def test_middle_dots_only_in_the_approved_labels(self):
+        # The concept label, the showreel caption and the clip caption are the only places a middle dot may appear on the
+        # marketing pages. (The demo app's counter line, "0 new · 0 to follow up", is interface text, not a label.)
+        for route, main in self.main.items():
+            if route == 'demo/index.html':
+                continue
+            with self.subTest(route=route):
+                text = main.replace(CONCEPT_LABEL, '').replace(SHOWREEL_CAPTION, '').replace(CLIP_CAPTION, '')
+                self.assertNotIn('·', text)
+                self.assertEqual(main.count(CLIP_CAPTION), VIDEOS_PER_ROUTE.get(route, 0) if route != 'index.html' else 0)

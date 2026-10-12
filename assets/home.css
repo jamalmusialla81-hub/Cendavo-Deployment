@@ -207,4 +207,7 @@
 .ph-wait .hero-device{opacity:0;transform:translateY(70px)}
 .ph-wait .intro-mark path{opacity:0}
 .ph-wait .intro-word>span{transform:translateY(110%)}
+/* Project cards (Task 29): the photo pushes in on hover or keyboard focus; the light sweep is in site.css, the tilt in details.js. */
+.motion .teaser-img img{transition:transform 700ms var(--ease)}
+.motion .teaser-card:is(:hover,:focus-within) .teaser-img img{transform:scale(1.06)}
 }

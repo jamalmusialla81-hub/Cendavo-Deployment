@@ -169,3 +169,19 @@
 @media(max-width:900px){
 .quote-paper{transform:rotate(.8deg)}
 }
+
+/* Social clips (Night Shift Task 29): a silent 9:16 video in the phone frame, shown whole (letterboxed, never cropped), with
+   its caption under the phone and a one-sentence description plus the Pause/Play button beside it. reel.js swaps the
+   native controls for the button; without JS the controls stay and the button stays hidden. pages.css places them: under
+   the Redesign heading, beside the Care plan heading (.care-top) and beside the Work intro (.wk-clip). */
+.clip{display:flex;flex-wrap:wrap;align-items:flex-end;gap:20px 28px}
+.clip-fig{flex:none;margin:0}
+.clip-phone{--pw:220px}
+.clip-video{display:block;width:100%;height:100%;object-fit:contain;background:#000}
+.clip-cap{margin-top:14px;color:var(--stone);font-size:.88rem;text-align:center}
+.clip-side{flex:1 1 200px;max-width:36ch}
+.clip-desc{margin:0;color:var(--stone)}
+.clip-toggle{margin-top:16px;min-height:44px;padding:0 18px;border:1px solid var(--line);border-radius:var(--radius-sm);background:var(--ink);color:var(--bone);font:600 1rem/1 var(--font-display);cursor:pointer}
+.clip-toggle:hover{background:var(--ink-2)}
+.clip-toggle:focus-visible{outline:2px solid var(--bone);outline-offset:3px;box-shadow:0 0 0 6px var(--ink)}
+.bone .clip-cap{color:var(--ink-soft)}

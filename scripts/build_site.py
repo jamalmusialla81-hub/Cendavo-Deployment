@@ -31,7 +31,8 @@ HEADER_OPTIONAL = {'/demo/'}
 # concept mini-sites and the quote sheet) loads, before the page stylesheet, only on the pages that show mockups.
 PAGE_STYLES = {'index': '<link rel="stylesheet" href="/assets/home.css">'}
 INNER_STYLE = '<link rel="stylesheet" href="/assets/pages.css">'
-KIT_PAGES = ('index', 'work', 'pricing')
+# Services loads it too (Task 29): its two social videos sit in the kit's phone frame.
+KIT_PAGES = ('index', 'work', 'services', 'pricing')
 KIT_STYLE = '<link rel="stylesheet" href="/assets/kit.css">'
 
 
@@ -39,12 +40,15 @@ def page_styles(key):
     return (KIT_STYLE if key in KIT_PAGES else '') + PAGE_STYLES.get(key, INNER_STYLE)
 # Motion (Night Shift Task 10). GSAP 3.13 (vendored in /assets/vendor/gsap/, GSAP Standard "No Charge" License; see
 # LICENSE.txt there) loads, deferred, only on the pages that animate: GSAP, then ScrollTrigger, then motion.js (shared
-# reveals), then home.js on /. Those pages also load motion-boot.js in <head> (external, not deferred) to set the
-# .js/.motion classes before first paint; only the homepage's tag carries data-intro, which allows the first-visit intro.
-# About reuses the shared reveals only (no page-specific script). Contact (the enquiry form) and Demo (the browser app) load no GSAP and no motion scripts.
+# reveals), then details.js (card tilt, cursor ring, step count-up; Task 29), then reel.js (the shared silent-video
+# controller) on the pages with video, then home.js on /. Those pages also load motion-boot.js in <head> (external, not
+# deferred) to set the .js/.motion classes before first paint; only the homepage's tag carries data-intro, which allows the
+# first-visit intro. Pricing and About reuse the shared scripts only. Contact (the enquiry form) and Demo (the browser app)
+# load no GSAP and no motion scripts.
 MOTION_PAGES = ('index', 'work', 'services', 'pricing', 'about')
-GSAP = '<script src="/assets/vendor/gsap/gsap.min.js" defer></script><script src="/assets/vendor/gsap/ScrollTrigger.min.js" defer></script><script src="/assets/motion.js" defer></script>'
-PAGE_SCRIPTS = {'index': GSAP + '<script src="/assets/home.js" defer></script>', 'work': GSAP, 'services': GSAP, 'pricing': GSAP, 'about': GSAP, 'demo': '<script src="/assets/demo.js" defer></script>', 'contact': '<script src="/assets/enquiry.js" defer></script>'}
+GSAP = '<script src="/assets/vendor/gsap/gsap.min.js" defer></script><script src="/assets/vendor/gsap/ScrollTrigger.min.js" defer></script><script src="/assets/motion.js" defer></script><script src="/assets/details.js" defer></script>'
+REEL = '<script src="/assets/reel.js" defer></script>'
+PAGE_SCRIPTS = {'index': GSAP + REEL + '<script src="/assets/home.js" defer></script>', 'work': GSAP + REEL, 'services': GSAP + REEL, 'pricing': GSAP, 'about': GSAP, 'demo': '<script src="/assets/demo.js" defer></script>', 'contact': '<script src="/assets/enquiry.js" defer></script>'}
 
 
 def boot_script(key):

@@ -1,6 +1,5 @@
-// Homepage: showreel playback, before/after comparison, first-visit intro and hero. Without this script (or GSAP)
-// everything is visible, the intro never shows, the comparison sits at 50% and the showreel keeps its native controls.
-// Shared reveals live in motion.js.
+// Homepage: before/after comparison and its demo sweep, showreel entrance, first-visit intro and hero. Without it (or GSAP)
+// everything is visible, the intro never shows and the comparison sits at 50%. Video playback is in reel.js.
 (() => {
   const doc = document;
   const root = doc.documentElement;
@@ -11,73 +10,44 @@
   const INTRO_LATEST_START_MS = 700;
   const SKIP_EVENTS = ['keydown', 'pointerdown', 'wheel', 'touchstart'];
   const MOTION = '(prefers-reduced-motion: no-preference)';
-  // Phones get the vertical cut; home.css switches the frame to 9:16 at the same width.
-  const NARROW = '(max-width: 640px)';
-
-  // Showreel (no GSAP needed): a silent video that plays only while in view, and never on its own with reduced motion or
-  // Save-Data. The native controls give way to one Pause/Play button (WCAG 2.2.2); a press of Pause is remembered.
-  const reel = doc.querySelector('[data-reel]');
-  const video = reel?.querySelector('video');
-  const toggle = reel?.querySelector('[data-reel-toggle]');
-  if (video && toggle) {
-    if (window.matchMedia?.(NARROW).matches && video.dataset.narrowSrc) {
-      const source = video.querySelector('source');
-      if (source) source.setAttribute('src', video.dataset.narrowSrc);
-      if (video.dataset.narrowPoster) video.setAttribute('poster', video.dataset.narrowPoster);
-      video.load(); // preload="none": this picks up the new source without downloading it yet
-    }
-    const saveData = Boolean(window.navigator?.connection?.saveData);
-    let wanted = !still() && !saveData; // the visitor's choice once they press the button
-    let inView = false;
-    const label = () => { toggle.textContent = video.paused ? 'Play showreel' : 'Pause showreel'; };
-    const play = () => {
-      let attempt;
-      try { attempt = video.play(); } catch (error) { attempt = null; }
-      if (attempt && typeof attempt.then === 'function') attempt.then(label, label); // refused (e.g. Low Power Mode): shows Play
-      label();
-    };
-    video.muted = true;
-    video.removeAttribute('controls');
-    video.addEventListener('play', label);
-    video.addEventListener('pause', label);
-    toggle.addEventListener('click', () => {
-      wanted = video.paused;
-      if (wanted) play();
-      else video.pause();
-      label();
-    });
-    if (window.IntersectionObserver) {
-      new window.IntersectionObserver(entries => {
-        inView = entries[entries.length - 1].isIntersecting;
-        if (inView && wanted && video.paused) play();
-        else if (!inView && !video.paused) video.pause();
-      }, { threshold: 0.25 }).observe(video);
-    }
-    toggle.hidden = false;
-    label();
-  }
+  // Demo sweep, once: 50 -> 82 -> 18 -> 50 over 1.6 s. Any press, key, touch or use of the controls stops it.
+  const SWEEP = [[82, 0.5], [18, 0.7], [50, 0.4]];
+  const SWEEP_STOP = ['pointerdown', 'keydown', 'touchstart'];
 
   // Before/after comparison: a labelled range input plus Before/After buttons.
   const figure = doc.querySelector('[data-compare]');
   const controls = figure?.querySelector('[data-compare-controls]');
   const range = controls?.querySelector('input[type="range"]');
+  let update = null;
+  let sweep = null;
+  let swept = false; // once per page load, and never after the visitor has used the comparison
+  const stopSweep = () => {
+    swept = true;
+    SWEEP_STOP.forEach(type => window.removeEventListener(type, stopSweep));
+    if (!sweep) return;
+    sweep.kill();
+    sweep = null;
+    figure.style.setProperty('--pos', (Number(range.value) || 0) + '%'); // back to the range value; no attribute changes
+  };
   if (range) {
     const buttons = controls.querySelectorAll('[data-compare-set]');
     const state = { v: Number(range.value) || 50 };
     let tween = null;
-    const update = () => {
+    update = () => {
       const value = Math.min(100, Math.max(0, Number(range.value) || 0));
       figure.style.setProperty('--pos', value + '%');
       range.setAttribute('aria-valuetext', value === 0 ? 'Before only' : value === 100 ? 'After only' : value + ' of 100 showing the redesign');
       buttons.forEach(button => button.setAttribute('aria-pressed', String(Number(button.dataset.compareSet) === value)));
     };
     range.addEventListener('input', () => {
+      stopSweep();
       tween?.kill();
       state.v = Number(range.value);
       update();
     });
     buttons.forEach(button => button.addEventListener('click', () => {
       const target = Number(button.dataset.compareSet);
+      stopSweep();
       tween?.kill();
       if (window.gsap && !still()) {
         // Glide the divider to the chosen side; the range value follows so it stays the source of truth.
@@ -142,6 +112,30 @@
     return tl;
   };
 
+  // Only the visual --pos moves: the range value, its aria-valuetext and the buttons never change (nothing is announced).
+  const demoSweep = () => {
+    if (!update) return;
+    const at = { p: Number(range.value) || 50 };
+    const draw = () => figure.style.setProperty('--pos', at.p + '%');
+    ScrollTrigger.create({ trigger: figure, start: 'top 65%', once: true, onEnter: () => {
+      if (swept) return;
+      swept = true;
+      sweep = gsap.timeline({ onComplete: stopSweep });
+      SWEEP.forEach(([p, duration]) => sweep.to(at, { p, duration, ease: 'power2.inOut', onUpdate: draw }));
+      SWEEP_STOP.forEach(type => window.addEventListener(type, stopSweep, { passive: true }));
+    } });
+  };
+
+  // Showreel entrance, if below the fold: the video opens from an inset window as it scrolls in (scrubbed, no pin); the
+  // caption and Pause button rise as it starts to play.
+  const reelEntrance = () => {
+    const reel = doc.querySelector('[data-reel]');
+    const video = reel?.querySelector('video');
+    if (!video || reel.getBoundingClientRect().top < window.innerHeight) return;
+    gsap.fromTo(video, { clipPath: 'inset(9% 11% 9% 11%)', scale: 1.08 }, { clipPath: 'inset(0% 0% 0% 0%)', scale: 1, ease: 'none', scrollTrigger: { trigger: reel, start: 'top bottom', end: 'top 35%', scrub: 0.6 } });
+    gsap.fromTo($$('.reel-cap, [data-reel-toggle]', reel), { opacity: 0, y: 14 }, { opacity: 1, y: 0, duration: 0.6, stagger: 0.08, ease: 'power3.out', clearProps: 'opacity,transform', scrollTrigger: { trigger: reel, start: 'top 90%', once: true } });
+  };
+
   mm.add('(prefers-reduced-motion: reduce)', endIntro);
   // The hero opens only under the intro or while CSS holds it; after the 2.5 s failsafe it stays shown.
   mm.add(MOTION, () => {
@@ -157,6 +151,8 @@
       }
     } else endIntro();
     root.classList.remove('ph-wait');
-    return endIntro;
+    reelEntrance();
+    demoSweep();
+    return () => { endIntro(); stopSweep(); };
   });
 })();

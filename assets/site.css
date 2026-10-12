@@ -206,3 +206,27 @@ main:focus{outline:none;box-shadow:none}
 
 /* Motion: only for people who have not asked for reduced motion; transform only. GSAP (home, work, services, pricing) uses its own matchMedia guard. */
 @media(prefers-reduced-motion:no-preference){html{scroll-behavior:smooth}.nav-links a::after,.footer-links a::after,.ulink::after,.button.go::after{transition:transform 450ms var(--ease)}.button.go:hover::after,.button.go:focus-visible::after{transform:translateX(2px) rotate(45deg)}}
+
+@media(prefers-reduced-motion:no-preference){
+/* Page transitions (Night Shift Task 29): cross-document View Transitions, only for people who have not asked for reduced
+   motion; browsers without support navigate as usual. The header stays put, the page's one H1 morphs into the next page's,
+   and the new page wipes up over the old one (450 ms). Each name is given to one element per page. The cursor ring is
+   drawn by details.js on fine pointers only; it never takes clicks and the native cursor stays. */
+@view-transition{navigation:auto}
+.site-header{view-transition-name:site-header}
+main h1{view-transition-name:page-title}
+::view-transition-old(root){animation:vt-out 450ms cubic-bezier(.7,0,.2,1) both}
+::view-transition-new(root){animation:vt-in 450ms cubic-bezier(.7,0,.2,1) both}
+::view-transition-group(page-title){animation-duration:450ms;animation-timing-function:cubic-bezier(.7,0,.2,1)}
+@keyframes vt-out{to{transform:translateY(-4%)}}
+@keyframes vt-in{from{clip-path:inset(100% 0 0 0)}to{clip-path:inset(0 0 0 0)}}
+.cursor-ring{position:fixed;top:0;left:0;z-index:200;width:0;height:0;pointer-events:none;mix-blend-mode:difference}
+.cursor-ring span{position:absolute;top:-18px;left:-18px;width:36px;height:36px;border:1.5px solid #fff;border-radius:50%;pointer-events:none;transition:transform 250ms var(--ease)}
+.cursor-ring.is-link span{transform:scale(1.6)}
+/* Project cards on / and /work/: one soft light sweeps across the photo on hover or keyboard focus. It snaps back unseen
+   (no transition on the way out), so it never runs in reverse. */
+.motion :is(.teaser-img,.wk-tile-img){position:relative}
+.motion :is(.teaser-img,.wk-tile-img)::after{content:"";position:absolute;inset:0;background:linear-gradient(105deg,transparent 30%,rgba(242,239,232,.16) 50%,transparent 70%);transform:translateX(-101%);pointer-events:none}
+.motion :is(.teaser-card:hover,.teaser-card:focus-within,.wk-tile a:hover,.wk-tile a:focus-visible) :is(.teaser-img,.wk-tile-img)::after{transform:translateX(101%);transition:transform 900ms var(--ease)}
+}
+@media(prefers-reduced-motion:reduce){::view-transition-group(*),::view-transition-old(*),::view-transition-new(*){animation:none!important}}

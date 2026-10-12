@@ -6,6 +6,8 @@ from pathlib import Path
 
 DEMO = Path(__file__).resolve().parents[1] / 'assets' / 'demo.js'
 HOME = Path(__file__).resolve().parents[1] / 'assets' / 'home.js'
+REEL = Path(__file__).resolve().parents[1] / 'assets' / 'reel.js'
+DETAILS = Path(__file__).resolve().parents[1] / 'assets' / 'details.js'
 
 BOOT = Path(__file__).resolve().parents[1] / 'assets' / 'motion-boot.js'
 MOTION = Path(__file__).resolve().parents[1] / 'assets' / 'motion.js'
@@ -190,18 +192,19 @@ console.log(JSON.stringify({
 }));
 """
 
-# Night Shift Task 28: runs assets/home.js's showreel controller with a fake <video> (play() resolves, or rejects like iOS Low
-# Power Mode), a fake IntersectionObserver the test drives by hand, matchMedia, Save-Data and optional GSAP.
+# Night Shift Task 28: runs the showreel controller (assets/reel.js since Task 29) with a fake <video> (play() resolves, or
+# rejects like iOS Low Power Mode), a fake IntersectionObserver the test drives by hand, matchMedia, Save-Data and optional
+# GSAP. Task 29: several reels on one page (the Services clips) must work independently, each with its own button name.
 REEL_SCRIPT = HARNESS + r"""
 const source = fs.readFileSync(process.argv[1], 'utf8');
 const WIDE = { src: '/assets/video/cendavo-showreel-1600.mp4', poster: '/assets/video/cendavo-showreel-poster-1600.jpg' };
 const NARROW = { src: '/assets/video/cendavo-showreel-vertical-720.mp4', poster: '/assets/video/cendavo-showreel-vertical-poster-720.jpg' };
 const settle = () => new Promise(resolve => setImmediate(resolve));
-async function run(env) {
-  const src = element('source'); src.attrs.src = WIDE.src;
+function makeReel(env, name, narrow) {
+  const src = element('source'); src.attrs.src = narrow ? WIDE.src : '/assets/video/' + name + '.mp4';
   const video = element('video', { source: [src] });
-  video.attrs = { controls: '', poster: WIDE.poster, muted: '' };
-  video.dataset = { narrowSrc: NARROW.src, narrowPoster: NARROW.poster };
+  video.attrs = { controls: '', poster: narrow ? WIDE.poster : '/assets/video/' + name + '.jpg', muted: '' };
+  video.dataset = narrow ? { narrowSrc: NARROW.src, narrowPoster: NARROW.poster } : {};
   Object.assign(video, { paused: true, muted: false, plays: 0, pauses: 0, loads: 0 });
   const fire = type => (video.listeners[type] || []).forEach(fn => fn({ type }));
   video.removeAttribute = key => { delete video.attrs[key]; };
@@ -214,10 +217,16 @@ async function run(env) {
     return Promise.resolve();
   };
   video.pause = () => { video.pauses++; if (!video.paused) { video.paused = true; fire('pause'); } };
-  const toggle = element('toggle'); toggle.hidden = true; toggle.textContent = 'Play showreel'; toggle.attrs.type = 'button';
+  const toggle = element('toggle'); toggle.hidden = true; toggle.textContent = 'Play ' + name; toggle.attrs.type = 'button';
   const reel = element('reel', { video: [video], '[data-reel-toggle]': [toggle] });
+  return { reel, video, toggle, src };
+}
+async function run(env) {
+  const names = env.names || ['showreel'];
+  const reels = names.map((name, i) => makeReel(env, name, i === 0 && !env.names));
+  const { video, toggle, src } = reels[0];
   const root = element('html'); root.classList = classList(['js']);
-  const parts = { '[data-reel]': [reel] };
+  const parts = { '[data-reel]': reels.map(r => r.reel) };
   const doc = { documentElement: root, querySelector: s => (parts[s] || [])[0] || null, querySelectorAll: s => parts[s] || [] };
   const observers = [];
   class FakeObserver { constructor(callback, options) { this.callback = callback; this.options = options; this.targets = []; observers.push(this); } observe(target) { this.targets.push(target); } }
@@ -228,13 +237,29 @@ async function run(env) {
   if (env.gsap) { const stub = makeGsap(env); win.gsap = stub.gsap; win.ScrollTrigger = stub.ScrollTrigger; }
   let error = null;
   try { vm.runInNewContext(source, { window: win, document: doc, setImmediate }); } catch (e) { error = String(e); }
-  const state = () => ({ playing: !video.paused, label: toggle.textContent, plays: video.plays });
-  const view = async on => { observers.forEach(o => o.callback([{ isIntersecting: on, target: video }])); await settle(); return state(); };
-  const press = async () => { (toggle.listeners.click || []).forEach(fn => fn({ type: 'click' })); await settle(); return state(); };
+  const stateOf = r => ({ playing: !r.video.paused, label: r.toggle.textContent, plays: r.video.plays });
+  const state = () => stateOf(reels[0]);
+  const viewOf = async (r, on) => { observers.filter(o => o.targets.includes(r.video)).forEach(o => o.callback([{ isIntersecting: on, target: r.video }])); await settle(); };
+  const view = async on => { for (const r of reels) await viewOf(r, on); return state(); };
+  const pressOf = async r => { (r.toggle.listeners.click || []).forEach(fn => fn({ type: 'click' })); await settle(); };
+  const press = async () => { await pressOf(reels[0]); return state(); };
   await settle();
   const out = { error, controls: 'controls' in video.attrs, muted: video.muted, hidden: toggle.hidden, type: toggle.attrs.type,
     src: src.attrs.src, poster: video.attrs.poster, loads: video.loads, observed: observers.flatMap(o => o.targets).filter(t => t === video).length,
-    threshold: observers.length ? observers[0].options.threshold : null, initial: state() };
+    threshold: observers.length ? observers[0].options.threshold : null, initial: state(),
+    all: reels.map(r => ({ controls: 'controls' in r.video.attrs, hidden: r.toggle.hidden, muted: r.video.muted, loads: r.video.loads, src: r.src.attrs.src,
+      observed: observers.filter(o => o.targets.includes(r.video)).length, ...stateOf(r) })) };
+  if (env.names) {
+    // Independent instances: only the first clip scrolls into view, then the second; a press pauses only its own video.
+    const snap = () => reels.map(stateOf);
+    out.multi = [];
+    await viewOf(reels[0], true); out.multi.push(['first in view', snap()]);
+    await viewOf(reels[1], true); out.multi.push(['second in view', snap()]);
+    await pressOf(reels[1]); out.multi.push(['press second', snap()]);
+    await viewOf(reels[0], false); out.multi.push(['first out of view', snap()]);
+    await viewOf(reels[1], false); await viewOf(reels[1], true); out.multi.push(['second back in view', snap()]);
+    return out;
+  }
   out.steps = [];
   out.steps.push(['in view', await view(true)]);
   out.steps.push(['out of view', await view(false)]);
@@ -249,13 +274,188 @@ async function run(env) {
 (async () => {
   const desktop = { width: 1440, height: 900, fine: true, reduce: false };
   const phone = { width: 390, height: 844, fine: false, reduce: false };
+  const clips = ['redesign video', 'care plan video'];
   const cases = { desktop, phone, edge: { ...desktop, width: 640 }, wide: { ...desktop, width: 641 }, reduced: { ...desktop, reduce: true },
     saveData: { ...phone, saveData: true }, refuse: { ...phone, refuse: true }, throws: { ...desktop, throws: true },
-    noObserver: { ...desktop, noObserver: true }, gsap: { ...desktop, gsap: true } };
+    noObserver: { ...desktop, noObserver: true }, gsap: { ...desktop, gsap: true },
+    clips: { ...phone, names: clips }, clipsReduced: { ...desktop, reduce: true, names: clips }, clipsSaveData: { ...phone, saveData: true, names: clips } };
   const out = {};
   for (const [name, env] of Object.entries(cases)) out[name] = await run(env);
   console.log(JSON.stringify(out));
 })();
+"""
+
+# Night Shift Task 29: runs assets/home.js's one-time before/after demo sweep and the showreel entrance with the recording
+# GSAP stub. The sweep timeline is driven step by step by hand; writes to the range value and its attributes are counted.
+SWEEP_SCRIPT = HARNESS + r"""
+const source = fs.readFileSync(process.argv[1], 'utf8');
+function run(env) {
+  const range = element('range'), before = element('before'), after = element('after'), controls = element('controls');
+  const figure = element('figure');
+  before.dataset.compareSet = '0'; after.dataset.compareSet = '100'; controls.hidden = true;
+  controls.parts = { 'input[type="range"]': [range], '[data-compare-set]': [before, after] };
+  figure.parts = { '[data-compare-controls]': [controls] };
+  let value = '50', valueWrites = 0;
+  Object.defineProperty(range, 'value', { get: () => value, set: v => { valueWrites++; value = String(v); } });
+  const attrWrites = [];
+  range.setAttribute = (key, v) => { attrWrites.push(key); range.attrs[key] = String(v); };
+  const pressed = [];
+  [before, after].forEach(b => { b.setAttribute = (key, v) => { pressed.push(key); b.attrs[key] = String(v); }; });
+  const video = element('video'), cap = element('cap'), toggle = element('toggle');
+  const reel = element('reel', { video: [video], '.reel-cap, [data-reel-toggle]': [cap, toggle] });
+  reel.getBoundingClientRect = () => ({ left: 0, top: env.reelTop === undefined ? 2000 : env.reelTop, width: 1200, height: 675 });
+  const root = element('html'); root.classList = classList(['js', 'motion']);
+  const parts = { '[data-compare]': [figure], '[data-reel]': [reel] };
+  const doc = { documentElement: root, querySelector: s => (parts[s] || [])[0] || null, querySelectorAll: s => parts[s] || [] };
+  const { win, listeners } = makeWindow(env);
+  let log = null;
+  if (env.gsap) {
+    const stub = makeGsap(env);
+    const base = stub.gsap.timeline;
+    stub.gsap.timeline = vars => {
+      const tl = base(vars);
+      tl.killed = 0; tl.targets = [];
+      tl.kill = () => { tl.killed++; };
+      const to = tl.to;
+      tl.to = (t, v, p) => { tl.targets.push(t); return to(t, v, p); };
+      return tl;
+    };
+    win.gsap = stub.gsap; win.ScrollTrigger = stub.ScrollTrigger; log = stub.log;
+  }
+  vm.runInNewContext(source, { window: win, document: doc });
+  const pos = () => figure.style.props['--pos'];
+  const stopCount = () => ['pointerdown', 'keydown', 'touchstart'].reduce((n, t) => n + (listeners[t] || []).length, 0);
+  const out = { initialPos: pos(), creates: log ? log.creates.length : 0 };
+  if (log) {
+    const entrance = log.tweens.filter(t => t.kind === 'fromTo');
+    out.entrance = entrance.map(t => ({ names: t.names, from: t.from, to: { ...t.vars, scrollTrigger: undefined },
+      trigger: t.vars.scrollTrigger ? { scrub: t.vars.scrollTrigger.scrub || null, once: Boolean(t.vars.scrollTrigger.once), pin: 'pin' in t.vars.scrollTrigger } : null }));
+  }
+  if (env.touchFirst) { value = '30'; range.listeners.input[0](); }
+  const sweepTrigger = log ? log.creates.find(c => c.trigger === figure) : null;
+  out.trigger = sweepTrigger ? { start: sweepTrigger.start, once: sweepTrigger.once } : null;
+  const valueWritesBefore = valueWrites, attrWritesBefore = attrWrites.length, pressedBefore = pressed.length;
+  const timelinesBefore = log ? log.timelines.length : 0;
+  if (sweepTrigger) sweepTrigger.onEnter();
+  const sweep = log && log.timelines.length > timelinesBefore ? log.timelines[log.timelines.length - 1] : null;
+  out.started = Boolean(sweep);
+  out.positions = [];
+  out.stopListeners = stopCount();
+  out.passive = ['pointerdown', 'keydown', 'touchstart'].map(t => (listeners[t] || []).every(l => l.options && l.options.passive));
+  if (sweep) {
+    out.duration = sweep.duration();
+    sweep.tweens.forEach((tween, i) => {
+      if (sweep.killed || (env.stopAfter !== undefined && i > env.stopAfter)) return;
+      sweep.targets[i].p = tween.vars.p; tween.vars.onUpdate(); out.positions.push(pos());
+      if (i === env.stopAfter) {
+        let prevented = false;
+        if (env.stopWith === 'input') { value = '30'; range.listeners.input[0](); }
+        else (listeners[env.stopWith] || []).slice().forEach(l => l.fn({ type: env.stopWith, preventDefault() { prevented = true; } }));
+        out.prevented = prevented;
+      }
+    });
+    if (!sweep.killed && env.stopAfter === undefined) sweep.vars.onComplete();
+    out.killed = sweep.killed;
+  }
+  out.sweepValueWrites = valueWrites - valueWritesBefore;
+  out.sweepAttrWrites = attrWrites.slice(attrWritesBefore);
+  out.sweepPressedWrites = pressed.length - pressedBefore;
+  out.finalPos = pos();
+  out.value = value;
+  out.stopListenersAfter = stopCount();
+  // A second entry into view (or a reload of the trigger) never starts another sweep.
+  const timelinesNow = log ? log.timelines.length : 0;
+  if (sweepTrigger) sweepTrigger.onEnter();
+  out.secondStart = log ? log.timelines.length > timelinesNow : false;
+  return out;
+}
+const desktop = { width: 1440, height: 900, fine: true, reduce: false, gsap: true };
+console.log(JSON.stringify({
+  complete: run(desktop),
+  key: run({ ...desktop, stopAfter: 0, stopWith: 'keydown' }),
+  pointer: run({ ...desktop, stopAfter: 1, stopWith: 'pointerdown' }),
+  touch: run({ ...desktop, stopAfter: 0, stopWith: 'touchstart' }),
+  input: run({ ...desktop, stopAfter: 0, stopWith: 'input' }),
+  touchedFirst: run({ ...desktop, touchFirst: true }),
+  phone: run({ width: 390, height: 844, fine: false, reduce: false, gsap: true }),
+  onScreen: run({ ...desktop, reelTop: 300 }),
+  reduced: run({ ...desktop, reduce: true }),
+  plain: run({ ...desktop, gsap: false }),
+}));
+"""
+
+# Night Shift Task 29: runs assets/details.js (step count-up, card tilt, cursor ring) with the recording GSAP stub.
+DETAILS_SCRIPT = HARNESS + r"""
+const source = fs.readFileSync(process.argv[1], 'utf8');
+function run(env) {
+  const below = (name, text) => { const el = element(name); el.textContent = text; el.getBoundingClientRect = () => ({ left: 0, top: 2000, width: 80, height: 40 }); return el; };
+  const steps = ['01', '02', '03', '04', '05'].map((n, i) => below('step' + i, n));
+  const onScreen = element('stepOnScreen'); onScreen.textContent = '01';
+  const cards = many('card', 3);
+  const body = element('body');
+  const created = [];
+  body.appendChild = child => { body.children.push(child); };
+  const make = tag => {
+    const el = element(tag + created.length);
+    el.appendChild = child => { el.children.push(child); };
+    el.remove = () => { body.children = body.children.filter(c => c !== el); };
+    created.push(el);
+    return el;
+  };
+  const root = element('html'); root.classList = classList(['js', 'motion']);
+  const parts = { '.step-n': steps.concat(onScreen), '.teaser-card, .wk-tile': cards };
+  const doc = { documentElement: root, body, createElement: make, querySelectorAll: s => parts[s] || [], querySelector: s => (parts[s] || [])[0] || null,
+    listeners: {}, addEventListener(type, fn) { (this.listeners[type] = this.listeners[type] || []).push(fn); }, removeEventListener() {} };
+  const { win, listeners } = makeWindow(env);
+  let log = null;
+  if (env.gsap) { const stub = makeGsap(env); win.gsap = stub.gsap; win.ScrollTrigger = stub.ScrollTrigger; log = stub.log; }
+  let error = null;
+  try { vm.runInNewContext(source, { window: win, document: doc }); } catch (e) { error = String(e); }
+  const out = { error, queries: log ? log.queries : [], ring: body.children.map(el => ({ className: el.className, attrs: el.attrs, children: el.children.length })),
+    textsAtStart: steps.map(el => el.textContent), onScreenText: onScreen.textContent };
+  out.stepAttrWrites = steps.reduce((n, el) => n + Object.keys(el.attrs).length, 0);
+  if (!log) return out;
+  const counts = log.tweens.filter(t => t.kind === 'to' && t.vars && 'n' in t.vars);
+  out.counts = counts.map(t => ({ n: t.vars.n, once: Boolean(t.vars.scrollTrigger && t.vars.scrollTrigger.once), start: t.vars.scrollTrigger && t.vars.scrollTrigger.start }));
+  counts.forEach(t => { t.vars.onUpdate(); t.vars.onComplete(); });
+  out.textsAfter = steps.map(el => el.textContent);
+  out.perspective = log.sets.filter(v => 'transformPerspective' in v).map(v => v.transformPerspective);
+  // Tilt: the pointer far outside the card in every direction stays clamped.
+  log.quick.length = 0;
+  cards.forEach(card => (card.listeners.pointermove || []).forEach(fn => { fn({ clientX: -5000, clientY: 9000 }); fn({ clientX: 9000, clientY: -5000 }); }));
+  out.tilt = log.quick.filter(([prop]) => prop === 'rotationX' || prop === 'rotationY').map(([, v]) => v);
+  log.quick.length = 0;
+  cards.forEach(card => (card.listeners.pointerleave || []).forEach(fn => fn({})));
+  out.leave = log.quick.map(([, v]) => v);
+  // Cursor ring: follows a mouse, grows over links, steps aside over form fields, ignores touch and pen-less taps.
+  const ring = body.children[0];
+  const target = matches => ({ closest: sel => (matches.some(m => sel.split(', ').includes(m)) ? {} : null) });
+  const move = (event) => { log.quick.length = 0; log.tweens.length = 0; (listeners.pointermove || []).forEach(l => l.fn(event)); };
+  if (ring) {
+    out.passiveMove = (listeners.pointermove || []).every(l => l.options && l.options.passive);
+    move({ pointerType: 'touch', clientX: 10, clientY: 10, target: target([]) });
+    out.touchMoves = log.quick.length;
+    move({ pointerType: 'mouse', clientX: 300, clientY: 200, target: target([]) });
+    out.follow = log.quick.slice();
+    out.shown = log.tweens.filter(t => t.names[0] === ring.name).map(t => t.vars.opacity);
+    move({ pointerType: 'mouse', clientX: 310, clientY: 210, target: target(['a']) });
+    out.overLink = ring.classList.contains('is-link');
+    move({ pointerType: 'mouse', clientX: 320, clientY: 220, target: target(['input']) });
+    out.overField = { link: ring.classList.contains('is-link'), opacity: log.tweens.filter(t => t.names[0] === ring.name).map(t => t.vars.opacity) };
+    move({ pointerType: 'mouse', clientX: 330, clientY: 230, target: target(['p']) });
+    out.backOverText = log.tweens.filter(t => t.names[0] === ring.name).map(t => t.vars.opacity);
+    log.tweens.length = 0;
+    (doc.listeners.pointerout || []).forEach(fn => fn({ relatedTarget: null }));
+    out.leftWindow = log.tweens.filter(t => t.names[0] === ring.name).map(t => t.vars.opacity);
+  }
+  return out;
+}
+console.log(JSON.stringify({
+  desktop: run({ width: 1440, height: 900, fine: true, reduce: false, gsap: true }),
+  touch: run({ width: 390, height: 844, fine: false, reduce: false, gsap: true }),
+  reduced: run({ width: 1440, height: 900, fine: true, reduce: true, gsap: true }),
+  plain: run({ width: 1440, height: 900, fine: true, reduce: false, gsap: false }),
+}));
 """
 
 # Runs assets/motion-boot.js with stubbed document, matchMedia, location, sessionStorage and setTimeout.
@@ -685,7 +885,7 @@ class DemoScriptTests(unittest.TestCase):
 
     def test_showreel_picks_the_cut_for_the_screen(self):
         # (a) At 640px and below the vertical cut and poster; above it the 1600 ones (home.css switches the frame at the same width).
-        r = self.node_json(REEL_SCRIPT, HOME)
+        r = self.node_json(REEL_SCRIPT, REEL)
         wide = ('/assets/video/cendavo-showreel-1600.mp4', '/assets/video/cendavo-showreel-poster-1600.jpg')
         narrow = ('/assets/video/cendavo-showreel-vertical-720.mp4', '/assets/video/cendavo-showreel-vertical-poster-720.jpg')
         for name, expected in (('desktop', wide), ('wide', wide), ('phone', narrow), ('edge', narrow)):
@@ -699,8 +899,10 @@ class DemoScriptTests(unittest.TestCase):
 
     def test_showreel_swaps_native_controls_for_one_labelled_button(self):
         # (b) JS removes the native controls and shows a type="button" toggle whose label follows the real playback state.
-        r = self.node_json(REEL_SCRIPT, HOME)
+        r = self.node_json(REEL_SCRIPT, REEL)
         for name, result in r.items():
+            if 'multi' in result:
+                continue  # the clip cases are checked in test_every_reel_on_a_page_plays_and_pauses_on_its_own
             with self.subTest(case=name):
                 self.assertIsNone(result['error'])
                 self.assertFalse(result['controls'])
@@ -713,7 +915,7 @@ class DemoScriptTests(unittest.TestCase):
 
     def test_showreel_plays_in_view_and_remembers_a_pause(self):
         # (c) Plays when in view, pauses when it leaves; (d) after Pause, coming back into view does not resume it.
-        r = self.node_json(REEL_SCRIPT, HOME)
+        r = self.node_json(REEL_SCRIPT, REEL)
         for name in ('desktop', 'phone', 'gsap'):
             with self.subTest(case=name):
                 result = r[name]
@@ -726,7 +928,7 @@ class DemoScriptTests(unittest.TestCase):
 
     def test_showreel_never_starts_itself_with_reduced_motion_or_save_data(self):
         # (e) Reduced motion and (g) Save-Data: no play() call until the visitor presses Play; the button offers "Play showreel".
-        r = self.node_json(REEL_SCRIPT, HOME)
+        r = self.node_json(REEL_SCRIPT, REEL)
         for name in ('reduced', 'saveData'):
             with self.subTest(case=name):
                 steps = r[name]['steps']
@@ -738,7 +940,7 @@ class DemoScriptTests(unittest.TestCase):
     def test_showreel_survives_refused_playback_and_missing_apis(self):
         # (f) A refused play() (iOS Low Power Mode) or a throwing one leaves "Play showreel" and throws nothing; without
         # IntersectionObserver nothing autoplays but the button still works; (h) it needs no GSAP.
-        r = self.node_json(REEL_SCRIPT, HOME)
+        r = self.node_json(REEL_SCRIPT, REEL)
         for name in ('refuse', 'throws'):
             with self.subTest(case=name):
                 self.assertIsNone(r[name]['error'])
@@ -750,9 +952,171 @@ class DemoScriptTests(unittest.TestCase):
         self.assertEqual(no_observer['steps'][2][1], {'playing': False, 'label': 'Play showreel', 'plays': 0})
         self.assertEqual(no_observer['steps'][3][1], {'playing': True, 'label': 'Pause showreel', 'plays': 1})
         self.assertEqual(r['desktop']['steps'], r['gsap']['steps'])  # the same with or without GSAP
-        # The controller sits before the "GSAP is optional" bail-out, so a missing GSAP never stops it.
-        js = HOME.read_text(encoding='utf-8')
-        self.assertLess(js.index("doc.querySelector('[data-reel]')"), js.index('if (!gsap || !ScrollTrigger)'))
+        # Task 29: the controller lives in reel.js, which never touches GSAP, so a missing GSAP never stops it; home.js no
+        # longer plays or pauses anything.
+        js = REEL.read_text(encoding='utf-8')
+        for needle in ('window.gsap', 'gsap.', 'ScrollTrigger'):
+            self.assertNotIn(needle, js)
+        home = HOME.read_text(encoding='utf-8')
+        for needle in ('video.play(', 'video.pause(', 'IntersectionObserver', "removeAttribute('controls')"):
+            self.assertNotIn(needle, home)
+
+    def test_every_reel_on_a_page_plays_and_pauses_on_its_own(self):
+        # Task 29: Services has two clips. Each gets its own observer and button (named from its markup), plays only while it
+        # is in view, and a press of Pause on one never touches the other.
+        r = self.node_json(REEL_SCRIPT, REEL)
+        clips = r['clips']
+        self.assertIsNone(clips['error'])
+        for index, (state, name) in enumerate(zip(clips['all'], ('redesign video', 'care plan video'))):
+            with self.subTest(clip=name):
+                self.assertFalse(state['controls'])
+                self.assertFalse(state['hidden'])
+                self.assertTrue(state['muted'])
+                self.assertEqual(state['observed'], 1)
+                self.assertEqual(state['loads'], 0)  # no narrow cut: the source is left alone
+                self.assertEqual(state['src'], f'/assets/video/{name}.mp4')
+                self.assertEqual((state['playing'], state['label'], state['plays']), (False, f'Play {name}', 0))
+        expected = [('first in view', [(True, 'Pause redesign video'), (False, 'Play care plan video')]),
+                    ('second in view', [(True, 'Pause redesign video'), (True, 'Pause care plan video')]),
+                    ('press second', [(True, 'Pause redesign video'), (False, 'Play care plan video')]),
+                    ('first out of view', [(False, 'Play redesign video'), (False, 'Play care plan video')]),
+                    ('second back in view', [(False, 'Play redesign video'), (False, 'Play care plan video')])]
+        self.assertEqual([(step, [(s['playing'], s['label']) for s in states]) for step, states in clips['multi']], expected)
+        # Reduced motion or Save-Data: no clip calls play() by itself. Only the press on the second clip starts it; the first,
+        # never pressed, stays still throughout.
+        for name in ('clipsReduced', 'clipsSaveData'):
+            with self.subTest(case=name):
+                steps = r[name]['multi']
+                for step, states in steps[:2]:
+                    for state in states:
+                        self.assertEqual((state['playing'], state['plays']), (False, 0), step)
+                        self.assertTrue(state['label'].startswith('Play '))
+                self.assertEqual(steps[2][1][1], {'playing': True, 'label': 'Pause care plan video', 'plays': 1})
+                for step, states in steps:
+                    self.assertEqual((states[0]['playing'], states[0]['plays']), (False, 0), step)
+
+    def test_demo_sweep_runs_once_and_moves_only_the_divider(self):
+        # Task 29: the first time the comparison is well in view, the divider sweeps 50 -> 82 -> 18 -> 50 in 1.6 s, once.
+        # Only the visual --pos changes: the range value, its aria-valuetext and the buttons' aria-pressed are never
+        # written, so assistive technology hears nothing extra.
+        r = self.node_json(SWEEP_SCRIPT, HOME)
+        for name in ('complete', 'phone', 'onScreen'):
+            with self.subTest(case=name):
+                result = r[name]
+                self.assertEqual(result['trigger'], {'start': 'top 65%', 'once': True})
+                self.assertTrue(result['started'])
+                self.assertEqual(result['positions'], ['82%', '18%', '50%'])
+                self.assertAlmostEqual(result['duration'], 1.6)
+                self.assertEqual((result['sweepValueWrites'], result['sweepAttrWrites'], result['sweepPressedWrites']), (0, [], 0))
+                self.assertEqual((result['finalPos'], result['value']), ('50%', '50'))
+                self.assertEqual(result['stopListeners'], 3)  # pointerdown, keydown, touchstart while it runs ...
+                self.assertEqual(result['passive'], [True, True, True])
+                self.assertEqual(result['stopListenersAfter'], 0)  # ... and none once it is over
+                self.assertFalse(result['secondStart'])  # at most once per page load
+
+    def test_demo_sweep_stops_on_any_input_and_returns_to_the_range_value(self):
+        r = self.node_json(SWEEP_SCRIPT, HOME)
+        for name, stopped_at in (('key', ['82%']), ('pointer', ['82%', '18%']), ('touch', ['82%'])):
+            with self.subTest(case=name):
+                result = r[name]
+                self.assertEqual(result['positions'], stopped_at)
+                self.assertEqual(result['killed'], 1)
+                self.assertFalse(result['prevented'])  # the key, click or touch still reaches the page
+                self.assertEqual(result['finalPos'], '50%')  # back to the range value, which never moved
+                self.assertEqual((result['sweepValueWrites'], result['sweepAttrWrites'], result['sweepPressedWrites']), (0, [], 0))
+                self.assertEqual(result['stopListenersAfter'], 0)
+                self.assertFalse(result['secondStart'])
+        # Moving the slider mid-sweep stops it; the divider follows the visitor's value (announced as usual for an input).
+        moved = r['input']
+        self.assertEqual(moved['killed'], 1)
+        self.assertEqual((moved['finalPos'], moved['value']), ('30%', '30'))
+        self.assertEqual(moved['stopListenersAfter'], 0)
+
+    def test_demo_sweep_never_runs_with_reduced_motion_without_gsap_or_after_use(self):
+        r = self.node_json(SWEEP_SCRIPT, HOME)
+        for name in ('reduced', 'plain'):
+            with self.subTest(case=name):
+                self.assertIsNone(r[name]['trigger'])
+                self.assertFalse(r[name]['started'])
+                self.assertEqual(r[name]['finalPos'], '50%')
+        # Someone who already moved the slider never gets a demonstration on top of their choice.
+        touched = r['touchedFirst']
+        self.assertFalse(touched['started'])
+        self.assertEqual((touched['finalPos'], touched['value']), ('30%', '30'))
+
+    def test_showreel_entrance_is_scrubbed_unpinned_and_only_below_the_fold(self):
+        # Task 29: the video opens from an inset window and settles from a 1.08 zoom as the frame scrolls in (scrubbed, no
+        # pin, clip-path and transform only); the caption and Pause button then rise once. Never under reduced motion, and
+        # not when the frame is already on screen (it would jump).
+        r = self.node_json(SWEEP_SCRIPT, HOME)
+        for name in ('complete', 'phone'):
+            with self.subTest(case=name):
+                video, after = r[name]['entrance']
+                self.assertEqual(video['names'], ['video'])
+                self.assertEqual(video['from'], {'clipPath': 'inset(9% 11% 9% 11%)', 'scale': 1.08})
+                self.assertEqual((video['to']['clipPath'], video['to']['scale']), ('inset(0% 0% 0% 0%)', 1))
+                self.assertGreater(video['trigger']['scrub'], 0)
+                self.assertFalse(video['trigger']['pin'])
+                self.assertEqual(after['names'], ['cap', 'toggle'])
+                self.assertEqual(after['from'], {'opacity': 0, 'y': 14})
+                self.assertTrue(after['trigger']['once'])
+                self.assertFalse(after['trigger']['pin'])
+                self.assertIn('opacity', after['to']['clearProps'])
+                for tween in (video, after):
+                    self.assertTrue(set(tween['from']) <= {'clipPath', 'scale', 'opacity', 'y'})
+        for name in ('onScreen', 'reduced'):
+            with self.subTest(case=name):
+                self.assertEqual(r[name]['entrance'], [])
+
+    def test_step_numerals_count_up_once_and_keep_their_final_text(self):
+        # Task 29: Services step numerals (aria-hidden, final in the HTML) count up once as they scroll in. Only below the
+        # fold and only with motion allowed; nothing else about them changes.
+        r = self.node_json(DETAILS_SCRIPT, DETAILS)
+        for name in ('desktop', 'touch'):
+            with self.subTest(case=name):
+                result = r[name]
+                self.assertIsNone(result['error'])
+                self.assertEqual(result['textsAtStart'], ['00'] * 5)
+                self.assertEqual(result['counts'], [{'n': n, 'once': True, 'start': 'top 88%'} for n in range(1, 6)])
+                self.assertEqual(result['textsAfter'], ['01', '02', '03', '04', '05'])
+                self.assertEqual(result['onScreenText'], '01')  # already visible: left alone
+                self.assertEqual(result['stepAttrWrites'], 0)
+        for name in ('reduced', 'plain'):
+            with self.subTest(case=name):
+                self.assertEqual(r[name]['textsAtStart'], ['01', '02', '03', '04', '05'])
+                self.assertEqual(r[name].get('counts', []), [])
+
+    def test_cards_tilt_only_for_fine_pointers_and_never_past_six_degrees(self):
+        r = self.node_json(DETAILS_SCRIPT, DETAILS)
+        desktop = r['desktop']
+        self.assertEqual(desktop['perspective'], [900, 900, 900])
+        self.assertTrue(desktop['tilt'])
+        self.assertEqual(max(abs(v) for v in desktop['tilt']), 6)
+        self.assertEqual(desktop['leave'], [0] * 6)  # eases back flat when the pointer leaves
+        for name in ('touch', 'reduced'):
+            with self.subTest(case=name):
+                self.assertEqual(r[name]['tilt'], [])
+                self.assertEqual(r[name]['perspective'], [])
+        for query in desktop['queries']:
+            self.assertIn('(prefers-reduced-motion: no-preference)', query)
+
+    def test_cursor_ring_is_extra_decorative_and_only_on_fine_pointers(self):
+        r = self.node_json(DETAILS_SCRIPT, DETAILS)
+        desktop = r['desktop']
+        self.assertEqual(desktop['ring'], [{'className': 'cursor-ring', 'attrs': {'aria-hidden': 'true'}, 'children': 1}])
+        self.assertTrue(desktop['passiveMove'])
+        self.assertEqual(desktop['touchMoves'], 0)  # touch and pen moves are ignored
+        self.assertEqual(desktop['follow'], [['x', 300], ['y', 200]])
+        self.assertEqual(desktop['shown'], [1])
+        self.assertTrue(desktop['overLink'])  # grows over links and buttons
+        self.assertEqual(desktop['overField'], {'link': False, 'opacity': [0]})  # steps aside over form fields
+        self.assertEqual(desktop['backOverText'], [1])
+        self.assertEqual(desktop['leftWindow'], [0])
+        # A coarse pointer, reduced motion or no GSAP: no element is ever created.
+        for name in ('touch', 'reduced', 'plain'):
+            with self.subTest(case=name):
+                self.assertIsNone(r[name]['error'])
+                self.assertEqual(r[name]['ring'], [])
 
     def test_motion_boot_only_starts_the_intro_on_a_first_plain_visit(self):
         r = self.node_json(BOOT_SCRIPT, BOOT)

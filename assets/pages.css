@@ -69,6 +69,8 @@
 /* Care plan: a full-bleed dark band set in type alone, a change of pace after the two photo chapters above it. */
 .care-band{padding-block:var(--section-lg);background:var(--ink-2);border-bottom:1px solid var(--line)}
 .care-head{max-width:58rem}
+.care-top{display:grid;grid-template-columns:minmax(0,7fr) minmax(0,5fr);column-gap:var(--col-gap);align-items:end}
+.chap-head .clip{margin-top:clamp(32px,4vw,56px)}
 .care-label{margin-top:clamp(56px,7vw,104px)}
 .care-cycle{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));column-gap:clamp(20px,4vw,64px)}
 .care-cycle li{min-width:0;padding:clamp(28px,3vw,44px) 0;border-bottom:1px solid var(--line)}
@@ -172,6 +174,7 @@
 .wk-hero{padding-block:clamp(64px,9vw,136px) var(--section)}
 .wk-h{max-width:20ch;font-size:clamp(2.6rem,6.6vw,6.6rem)}
 .wk-hero-sub{grid-column:8/-1;margin-top:clamp(20px,2vw,32px)}
+.wk-clip{grid-column:1/span 6;grid-row:2;margin-top:clamp(20px,2vw,32px)}
 /* The index row is a .wrap, so it keeps the standard side gutter: only list styling and vertical spacing are set here. */
 .wk-index{list-style:none;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:24px;margin-block:clamp(40px,4vw,64px) 0;padding-block:0}
 .wk-tile a{display:grid;grid-template-rows:minmax(0,1fr) auto auto;height:100%;text-decoration:none}
@@ -333,6 +336,8 @@
 .ct-form{padding:56px var(--gut) 72px}
 }
 @media(max-width:900px){
+.care-top{grid-template-columns:1fr}
+.care-top .clip{margin-top:48px}
 .ab-hero-copy,.ab-photos{grid-column:1/-1}
 .ab-photos{gap:10px;margin:40px 0 0}
 .ab-photo:nth-child(2){margin-top:24px}
@@ -419,5 +424,5 @@
 .ph-wait :is(.wk-hero-sub,.sv-hero .pg-sub,.sv-chapters,.pr-hero .pg-sub,.pr-hero .btn-row){opacity:0;transform:translateY(18px)}
 .ph-wait :is(.sv-hero-media,.ab-photo){clip-path:inset(0 0 0 100%)}
 .wk-tile-img img{transition:transform 900ms var(--ease)}
-.wk-tile a:hover .wk-tile-img img,.wk-tile a:focus-visible .wk-tile-img img{transform:scale(1)}
+.wk-tile a:hover .wk-tile-img img,.wk-tile a:focus-visible .wk-tile-img img{transform:scale(1.1)}
 }
