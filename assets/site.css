@@ -73,7 +73,8 @@ p{margin-bottom:var(--space-4);max-width:var(--measure)}
 .button.dark:hover,.site-header .button:hover{background:var(--ink-2)}
 .button.small{min-height:48px;padding:0 18px;font-size:.95rem}
 .button.large{min-height:60px;padding:0 28px;font-size:1.0625rem}
-.button[disabled]{opacity:.75;cursor:progress}
+.button[disabled]{opacity:.75;cursor:not-allowed}
+.form[aria-busy="true"] .button[disabled]{cursor:progress}
 
 /* Footer */
 .footer{border-top:1px solid var(--line-dark);padding-top:clamp(56px,7vw,96px)}
@@ -139,6 +140,14 @@ td.actions{display:flex;gap:6px;flex-wrap:wrap;margin:0}
    (the demo's side panel here, the closing bands in home.css and pages.css). Amber is below 3:1 on paper, so it is never a ring. */
 :focus-visible{outline:2px solid var(--ink);outline-offset:3px}
 .demo-side :focus-visible{outline-color:var(--bone)}
+/* Task 47: the demo's date field keeps a full ring while focus is anywhere inside it, including its calendar button (the
+   button rule stands alone: a browser that does not know the pseudo-element drops only that rule). */
+input[type="date"]:focus-visible,input[type="date"]:focus-within{outline:2px solid var(--ink);outline-offset:3px}
+input[type="date"]::-webkit-calendar-picker-indicator:focus-visible{outline:2px solid var(--ink);outline-offset:2px;border-radius:4px}
+/* Task 47: the demo's CSV button is a solid light pill on the ink panel (the glass outline button was translucent there,
+   so its text contrast depended on what showed through). */
+#export-demo{border-color:#FBFAF7;background:#FBFAF7;color:#0E0E0D;-webkit-backdrop-filter:none;backdrop-filter:none}
+#export-demo:hover{border-color:#FFFFFF;background:#FFFFFF;color:#0E0E0D}
 main:focus{outline:none;box-shadow:none}
 .skip-link{position:absolute;left:12px;top:-100px;z-index:100;padding:12px 18px;border-radius:var(--radius-sm);background:var(--ink);color:#fff;font-weight:700}
 .skip-link:focus{top:12px}
@@ -163,6 +172,10 @@ main:focus{outline:none;box-shadow:none}
 .js .nav-links.open a::after{display:none}
 .js .nav>.button{order:0;margin-bottom:0}
 .js .menu[aria-expanded="true"]~.button{order:4;margin-bottom:var(--space-4)}
+/* Task 47: site.js sets .menu-lock while the menu is open, so the page behind it stays put (mobile layouts only). */
+html.menu-lock,html.menu-lock body{overflow:hidden}
+/* The menu scrolls inside itself instead, so its last link stays reachable on short (landscape) screens. */
+html.menu-lock .site-header .nav{max-height:calc(100svh - 24px);overflow-y:auto;overscroll-behavior:contain}
 }
 @media(max-width:860px){
 .demo-shell,.demo-grid{grid-template-columns:minmax(0,1fr)}

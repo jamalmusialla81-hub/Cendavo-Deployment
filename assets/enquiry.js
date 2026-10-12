@@ -30,6 +30,9 @@
   var PHONE = /^[0-9+() -]+$/;
   var UUID_V4 = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
   var TIMEOUT_MS = 15000;
+  // Task 47: the hidden bot trap's name in the page is deliberately meaningless, so browsers and password managers do not
+  // autofill it (a filled trap silently drops a real enquiry). The server still reads it as company_url.
+  var HONEYPOT = 'hp_xq';
 
   function clean(value, multiline) {
     if (value === undefined || value === null) return '';
@@ -96,11 +99,37 @@
     return { valid: Object.keys(errors).length === 0, values: values, errors: errors };
   }
 
+  // The message for one field, or '' when it is valid: the same rules and wording as validateEnquiry (each field's rule
+  // reads only that field), used to re-check a field live once it has been marked invalid.
+  function fieldError(field, value) {
+    if (FIELDS.indexOf(field) === -1) return '';
+    var source = {};
+    source[field] = value;
+    return validateEnquiry(source).errors[field] || '';
+  }
+
+  // A UUID v4 idempotency key (it only de-duplicates retries; it is not a secret). Task 47: never throws, so the form
+  // still gets its submit handler where crypto is missing or partial; Math.random is the last resort.
   function makeKey() {
-    var c = typeof crypto !== 'undefined' ? crypto : null;
-    if (c && typeof c.randomUUID === 'function') return c.randomUUID();
-    var b = new Uint8Array(16);
-    c.getRandomValues(b);
+    var c = typeof crypto !== 'undefined' && crypto ? crypto : null;
+    if (c && typeof c.randomUUID === 'function') {
+      try {
+        var id = String(c.randomUUID()).toLowerCase();
+        if (UUID_V4.test(id)) return id;
+      } catch (e) { /* fall through */ }
+    }
+    var b = [];
+    if (c && typeof c.getRandomValues === 'function' && typeof Uint8Array === 'function') {
+      try {
+        b = Array.prototype.slice.call(c.getRandomValues(new Uint8Array(16)));
+      } catch (e) {
+        b = [];
+      }
+    }
+    if (b.length !== 16) {
+      b = [];
+      for (var i = 0; i < 16; i++) b.push(Math.floor(Math.random() * 256));
+    }
     b[6] = (b[6] & 0x0f) | 0x40;
     b[8] = (b[8] & 0x3f) | 0x80;
     var h = Array.prototype.map.call(b, function (x) { return (x + 256).toString(16).slice(1); }).join('');
@@ -178,7 +207,7 @@
     return { reset: false, tone: 'error', message: message, errors: errors };
   }
 
-  var api = { CONTACT_EMAIL: CONTACT_EMAIL, SERVICES: SERVICES, MESSAGES: MESSAGES, NOTICES: NOTICES, validateEnquiry: validateEnquiry, submitEnquiry: submitEnquiry, createSender: createSender, outcomeFor: outcomeFor, makeKey: makeKey };
+  var api = { CONTACT_EMAIL: CONTACT_EMAIL, SERVICES: SERVICES, MESSAGES: MESSAGES, NOTICES: NOTICES, validateEnquiry: validateEnquiry, submitEnquiry: submitEnquiry, createSender: createSender, outcomeFor: outcomeFor, makeKey: makeKey, fieldError: fieldError, HONEYPOT: HONEYPOT };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   if (typeof document === 'undefined') return;
 
@@ -223,12 +252,29 @@
 
   function readFields() {
     var fields = {};
-    FIELDS.concat('company_url').forEach(function (field) {
+    FIELDS.forEach(function (field) {
       var control = form.elements[field];
       fields[field] = control ? control.value : '';
     });
+    var trap = form.elements[HONEYPOT];
+    fields.company_url = trap ? trap.value : '';
     return fields;
   }
+
+  // Task 47: once a field shows an error, typing in it or leaving it re-checks just that field and clears the error as
+  // soon as it is fixed. Untouched fields are never checked early; focus and the status line never change here, and the
+  // error text is not a live region, so nothing is announced on each keystroke.
+  function recheck(event) {
+    var control = event && event.target;
+    if (!control || FIELDS.indexOf(control.name) === -1 || control.getAttribute('aria-invalid') !== 'true') return;
+    var message = fieldError(control.name, control.value);
+    var slot = form.querySelector('[data-error-for="' + control.name + '"]');
+    if (slot && slot.textContent !== message) slot.textContent = message;
+    if (!message) control.removeAttribute('aria-invalid');
+  }
+  form.addEventListener('input', recheck);
+  form.addEventListener('change', recheck);
+  form.addEventListener('focusout', recheck);
 
   form.addEventListener('submit', async function (event) {
     event.preventDefault();
@@ -264,4 +310,7 @@
     }
     announce(outcome.message, outcome.tone);
   });
+  // Task 47: the button ships disabled, so nothing can be submitted (by click or Enter) unless this script is running
+  // and its handler is attached; without it the page's <noscript> notice offers the email address instead.
+  if (button) button.disabled = false;
 })();

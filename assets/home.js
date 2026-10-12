@@ -25,6 +25,8 @@
       return at(t, y1, y2);
     };
   };
+  // What most reveals hand back to CSS when they end.
+  const OT = 'opacity,transform';
   const OUT = bezier(0.2, 0.8, 0.2, 1);
   const IO = bezier(0.7, 0, 0.2, 1);
   // Demo sweep, once: 50 -> 82 -> 18 -> 50 over 1.5 s. Any press, key, touch or use of the controls stops it.
@@ -149,12 +151,12 @@
       book?.classList.add('booked');
     };
     if (lines.length) tl.fromTo(lines, { yPercent: 108, y: 0 }, { yPercent: 0, y: 0, duration: 1, stagger: 0.08, clearProps: 'transform' }, 0);
-    if (fades.length) tl.fromTo(fades, { y: 18, opacity: 0 }, { y: 0, opacity: 1, duration: 0.7, stagger: 0.08, clearProps: 'opacity,transform' }, 0.4);
+    if (fades.length) tl.fromTo(fades, { y: 18, opacity: 0 }, { y: 0, opacity: 1, duration: 0.7, stagger: 0.08, clearProps: OT }, 0.4);
     const deck = $('.hero-cards');
     if (deck) tl.fromTo(deck, { opacity: 0 }, { opacity: 1, duration: 0.2, clearProps: 'opacity' }, 0.6);
     if (cards.length) {
       tl.fromTo(cards, { opacity: 0, z: -420, rotationX: 18, rotationY: -14, transformPerspective: 900 },
-        { opacity: 1, z: 0, rotationX: 0, rotationY: 0, duration: 1.4, stagger: 0.14, ease: OUT, clearProps: 'opacity,transform' }, 0.6);
+        { opacity: 1, z: 0, rotationX: 0, rotationY: 0, duration: 1.4, stagger: 0.14, ease: OUT, clearProps: OT }, 0.6);
     }
     if (book && slot) {
       book.classList.remove('booked');
@@ -177,9 +179,12 @@
       { z: 260, rotationX: -10, rotationY: i % 2 ? 12 : -12, opacity: 0, ease: 'none', duration: 0.45, transformPerspective: 900, immediateRender: false }, 0.04 * i));
   };
 
-  // Section headings rise through a mask, once, as they come into view.
-  const headings = () => $$('[data-rise]').filter(below).forEach(el => {
-    gsap.fromTo(el, { clipPath: 'inset(0% 0% 100% 0%)', yPercent: 30 }, { clipPath: 'inset(0% 0% -12% 0%)', yPercent: 0, duration: 1, ease: OUT, clearProps: 'clipPath,transform', scrollTrigger: once(el) });
+  // Section headings rise through a mask, once, as they come into view. Task 47: inside a [data-rise-group] (a heading
+  // beside its paragraph) both share the group's trigger and the later sibling follows 0.12 s after the first, so the
+  // paragraph (which can sit higher on a wide screen) never rises before its heading.
+  const headings = () => $$('[data-rise]').forEach(el => {
+    const g = el.closest?.('[data-rise-group]') || el;
+    if (below(g)) gsap.fromTo(el, { clipPath: 'inset(0% 0% 100% 0%)', yPercent: 30 }, { clipPath: 'inset(0% 0% -12% 0%)', yPercent: 0, duration: 1, delay: g !== el && el.previousElementSibling ? .12 : 0, ease: OUT, clearProps: 'clipPath,transform', scrollTrigger: once(g) });
   });
 
   // Showreel: a rounded glass lens that opens to the full, square-edged frame (Task 44: no box) and tilts flat as it
@@ -190,7 +195,7 @@
     gsap.fromTo(frame, { clipPath: 'inset(9% 16% 9% 16% round 48px)', rotationX: 10, scale: 0.97, transformPerspective: 1600 },
       { clipPath: 'inset(0% 0% 0% 0% round 0px)', rotationX: 0, scale: 1, ease: 'none', scrollTrigger: { trigger: frame, start: 'top 92%', end: 'top 25%', ...SCRUB } });
     const panel = $('.reel-panel');
-    if (panel && below(panel)) gsap.fromTo(panel, { y: 40, opacity: 0 }, { y: 0, opacity: 1, duration: 1, ease: OUT, clearProps: 'opacity,transform', scrollTrigger: once(panel) });
+    if (panel && below(panel)) gsap.fromTo(panel, { y: 40, opacity: 0 }, { y: 0, opacity: 1, duration: 1, ease: OUT, clearProps: OT, scrollTrigger: once(panel) });
   };
 
   // Marquee: the photo strip (each pill rides on its tile) and the type's masks glide continuously (a transform, and one
@@ -232,7 +237,7 @@
   const cardsIn = wide => $$('.teaser-card').filter(below).forEach((card, i) => {
     const fan = [{ x: -160, rY: 32, rZ: -4 }, { x: 220, rY: -38, rZ: 5 }, { x: 260, rY: -30, rZ: -3 }][i % 3];
     gsap.fromTo(card, { opacity: 0, y: 160, x: wide ? fan.x : 0, z: -500, rotationX: 22, rotationY: wide ? fan.rY : 0, rotationZ: wide ? fan.rZ : 0, transformPerspective: 1400, transformOrigin: '50% 100%' },
-      { opacity: 1, y: 0, x: 0, z: 0, rotationX: 0, rotationY: 0, rotationZ: 0, duration: 1.6, delay: (i % 3) * 0.12, ease: OUT, clearProps: 'opacity,transform', scrollTrigger: once(card) });
+      { opacity: 1, y: 0, x: 0, z: 0, rotationX: 0, rotationY: 0, rotationZ: 0, duration: 1.6, delay: (i % 3) * 0.12, ease: OUT, clearProps: OT, scrollTrigger: once(card) });
   });
 
   // Fine pointers: a small tilt toward the pointer and a light sweep across the photo (keyboard focus gets neither).
@@ -265,9 +270,9 @@
   // The glass browser frame swings in once before the sweep; the closing panel lifts out of depth once.
   const arrivals = () => {
     const frame = $('.compare-frame');
-    if (frame && below(frame)) gsap.fromTo(frame, { rotationY: -18, rotationX: 6, y: 60, opacity: 0, transformPerspective: 1600 }, { rotationY: 0, rotationX: 0, y: 0, opacity: 1, duration: 1.4, ease: OUT, clearProps: 'opacity,transform', scrollTrigger: once(frame) });
+    if (frame && below(frame)) gsap.fromTo(frame, { rotationY: -18, rotationX: 6, y: 60, opacity: 0, transformPerspective: 1600 }, { rotationY: 0, rotationX: 0, y: 0, opacity: 1, duration: 1.4, ease: OUT, clearProps: OT, scrollTrigger: once(frame) });
     const panel = $('.band-panel');
-    if (panel && below(panel)) gsap.fromTo(panel, { y: 90, opacity: 0, scale: 0.94, rotationX: 10, transformPerspective: 1400 }, { y: 0, opacity: 1, scale: 1, rotationX: 0, duration: 1.4, ease: OUT, clearProps: 'opacity,transform', scrollTrigger: once(panel) });
+    if (panel && below(panel)) gsap.fromTo(panel, { y: 90, opacity: 0, scale: 0.94, rotationX: 10, transformPerspective: 1400 }, { y: 0, opacity: 1, scale: 1, rotationX: 0, duration: 1.4, ease: OUT, clearProps: OT, scrollTrigger: once(panel) });
   };
 
   // Wide screens: the two glass phones fly in from depth as the closing band scrolls up (scrubbed, transform only).

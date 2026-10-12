@@ -36,7 +36,8 @@ class ContactEmailTests(unittest.TestCase):
         for route, html in self.html.items():
             links = re.findall(r'<a\b([^>]*)\bhref="(mailto:[^"]*)"([^>]*)>(.*?)</a>', html)
             with self.subTest(route=route):
-                self.assertEqual(len(links), 3 if route == 'contact/index.html' else 1)
+                # Contact: beside the form, in the no-JavaScript notice (Task 47) and in the privacy note.
+                self.assertEqual(len(links), 4 if route == 'contact/index.html' else 1)
                 self.assertEqual(html.count('mailto:'), len(links))
                 self.assertNotIn('{{', html)  # no placeholder left behind
             for before, href, after, text in links:
@@ -198,18 +199,22 @@ class SiteBuildTests(unittest.TestCase):
             self.assertIn(f'<option value="{value}">', html)
         self.assertIn('<p data-enquiry-status class="status" role="status"></p>', html)
         self.assertIn('stored in a Cloudflare database', html)
-        # Task 30: enquiries are also emailed to the owner through Resend, so the notice must say so.
+        # Task 30: enquiries may also be emailed to the owner through Resend, so the notice must say so. Task 47: the email
+        # copy is only sent when the alert is configured, so the note says "may" and never claims it always happens.
         # Task 31: the note may hold one element, the mailto link, and it ends the deletion sentence.
         notice = re.search(r'<p class="notice" id="enquiry-privacy">(.*?)</p>', html).group(1)
         self.assertEqual(re.findall(r'<[^>]+>', notice), [f'<a class="mail" href="mailto:{CONTACT_EMAIL}">', '</a>'])
-        self.assertIn('also emailed to Cendavo through our email delivery provider, Resend', notice)
+        self.assertIn('stored in a Cloudflare database', notice)
+        self.assertIn('may also be emailed to Cendavo through our email delivery provider, Resend', notice)
+        self.assertNotIn('and also emailed', notice)
         self.assertIn('not added to mailing lists or sold', notice)
         self.assertTrue(notice.endswith(f'you can ask us to delete them at any time by emailing {MAIL_LINK}.'))
         self.assertNotIn('A$', html)
-        # Task 31: the business address is the only "@" in the page's main content, in exactly two links (beside the form
-        # and in the privacy note). Nothing else (no other address, no placeholder email) may appear.
+        # Task 31: the business address is the only "@" in the page's main content, in exactly three links (beside the form,
+        # in the no-JavaScript notice (Task 47) and in the privacy note). Nothing else (no other address, no placeholder
+        # email) may appear.
         main = html.split('<main', 1)[1].split('</main>', 1)[0]
-        self.assertEqual(main.count(MAIL_LINK), 2)
+        self.assertEqual(main.count(MAIL_LINK), 3)
         self.assertIn(f'<p class="ct-mail">Prefer email? Write to {MAIL_LINK}</p>', main)
         self.assertNotIn('@', main.replace(MAIL_LINK, ''))
 
@@ -217,7 +222,19 @@ class SiteBuildTests(unittest.TestCase):
         html = (OUT / 'contact/index.html').read_text()
         honeypot = re.search(r'<div class="hp" aria-hidden="true">.*?</div>', html)
         self.assertIsNotNone(honeypot)
-        self.assertRegex(honeypot.group(0), r'<input id="enquiry-company-url" name="company_url" type="text" tabindex="-1" autocomplete="off">')
+        # Task 47: a name and id with no meaning for autofill (a filled trap silently drops a real enquiry); enquiry.js
+        # still sends its value to the server as company_url.
+        field = re.search(r'<input id="([^"]+)" name="([^"]+)" type="text" tabindex="-1" autocomplete="off">', honeypot.group(0))
+        self.assertIsNotNone(field)
+        self.assertEqual(honeypot.group(0).count('<input'), 1)
+        self.assertIn(f'<label for="{field.group(1)}">', honeypot.group(0))
+        for word in ('company', 'url', 'website', 'name', 'email', 'mail', 'phone', 'tel', 'org', 'address', 'addr'):
+            with self.subTest(word=word):
+                self.assertNotIn(word, field.group(1).lower())
+                self.assertNotIn(word, field.group(2).lower())
+        script = (ROOT / 'assets/enquiry.js').read_text()
+        self.assertIn(f"var HONEYPOT = '{field.group(2)}';", script)
+        self.assertIn('fields.company_url = trap ? trap.value', script)
         css = (OUT / 'assets/site.css').read_text()
         self.assertIn('.hp{position:absolute;left:-10000px', css)
         self.assertIn('.field-error{', css)
@@ -1358,7 +1375,7 @@ class InnerPageTests(unittest.TestCase):
             with self.subTest(project=slug):
                 article = re.search(rf'<article [^>]*id="{slug}"[^>]*>(.*?)</article>', main, re.S).group(1)
                 self.assertEqual(article.count(' data-bench='), 1)
-                screens = re.search(r'<section class="cs-screens" aria-labelledby="([^"]+)">(.*?)</section>', article, re.S)
+                screens = re.search(rf'<section class="cs-screens" aria-labelledby="{short}-title ([^"]+)">(.*?)</section>', article, re.S)
                 self.assertIsNotNone(screens)
                 self.assertRegex(screens.group(2), rf'<h3 id="{screens.group(1)}"[^>]*>Key screens</h3>')
                 bench = re.search(rf'<figure class="bench b-{short}" data-bench="{short}">(.*?)</figure>', screens.group(2), re.S)
@@ -1428,7 +1445,7 @@ class InnerPageTests(unittest.TestCase):
         # Layout wrappers only: the service select sits in a styling wrapper, controls keep their hooks.
         self.assertIn('<div class="select"><select id="enquiry-service" name="service" required aria-describedby="enquiry-service-error">', main)
         self.assertIn('<p class="notice" id="enquiry-privacy">', main)
-        self.assertEqual(main.count(MAIL_LINK), 2)  # Task 31: beside the form and in the privacy note
+        self.assertEqual(main.count(MAIL_LINK), 3)  # Task 31: beside the form and in the privacy note; Task 47: the no-JS notice
         self.assertNotIn('@', main.replace(MAIL_LINK, ''))
         self.assertNotIn('<script', main)
 
@@ -2011,7 +2028,7 @@ class DesignCritiqueFixTests(unittest.TestCase):
         self.assertNotIn('ct-expect', html)
         self.assertNotRegex(self.pages_css, r'\.exp(?![\w-])')
         foot = re.search(r'<div class="form-foot">(.*?)</div></form>', main, re.S).group(1)
-        self.assertRegex(foot, r'^<button class="button large" type="submit">Send enquiry</button><p class="form-promise">[^<]{20,120}</p>'
+        self.assertRegex(foot, r'^<button class="button large" type="submit" disabled>Send enquiry</button><p class="form-promise">[^<]{20,120}</p>'
                                r'<p class="notice" id="enquiry-privacy">')
         line = re.search(r'<p class="form-promise">([^<]+)</p>', foot).group(1)
         for claim in ('person', 'plain language', 'no hard sell'):
@@ -2172,7 +2189,9 @@ class WorkArtDirectionTests(unittest.TestCase):
 
     def test_harbourside_is_unchanged(self):
         import hashlib
-        self.assertEqual(hashlib.sha256(self.article('harbourside').encode()).hexdigest(), HARBOURSIDE_SHA256)
+        # Task 47: its three regions are named with the project title too (aria-labelledby="hb-title hb-...").
+        frozen = undo_edits(self, self.article('harbourside'), tuple((f'aria-labelledby="hb-title hb-{part}"', f'aria-labelledby="hb-{part}"') for part in ('screens', 'brief', 'does')))
+        self.assertEqual(hashlib.sha256(frozen.encode()).hexdigest(), HARBOURSIDE_SHA256)
         self.assertEqual(re.findall(r'<article [^>]*id="([^"]+)"', self.source), ['harbourside', 'greenline', 'fade-co'])
 
     def test_greenline_is_mirrored_with_a_pull_line(self):
@@ -2250,7 +2269,7 @@ class WorkArtDirectionTests(unittest.TestCase):
         # Resolve padding on the Fade & Co screens section the way the cascade does: of the top-level rules whose selector is
         # a compound of classes the section carries, the highest specificity wins, then the later rule. Daylight (Task 34):
         # the screens keep their bottom padding before the brief.
-        section = re.search(r'<section class="([^"]+)" aria-labelledby="fc-screens">', self.source).group(1).split()
+        section = re.search(r'<section class="([^"]+)" aria-labelledby="fc-title fc-screens">', self.source).group(1).split()
         self.assertEqual(section, ['cs-screens'])
         winner = None
         rules = re.findall(r'([^{}]+)\{([^{}]*)\}', re.sub(r'/\*.*?\*/', '', self.base, flags=re.S))
@@ -3432,6 +3451,23 @@ class DaylightTests(unittest.TestCase):
 # Daylight (Task 34): the enquiry form, with every class attribute removed, is byte-identical to the form before Task 34
 # (pages/contact.html at 2a91fbb, from <form data-enquiry ...> to the status line): only classes and wrappers may change.
 CONTACT_FORM_SHA256 = 'bc95f8284ba6d12d27966bb5e5b2a7206d54325654f2452f2c0947cd3e5fe29d'
+# Task 47 (owner-mandated) changed exactly these strings inside the frozen form: the submit button ships disabled until
+# enquiry.js attaches its handler, the honeypot got a name browsers do not autofill, and the privacy note says "may" (the
+# email copy is only sent when the alert is configured). The freeze hashes still cover everything else: each test undoes
+# exactly these edits (each must appear once) and compares with the earlier baseline.
+TASK47_FORM_EDITS = (
+    (' type="submit" disabled>Send enquiry</button>', ' type="submit">Send enquiry</button>'),
+    ('<label for="enquiry-hp">Leave this field empty</label><input id="enquiry-hp" name="hp_xq" ',
+     '<label for="enquiry-company-url">Leave this field empty</label><input id="enquiry-company-url" name="company_url" '),
+    (' used by Cendavo and may also be emailed to Cendavo ', ' used by Cendavo and also emailed to Cendavo '),
+)
+
+
+def undo_edits(test, text, edits):
+    for new, old in edits:
+        test.assertEqual(text.count(new), 1, new)
+        text = text.replace(new, old)
+    return text
 # The demonstration app's markup, from its .demo-shell wrapper to the end of pages/demo.html, unchanged since before Task 34.
 DEMO_APP_SHA256 = 'edf5d1891ad9896aa8b44f0a53635fdfee7d6bc965ffb5d2a1b81bcffa44525e'
 VOID_TAGS = {'area', 'base', 'br', 'col', 'embed', 'hr', 'img', 'input', 'link', 'meta', 'source', 'track', 'wbr'}
@@ -3477,7 +3513,8 @@ class DaylightInnerPageTests(unittest.TestCase):
         self.assertEqual(source.count('<form'), 1)
         form = re.search(r'<form data-enquiry.*?</form><p data-enquiry-status class="status" role="status"></p>', source, re.S)
         self.assertIsNotNone(form)
-        self.assertEqual(hashlib.sha256(re.sub(r' class="[^"]*"', '', form.group(0)).encode()).hexdigest(), CONTACT_FORM_SHA256)
+        frozen = undo_edits(self, form.group(0), TASK47_FORM_EDITS)
+        self.assertEqual(hashlib.sha256(re.sub(r' class="[^"]*"', '', frozen).encode()).hexdigest(), CONTACT_FORM_SHA256)
         # The built page carries the same form (the build only fills in the contact address).
         self.assertEqual(main_of(self.html['contact/index.html']).count('<form data-enquiry class="form" method="post" novalidate>'), 1)
         self.assertNotIn('data-ph', self.html['contact/index.html'])
@@ -3756,7 +3793,7 @@ class GlassPageSceneTests(unittest.TestCase):
         # Contact: the form block is byte-for-byte what it was, there is one form, and the scene host is outside it.
         source = (ROOT / 'pages/contact.html').read_text()
         form = re.search(r'<form.*?</form>', source, re.S).group(0)
-        self.assertEqual(hashlib.sha256(form.encode()).hexdigest(), self.CONTACT_FORM_SHA256)
+        self.assertEqual(hashlib.sha256(undo_edits(self, form, TASK47_FORM_EDITS).encode()).hexdigest(), self.CONTACT_FORM_SHA256)
         contact = main_of(self.html['contact/index.html'])
         self.assertEqual(contact.count('<form'), 1)
         built = re.search(r'<form.*?</form>', contact, re.S).group(0)
@@ -4307,3 +4344,110 @@ class HeroFitPauseGripTests(unittest.TestCase):
                        "stage.addEventListener('pointercancel', letGo)", 'setPointerCapture', 'releasePointerCapture'):
             self.assertIn(needle, self.home_js)
         self.assertIn('<input', main_of(self.home)[main_of(self.home).index('data-compare-controls'):])
+
+
+class EnquiryRobustnessAndAccessTests(unittest.TestCase):
+    """Task 47 (owner-mandated): the enquiry form never loses input silently, and six small accessibility fixes."""
+
+    @classmethod
+    def setUpClass(cls):
+        build()
+        cls.contact = (OUT / 'contact/index.html').read_text()
+        cls.site_css = (OUT / 'assets/site.css').read_text()
+        cls.home_css = (OUT / 'assets/home.css').read_text()
+        cls.pages_css = (OUT / 'assets/pages.css').read_text()
+
+    def test_without_javascript_the_form_cannot_send_and_the_page_offers_email(self):
+        main = main_of(self.contact)
+        form = re.search(r'<form [^>]*data-enquiry[^>]*>', main).group(0)
+        # POST stays (a native GET would put personal details in the URL); the button ships disabled, so neither a click
+        # nor Enter in a field (implicit submission) can send the form until enquiry.js has attached its handler.
+        self.assertIn('method="post"', form)
+        self.assertNotIn('action=', form)
+        self.assertEqual(re.findall(r'<button [^>]*type="submit"[^>]*>', main), ['<button class="button large" type="submit" disabled>'])
+        notice = re.search(r'<noscript>(.*?)</noscript>', main, re.S)
+        self.assertIsNotNone(notice)
+        self.assertLess(main.index('<noscript>'), main.index('<form '))
+        self.assertIn(MAIL_LINK, notice.group(1))
+        self.assertIn('cannot send', notice.group(1))
+        self.assertEqual(main.count('<noscript>'), 1)
+        self.assertTrue(rules_for(base_rules(self.pages_css), '.ct-noscript'))
+        # The disabled button only shows a "busy" cursor while a send is actually in progress.
+        self.assertIn('cursor:not-allowed', rules_for(base_rules(self.site_css), '.button[disabled]')[0])
+        self.assertIn('cursor:progress', rules_for(base_rules(self.site_css), '.form[aria-busy="true"] .button[disabled]')[0])
+
+    def test_enquiry_script_enables_the_button_only_after_its_submit_handler(self):
+        script = (ROOT / 'assets/enquiry.js').read_text()
+        self.assertEqual(script.count('button.disabled = false;'), 2)  # after a send, and once at start-up
+        self.assertLess(script.index("form.addEventListener('submit'"), script.rindex('if (button) button.disabled = false;'))
+        self.assertNotIn('innerHTML', script)
+
+    def test_export_button_has_solid_colours_with_enough_contrast(self):
+        for selector in ('#export-demo', '#export-demo:hover'):
+            with self.subTest(selector=selector):
+                rule = rules_for(base_rules(self.site_css), selector)
+                self.assertEqual(len(rule), 1)
+                background = re.search(r'background:(#[0-9A-Fa-f]{6})(?:;|$)', rule[0])
+                colour = re.search(r'(?:^|;)color:(#[0-9A-Fa-f]{6})(?:;|$)', rule[0])
+                self.assertIsNotNone(background)
+                self.assertIsNotNone(colour)
+                self.assertGreaterEqual(contrast(background.group(1), colour.group(1)), 4.5)
+        self.assertIn('backdrop-filter:none', rules_for(base_rules(self.site_css), '#export-demo')[0])
+        self.assertIn('id="export-demo"', (OUT / 'demo/index.html').read_text())
+
+    def test_date_input_keeps_a_visible_focus_ring_including_its_calendar_button(self):
+        base = base_rules(self.site_css)
+        for selector in ('input[type="date"]:focus-visible', 'input[type="date"]:focus-within',
+                         'input[type="date"]::-webkit-calendar-picker-indicator:focus-visible'):
+            with self.subTest(selector=selector):
+                rule = rules_for(base, selector)
+                self.assertEqual(len(rule), 1)
+                self.assertRegex(rule[0], r'outline:2px solid var\(--ink\)')
+        # The vendor pseudo-element sits in a rule of its own, so browsers that do not know it keep the other one.
+        self.assertNotRegex(base, r'focus-within,input\[type="date"\]::-webkit')
+        self.assertIn('<input name="date" type="date" required>', (OUT / 'demo/index.html').read_text())
+
+    def test_home_project_titles_are_big_enough_to_tap_on_phones(self):
+        phone = media_blocks(self.home_css, 'max-width:860px')
+        rule = rules_for(phone, '.teaser-card h3 a')
+        self.assertEqual(len(rule), 1)
+        self.assertIn('display:inline-block', rule[0])
+        self.assertGreaterEqual(int(re.search(r'min-height:(\d+)px', rule[0]).group(1)), 24)
+        home = main_of((OUT / 'index.html').read_text())
+        self.assertEqual(len(re.findall(r'<article class="teaser-card"[^>]*>.*?<h3 id="t\d-title"><a href="/work/#', home, re.S)), 3)
+
+    def test_every_work_region_has_a_unique_name_that_includes_its_project(self):
+        main = main_of((OUT / 'work/index.html').read_text())
+        texts = {}
+        for ident, body in re.findall(r'<h[1-6][^>]*\bid="([^"]+)"[^>]*>(.*?)</h[1-6]>', main, re.S):
+            texts[ident] = re.sub(r'\s+', ' ', re.sub(r'<[^>]+>', '', body)).replace('&amp;', '&').strip()
+        names = []
+        for tag, ids in re.findall(r'<(section|article|aside|nav|div)\b[^>]*\baria-labelledby="([^"]+)"', main):
+            parts = ids.split()
+            for ident in parts:
+                with self.subTest(id=ident):
+                    self.assertIn(f'id="{ident}"', main)
+                    self.assertIn(ident, texts)
+            names.append(' '.join(texts.get(ident, '') for ident in parts))
+        self.assertGreaterEqual(len(names), 9)
+        self.assertEqual(len(names), len(set(names)), names)
+        for short, project in (('hb', 'Harbourside Mobile Detailing'), ('gl', 'Greenline Landscapes'), ('fc', 'Fade & Co')):
+            for part in ('screens', 'brief', 'does'):
+                with self.subTest(region=f'{short}-{part}'):
+                    self.assertIn(f'aria-labelledby="{short}-title {short}-{part}"', main)
+                    self.assertTrue(texts[f'{short}-title'].startswith(project))
+
+    def test_menu_scroll_lock_applies_only_in_the_mobile_layout(self):
+        css = re.sub(r'/\*.*?\*/', '', self.site_css, flags=re.S)
+        self.assertNotIn('menu-lock', base_rules(css))
+        mobile = media_blocks(css, 'max-width:1080px')
+        self.assertIn('overflow:hidden', rules_for(mobile, 'html.menu-lock')[0])
+        self.assertIn('overflow:hidden', rules_for(mobile, 'html.menu-lock body')[0])
+        # The open menu scrolls inside itself, so short landscape screens can still reach its last link.
+        self.assertIn('overflow-y:auto', rules_for(mobile, 'html.menu-lock .site-header .nav')[0])
+        self.assertEqual(css.count('menu-lock'), 3)
+
+    def test_reel_heading_and_paragraph_share_one_reveal_group(self):
+        home = main_of((OUT / 'index.html').read_text())
+        self.assertRegex(home, r'<div class="reel-head" data-rise-group><h2 id="reel-title" data-rise>[^<]+</h2><p id="reel-desc" data-rise>')
+        self.assertRegex(home, r'<div class="work-head" data-rise-group><h2 id="work-title" data-rise>')

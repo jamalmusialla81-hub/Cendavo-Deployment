@@ -4,12 +4,19 @@ document.documentElement.classList.add('js');
 const menu = document.querySelector('[data-menu]');
 const nav = document.querySelector('[data-nav]');
 const header = document.querySelector('.site-header');
+// Task 47: while the mobile menu is open the page behind it does not scroll. html.menu-lock sets overflow:hidden only inside
+// the mobile breakpoint (site.css), and Lenis (motion pages, window.__glass.lenis, created later by glass.js) is stopped
+// too, since it scrolls on its own. Closing, Escape and widening to the desktop layout all release it.
 const setMenu = open => {
   nav.classList.toggle('open', open);
   menu.setAttribute('aria-expanded', String(open));
+  document.documentElement.classList.toggle('menu-lock', open);
+  window.__glass?.lenis?.[open ? 'stop' : 'start']();
   if (open) showHeader();
 };
 menu?.addEventListener('click', () => setMenu(!nav.classList.contains('open')));
+// Widening to the desktop layout closes the menu (Lenis.start is a no-op when it is not stopped).
+if (menu) window.matchMedia?.('(max-width: 1080px)').addEventListener?.('change', e => e.matches || setMenu(false));
 document.addEventListener('keydown', event => {
   if (event.key !== 'Escape' || !menu || !nav?.classList.contains('open')) return;
   setMenu(false);
@@ -34,7 +41,7 @@ function showHeader() {
 if (header) {
   window.addEventListener('scroll', () => {
     const y = window.scrollY || 0;
-    const next = navHidden(hidden, lastY, y, Boolean(nav?.classList.contains('open')));
+    const next = navHidden(hidden, lastY, y, nav?.classList.contains('open'));
     if (Math.abs(y - lastY) > NAV_STEP || y <= NAV_TOP) lastY = y;
     if (next === hidden) return;
     hidden = next;

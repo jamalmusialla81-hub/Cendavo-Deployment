@@ -298,6 +298,8 @@
 .teaser-card,.teaser-card:first-child{grid-column:auto}
 .teaser-card:last-child{margin-top:0}
 .teaser-img,.teaser-card:first-child .teaser-img{aspect-ratio:4/3}
+/* Task 47: the project titles are at least a 24px tap target on phones. */
+.teaser-card h3 a{display:inline-block;min-height:32px;padding-block:4px}
 .svc-list{grid-template-columns:1fr;gap:44px}
 }
 @media(max-width:760px){

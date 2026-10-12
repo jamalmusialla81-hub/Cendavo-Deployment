@@ -2395,5 +2395,329 @@ class HeaderPauseAndDragScriptTests(unittest.TestCase):
         self.assertFalse(r['motion']['sweepAfterDrag'])  # the visitor's choice is never swept over
 
 
+
+# Task 47 (owner-mandated): the enquiry form's page script in a stub DOM (start-up order, live re-checks, the honeypot's
+# payload key) and makeKey without a working crypto; site.js's mobile-menu scroll lock; the homepage's grouped reveals.
+ENQUIRY = Path(__file__).resolve().parents[1] / 'assets' / 'enquiry.js'
+
+ENQUIRY_PAGE_SCRIPT = HARNESS + r"""
+const source = fs.readFileSync(process.argv[1], 'utf8');
+const FIELDS = ['name', 'email', 'phone', 'business', 'website', 'service', 'message'];
+function page(env) {
+  const log = [], sent = [];
+  const controls = {};
+  FIELDS.concat('hp_xq').forEach(name => {
+    const el = element(name); el.name = name; el.value = '';
+    el.focus = () => log.push('focus:' + name);
+    controls[name] = el;
+  });
+  const slots = {}; FIELDS.forEach(name => { slots[name] = element('slot-' + name); });
+  const button = element('button'); button.textContent = 'Send enquiry';
+  let disabled = true;  // as the HTML ships it
+  Object.defineProperty(button, 'disabled', { get: () => disabled, set: v => { disabled = v; log.push('disabled=' + v); } });
+  const status = element('status');
+  const form = element('form');
+  form.elements = controls;
+  form.reset = () => FIELDS.concat('hp_xq').forEach(name => { controls[name].value = ''; });
+  form.querySelector = s => {
+    if (s === '[type="submit"]') return button;
+    const m = s.match(/^\[data-error-for="(\w+)"\]$/);
+    return m ? slots[m[1]] || null : null;
+  };
+  const add = form.addEventListener;
+  form.addEventListener = (type, fn) => { log.push('listen:' + type); add.call(form, type, fn); };
+  const doc = { querySelector: s => (s === '[data-enquiry]' ? form : s === '[data-enquiry-status]' ? status : null) };
+  const sandbox = { document: doc, window: {}, requestAnimationFrame: fn => fn(), performance: { now: () => 5000 }, setTimeout, clearTimeout, URL,
+    fetch: async (url, init) => { sent.push(JSON.parse(init.body)); return { status: 201, json: async () => ({ ok: true, id: 1 }) }; } };
+  if (env.crypto) sandbox.crypto = require('crypto').webcrypto;
+  let error = null;
+  try { vm.runInNewContext(source, sandbox); } catch (e) { error = String(e); }
+  const fire = (type, el) => (form.listeners[type] || []).map(fn => fn({ type, target: el, preventDefault() {} }));
+  const submit = () => Promise.all(fire('submit', form));
+  const view = () => Object.fromEntries(FIELDS.map(name => [name, { error: slots[name].textContent, invalid: controls[name].getAttribute('aria-invalid') }]));
+  return { log, sent, controls, button, status, form, fire, submit, view, error, disabled: () => disabled };
+}
+(async () => {
+  const out = {};
+  for (const [label, env] of [['withCrypto', { crypto: true }], ['noCrypto', { crypto: false }]]) {
+    const p = page(env);
+    out[label] = { error: p.error, log: p.log.slice(), disabled: p.disabled() };
+  }
+  // Live re-checks.
+  const p = page({ crypto: true });
+  p.controls.email.value = 'bad';
+  p.fire('focusout', p.controls.email);  // never marked invalid: leaving it does not check it early
+  p.fire('input', p.controls.email);
+  out.beforeSubmit = p.view();
+  await p.submit();  // everything empty: the required fields are marked and the first one is focused
+  out.afterSubmit = p.view();
+  out.statusAfterSubmit = p.status.textContent;
+  const mark = p.log.length;
+  p.controls.name.value = 'Sam';
+  p.fire('input', p.controls.name);
+  out.nameFixed = p.view().name;
+  p.controls.email.value = 'sam@';
+  p.fire('input', p.controls.email);
+  out.emailStillWrong = p.view().email;
+  p.controls.email.value = 'sam@example.com';
+  p.fire('input', p.controls.email);
+  out.emailTypedRight = p.view().email;
+  p.controls.message.value = 'too short';
+  p.fire('focusout', p.controls.message);
+  out.messageStillShort = p.view().message;
+  p.controls.message.value = 'Hello there, a website please.';
+  p.fire('focusout', p.controls.message);
+  out.messageFixed = p.view().message;
+  p.controls.service.value = 'not-sure';
+  p.fire('change', p.controls.service);
+  out.serviceFixed = p.view().service;
+  p.controls.phone.value = 'abc';  // never marked invalid, so typing in it does not check it
+  p.fire('input', p.controls.phone);
+  out.phoneUntouched = p.view().phone;
+  p.controls.name.value = '';  // cleared once fixed: no longer invalid, so it is not checked until the next submit
+  p.fire('input', p.controls.name);
+  out.nameClearedAfterFix = p.view().name;
+  out.sideEffects = p.log.slice(mark);
+  out.statusAfterRechecks = p.status.textContent;
+  // The honeypot travels to the server as company_url; the page's own name for it is never sent.
+  const q = page({ crypto: true });
+  q.controls.name.value = 'Sam'; q.controls.email.value = 'sam@example.com'; q.controls.service.value = 'not-sure';
+  q.controls.message.value = 'Hello there, a website please.'; q.controls.hp_xq.value = 'https://spam.example';
+  await q.submit();
+  out.payload = q.sent[0];
+  console.log(JSON.stringify(out));
+})();
+"""
+
+MAKE_KEY_SCRIPT = r"""
+const vm = require('vm');
+const fs = require('fs');
+const source = fs.readFileSync(process.argv[1], 'utf8');
+const real = require('crypto').webcrypto;
+const cases = {
+  none: undefined,
+  nullCrypto: null,
+  empty: {},
+  throwingRandomUUID: { randomUUID() { throw new Error('insecure context'); } },
+  badRandomUUID: { randomUUID: () => 'not-a-uuid' },
+  throwingGetRandomValues: { getRandomValues() { throw new Error('quota'); } },
+  shortGetRandomValues: { getRandomValues: () => new Uint8Array(4) },
+  getRandomValuesOnly: { getRandomValues: b => real.getRandomValues(b) },
+  full: real,
+};
+const out = {};
+for (const [name, crypto] of Object.entries(cases)) {
+  const module = { exports: {} };
+  const sandbox = { module, URL };
+  if (name !== 'none') sandbox.crypto = crypto;
+  vm.runInNewContext(source, sandbox);
+  const keys = [];
+  let error = null;
+  try { for (let i = 0; i < 50; i++) keys.push(module.exports.makeKey()); } catch (e) { error = String(e); }
+  out[name] = { error, keys, unique: new Set(keys).size };
+}
+const module = { exports: {} };
+vm.runInNewContext(source, { module, URL });
+const api = module.exports;
+out.fieldError = {
+  emailBad: api.fieldError('email', 'bad'), emailGood: api.fieldError('email', 'sam@example.com'), nameEmpty: api.fieldError('name', '  '),
+  phoneEmpty: api.fieldError('phone', ''), phoneBad: api.fieldError('phone', 'abc'), websiteBad: api.fieldError('website', 'nope'),
+  serviceBad: api.fieldError('service', 'gold'), messageShort: api.fieldError('message', 'short'), unknown: api.fieldError('idempotencyKey', ''),
+  proto: api.fieldError('constructor', 'x'),
+};
+out.messages = api.MESSAGES;
+out.honeypot = api.HONEYPOT;
+console.log(JSON.stringify(out));
+"""
+
+SHELL_LOCK_SCRIPT = HARNESS + r"""
+const source = fs.readFileSync(process.argv[1], 'utf8');
+function run(env) {
+  const header = element('header'), menu = element('menu'), nav = element('nav');
+  menu.attrs['aria-expanded'] = 'false';
+  menu.focus = () => {};
+  const root = element('html');
+  const parts = { '[data-menu]': [menu], '[data-nav]': [nav], '.site-header': [header] };
+  const doc = { documentElement: root, listeners: {}, addEventListener(type, fn) { (this.listeners[type] = this.listeners[type] || []).push(fn); },
+    querySelector: s => (parts[s] || [])[0] || null, querySelectorAll: s => parts[s] || [] };
+  const queries = {};
+  const lenis = { stops: 0, starts: 0, stop() { this.stops++; }, start() { this.starts++; } };
+  const { win } = makeWindow({ width: 390, height: 844, fine: false, reduce: false }, {
+    scrollY: 0, location: { pathname: '/' },
+    matchMedia: query => ({ matches: query === '(max-width: 1080px)', addEventListener(type, fn) { (queries[query] = queries[query] || []).push([type, fn]); } }),
+  });
+  vm.runInNewContext(source, { window: win, document: doc, getComputedStyle: () => ({ display: 'inline-flex' }) });
+  if (env.lenis) win.__glass = Object.assign(win.__glass || {}, { lenis });  // glass.js creates it after site.js has run
+  const steps = [];
+  const state = () => ({ lock: root.classList.contains('menu-lock'), open: nav.classList.contains('open'), expanded: menu.attrs['aria-expanded'],
+    stops: lenis.stops, starts: lenis.starts });
+  const step = (name, act) => { act(); steps.push([name, state()]); };
+  const click = () => (menu.listeners.click || []).forEach(fn => fn({ type: 'click' }));
+  const layout = matches => (queries['(max-width: 1080px)'] || []).forEach(([type, fn]) => type === 'change' && fn({ matches }));
+  step('start', () => {});
+  step('open', click);
+  step('close', click);
+  step('open again', click);
+  step('Escape', () => (doc.listeners.keydown || []).forEach(fn => fn({ key: 'Escape' })));
+  step('open once more', click);
+  step('still a phone layout', () => layout(true));
+  step('widen to the desktop layout', () => layout(false));
+  step('desktop layout with the menu closed', () => layout(false));
+  return { steps, watchers: (queries['(max-width: 1080px)'] || []).map(([type]) => type) };
+}
+console.log(JSON.stringify({ lenis: run({ lenis: true }), plain: run({ lenis: false }) }));
+"""
+
+HOME_GROUP_SCRIPT = HARNESS + r"""
+const source = fs.readFileSync(process.argv[1], 'utf8');
+function run(env) {
+  const below = name => { const el = element(name); el.getBoundingClientRect = () => ({ left: 0, top: 3000, width: 400, height: 300 }); return el; };
+  const head = below('reelHead');
+  const title = below('reelTitle'), desc = element('reelDesc');  // on a wide screen the paragraph can sit higher than its heading
+  desc.getBoundingClientRect = () => ({ left: 600, top: 2900, width: 400, height: 300 });
+  title.previousElementSibling = null; desc.previousElementSibling = title;
+  title.closest = desc.closest = s => (s === '[data-rise-group]' ? head : null);
+  const shown = element('shownHead'), shownTitle = element('shownTitle'), shownText = below('shownText');
+  shownTitle.previousElementSibling = null; shownText.previousElementSibling = shownTitle;
+  shownTitle.closest = shownText.closest = s => (s === '[data-rise-group]' ? shown : null);
+  const lone = below('lone'); lone.closest = () => null; lone.previousElementSibling = element('before');
+  const parts = { '[data-rise]': [title, desc, shownTitle, shownText, lone] };
+  const root = element('html'); root.classList = classList(['js'].concat(env.reduce ? [] : ['motion']));
+  const doc = { documentElement: root, querySelector: s => (parts[s] || [])[0] || null, querySelectorAll: s => parts[s] || [] };
+  const { win } = makeWindow(env, { requestAnimationFrame: () => 1, cancelAnimationFrame() {} });
+  const stub = makeGsap(env); win.gsap = stub.gsap; win.ScrollTrigger = stub.ScrollTrigger;
+  vm.runInNewContext(source, { window: win, document: doc });
+  return stub.log.tweens.filter(t => t.vars && t.vars.scrollTrigger).map(t => ({ name: t.names[0], trigger: t.vars.scrollTrigger.trigger.name,
+    start: t.vars.scrollTrigger.start, once: t.vars.scrollTrigger.once, delay: t.vars.delay || 0, from: t.from }));
+}
+console.log(JSON.stringify({ wide: run({ width: 1440, height: 900, fine: true, reduce: false }), phone: run({ width: 390, height: 844, fine: false, reduce: false }),
+  reduced: run({ width: 1440, height: 900, fine: true, reduce: true }) }));
+"""
+
+UUID_V4 = r'^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'
+
+
+class EnquiryRobustnessScriptTests(unittest.TestCase):
+    def node_json(self, script, path):
+        out = subprocess.run(['node', '-e', script, str(path)], capture_output=True, text=True, check=True)
+        return json.loads(out.stdout)
+
+    @classmethod
+    def setUpClass(cls):
+        if not shutil.which('node'):
+            return
+        run = lambda script, path: json.loads(subprocess.run(['node', '-e', script, str(path)], capture_output=True, text=True, check=True).stdout)
+        cls.page = run(ENQUIRY_PAGE_SCRIPT, ENQUIRY)
+        cls.keys = run(MAKE_KEY_SCRIPT, ENQUIRY)
+
+    def test_button_is_enabled_only_after_the_submit_handler_is_attached(self):
+        for label in ('withCrypto', 'noCrypto'):
+            with self.subTest(label=label):
+                r = self.page[label]
+                self.assertIsNone(r['error'])
+                self.assertIn('listen:submit', r['log'])
+                self.assertEqual(r['log'].count('disabled=false'), 1)
+                self.assertLess(r['log'].index('listen:submit'), r['log'].index('disabled=false'))
+                self.assertNotIn('disabled=true', r['log'])
+                self.assertFalse(r['disabled'])
+
+    def test_make_key_never_throws_and_always_returns_a_uuid_v4(self):
+        for name in ('none', 'nullCrypto', 'empty', 'throwingRandomUUID', 'badRandomUUID', 'throwingGetRandomValues',
+                     'shortGetRandomValues', 'getRandomValuesOnly', 'full'):
+            with self.subTest(crypto=name):
+                r = self.keys[name]
+                self.assertIsNone(r['error'])
+                self.assertEqual(len(r['keys']), 50)
+                for key in r['keys']:
+                    self.assertRegex(key, UUID_V4)
+                self.assertEqual(r['unique'], 50)
+
+    def test_field_error_reuses_the_validation_rules_and_messages(self):
+        f, m = self.keys['fieldError'], self.keys['messages']
+        self.assertEqual(f['emailBad'], m['email'])
+        self.assertEqual(f['emailGood'], '')
+        self.assertEqual(f['nameEmpty'], m['name'])
+        self.assertEqual(f['phoneEmpty'], '')  # optional
+        self.assertEqual(f['phoneBad'], m['phone'])
+        self.assertEqual(f['websiteBad'], m['website'])
+        self.assertEqual(f['serviceBad'], m['service'])
+        self.assertEqual(f['messageShort'], m['message'])
+        self.assertEqual(f['unknown'], '')  # only the visible fields
+        self.assertEqual(f['proto'], '')
+
+    def test_a_field_is_rechecked_live_only_after_it_has_shown_an_error(self):
+        r, m = self.page, self.keys['messages']
+        empty = {'error': '', 'invalid': None}
+        # Before any submit nothing is checked, not even a wrong email that was typed and left.
+        self.assertEqual(r['beforeSubmit'], {name: empty for name in r['beforeSubmit']})
+        for name in ('name', 'email', 'service', 'message'):
+            self.assertEqual(r['afterSubmit'][name], {'error': m[name], 'invalid': 'true'})
+        self.assertEqual(r['afterSubmit']['phone'], empty)
+        self.assertEqual(r['nameFixed'], empty)
+        self.assertEqual(r['emailStillWrong'], {'error': m['email'], 'invalid': 'true'})
+        self.assertEqual(r['emailTypedRight'], empty)
+        self.assertEqual(r['messageStillShort'], {'error': m['message'], 'invalid': 'true'})
+        self.assertEqual(r['messageFixed'], empty)
+        self.assertEqual(r['serviceFixed'], empty)
+        self.assertEqual(r['phoneUntouched'], empty)
+        self.assertEqual(r['nameClearedAfterFix'], empty)
+        # Re-checks never move focus, never touch the button and never change the status line.
+        self.assertEqual(r['sideEffects'], [])
+        self.assertTrue(r['statusAfterSubmit'])
+        self.assertEqual(r['statusAfterRechecks'], r['statusAfterSubmit'])
+
+    def test_honeypot_is_sent_as_company_url(self):
+        payload = self.page['payload']
+        self.assertEqual(self.keys['honeypot'], 'hp_xq')
+        self.assertEqual(payload['company_url'], 'https://spam.example')
+        self.assertNotIn('hp_xq', payload)
+        self.assertEqual(sorted(payload), sorted(['name', 'email', 'phone', 'business', 'website', 'service', 'message',
+                                                  'company_url', 'idempotencyKey', 'elapsedMs']))
+        self.assertRegex(payload['idempotencyKey'], UUID_V4)
+
+    def test_open_mobile_menu_locks_the_page_and_every_way_out_releases_it(self):
+        r = self.node_json(SHELL_LOCK_SCRIPT, SITE)
+        for case in ('lenis', 'plain'):
+            with self.subTest(case=case):
+                steps = dict((name, s) for name, s in r[case]['steps'])
+                self.assertEqual(r[case]['watchers'], ['change'])
+                self.assertFalse(steps['start']['lock'])
+                for name, locked in (('open', True), ('close', False), ('open again', True), ('Escape', False), ('open once more', True),
+                                     ('still a phone layout', True), ('widen to the desktop layout', False),
+                                     ('desktop layout with the menu closed', False)):
+                    with self.subTest(step=name):
+                        self.assertEqual(steps[name]['lock'], locked)
+                        self.assertEqual(steps[name]['open'], locked)
+                        self.assertEqual(steps[name]['expanded'], str(locked).lower())
+        lenis = dict((name, s) for name, s in r['lenis']['steps'])
+        # Lenis scrolls on its own, so it is stopped while the menu is open and started again on every way out.
+        self.assertEqual((lenis['open']['stops'], lenis['open']['starts']), (1, 0))
+        self.assertEqual((lenis['close']['stops'], lenis['close']['starts']), (1, 1))
+        self.assertEqual((lenis['Escape']['stops'], lenis['Escape']['starts']), (2, 2))
+        self.assertEqual((lenis['still a phone layout']['stops'], lenis['still a phone layout']['starts']), (3, 2))
+        self.assertEqual(lenis['widen to the desktop layout']['starts'], 3)
+        plain = dict((name, s) for name, s in r['plain']['steps'])
+        self.assertEqual((plain['open']['stops'], plain['open']['starts']), (0, 0))
+
+    def test_reel_heading_and_paragraph_rise_from_one_trigger_heading_first(self):
+        r = self.node_json(HOME_GROUP_SCRIPT, HOME)
+        for case in ('wide', 'phone'):
+            with self.subTest(case=case):
+                by = {t['name']: t for t in r[case]}
+                # The pair on screen at load is never hidden; the group below the fold rises from its own trigger.
+                self.assertEqual(sorted(by), ['lone', 'reelDesc', 'reelTitle'])
+                title, desc = by['reelTitle'], by['reelDesc']
+                self.assertEqual((title['trigger'], desc['trigger']), ('reelHead', 'reelHead'))
+                self.assertEqual(title['start'], desc['start'])
+                self.assertTrue(title['once'] and desc['once'])
+                self.assertEqual(title['delay'], 0)
+                self.assertGreater(desc['delay'], title['delay'])
+                self.assertLessEqual(desc['delay'], 0.2)
+                self.assertEqual(title['from'], desc['from'])
+                # A heading outside any group keeps its own trigger and no delay.
+                self.assertEqual((by['lone']['trigger'], by['lone']['delay']), ('lone', 0))
+        self.assertEqual(r['reduced'], [])  # reduced motion: nothing is hidden or animated
+
+
 if __name__ == '__main__':
     unittest.main()
