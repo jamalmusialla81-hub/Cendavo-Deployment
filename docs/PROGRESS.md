@@ -17,7 +17,7 @@ Cendavo is a website design, redesign and care studio for local service business
 ## Open owner decisions
 
 1. **Enquiry setup:** the D1 database and `ENQUIRIES_DB` binding are live (per [NIGHT_SHIFT_PLAN.md](NIGHT_SHIFT_PLAN.md) Task 30). Still to do: apply `migrations/0002_enquiry_throttle.sql` to the live database, add the `RESEND_API_KEY` and `ALERT_TO` secrets for Production, redeploy and confirm one alert arrives. The steps are in [ENQUIRIES.md](ENQUIRIES.md).
-2. **Public contact channel:** the site publishes no email address or phone number. The contact form is the only channel.
+2. **Public contact channel:** the site publishes the business address cendavo.au@gmail.com (Night Shift Task 31) beside the contact form, in the privacy note, in every page footer and in the enquiry failure messages. No phone number is published. Still to do: confirm the inbox is monitored and decide whether the privacy note should say that email sent directly is handled by Google (Gmail).
 3. **Prices:** none are confirmed. The site says only "fixed quote after a free consultation". Project prices and care-plan pricing are still to be decided. The earlier SaaS hypothesis of A$49–99 per month was never validated and is retired.
 4. **Enquiry handling:** decide how long enquiries are kept and how often D1 is checked.
 5. **Enquiry scope:** confirm or reverse the "Differences from the task spec" in [ENQUIRIES.md](ENQUIRIES.md). They are not owner decisions yet.

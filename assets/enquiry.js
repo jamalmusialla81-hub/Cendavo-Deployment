@@ -15,13 +15,16 @@
     message: 'Tell us a little about your project (10 to 2000 characters).',
     idempotencyKey: 'Please reload the page and try again.'
   };
+  // The public business address, the fallback when sending fails. Must match CONTACT_EMAIL in scripts/build_site.py and
+  // functions/api/enquiry.js. Notices are plain text (written with textContent), so the address is not a link here.
+  var CONTACT_EMAIL = 'cendavo.au@gmail.com';
   var NOTICES = {
     success: 'Thank you. Your enquiry has been received and we will reply to the email address you gave.',
     invalid: 'Please check the highlighted fields.',
     retry: 'Your enquiry was not sent. Your details are still in the form. Please wait a moment and press send again.',
-    unavailable: 'Enquiries are temporarily unavailable, so nothing was sent. Your details are still in the form. Please try again later.',
-    network: 'We could not reach the server, so your enquiry may not have been sent. Your details are still in the form. Check your connection and try again.',
-    error: 'Your enquiry could not be sent. Your details are still in the form. Please try again later.'
+    unavailable: 'Enquiries are temporarily unavailable, so nothing was sent. Your details are still in the form. Please try again later or email ' + CONTACT_EMAIL + '.',
+    network: 'We could not reach the server, so your enquiry may not have been sent. Your details are still in the form. Check your connection and try again, or email ' + CONTACT_EMAIL + '.',
+    error: 'Your enquiry could not be sent. Your details are still in the form. Please try again later or email ' + CONTACT_EMAIL + '.'
   };
   var EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
   var PHONE = /^[0-9+() -]+$/;
@@ -175,7 +178,7 @@
     return { reset: false, tone: 'error', message: message, errors: errors };
   }
 
-  var api = { SERVICES: SERVICES, MESSAGES: MESSAGES, NOTICES: NOTICES, validateEnquiry: validateEnquiry, submitEnquiry: submitEnquiry, createSender: createSender, outcomeFor: outcomeFor, makeKey: makeKey };
+  var api = { CONTACT_EMAIL: CONTACT_EMAIL, SERVICES: SERVICES, MESSAGES: MESSAGES, NOTICES: NOTICES, validateEnquiry: validateEnquiry, submitEnquiry: submitEnquiry, createSender: createSender, outcomeFor: outcomeFor, makeKey: makeKey };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   if (typeof document === 'undefined') return;
 

@@ -19,9 +19,12 @@ export const MESSAGES = {
   idempotencyKey: 'Please reload the page and try again.',
 };
 
-const UNAVAILABLE = 'Enquiries are temporarily unavailable, so nothing was sent. Please try again later.';
+// The public business address, offered as a fallback when an enquiry cannot be stored. Must match CONTACT_EMAIL in
+// scripts/build_site.py and assets/enquiry.js. The 429 retry message deliberately does not name it.
+export const CONTACT_EMAIL = 'cendavo.au@gmail.com';
+const UNAVAILABLE = `Enquiries are temporarily unavailable, so nothing was sent. Please try again later or email ${CONTACT_EMAIL}.`;
 const RETRY = 'Your enquiry was not sent. Please wait a moment and send it again.';
-const NOT_CONFIRMED = 'We could not confirm your enquiry. Please try again in a few minutes.';
+const NOT_CONFIRMED = `We could not confirm your enquiry. Please try again in a few minutes or email ${CONTACT_EMAIL}.`;
 
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const PHONE = /^[0-9+() -]+$/;

@@ -146,6 +146,7 @@
 .ct .pg-h{font-size:clamp(2.75rem,5.4vw,5.6rem);max-width:12ch}
 .ct-next{margin-top:clamp(40px,5vw,64px);max-width:480px}
 .ct-next .pg-label{margin-bottom:0}
+.ct-mail{margin:var(--space-8) 0 0;color:var(--stone)}
 .ct-steps li{display:grid;grid-template-columns:40px minmax(0,1fr);gap:18px;padding:18px 0;border-bottom:1px solid var(--line)}
 .ct-n{display:grid;place-items:center;width:36px;height:36px;border:1px solid var(--stone);border-radius:50%;font:650 .95rem/1 var(--font-display)}
 .ct-steps li:first-child .ct-n{background:var(--amber);border-color:var(--amber);color:var(--ink)}

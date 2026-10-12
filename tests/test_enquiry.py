@@ -18,6 +18,8 @@ FUNCTION = ROOT / 'functions' / 'api' / 'enquiry.js'
 CLIENT = ROOT / 'assets' / 'enquiry.js'
 MIGRATION = ROOT / 'migrations' / '0001_enquiries.sql'
 THROTTLE_MIGRATION = ROOT / 'migrations' / '0002_enquiry_throttle.sql'
+# The public business address (Night Shift Task 31), written out here so the tests do not trust the code under test.
+CONTACT_EMAIL = 'cendavo.au@gmail.com'
 
 KEY = '3f2b8c1e-9a4d-4e7b-8c2f-1a2b3c4d5e6f'
 VALID = {
@@ -375,6 +377,7 @@ for (const method of ['GET', 'PUT', 'DELETE', 'PATCH', 'OPTIONS']) {
 out.postAlias = mod.onRequestPost === mod.onRequest;
 out.services = mod.SERVICES;
 out.messages = mod.MESSAGES;
+out.contactEmail = mod.CONTACT_EMAIL;
 console.log(JSON.stringify(out));
 """.replace('KEY_UPPER', json.dumps(KEY.upper()))
 
@@ -455,6 +458,7 @@ const VALID = JSON.parse(process.argv[3]);
     ['undefined', undefined],
   ].map(([k, v]) => [k, api.outcomeFor(v)]));
   out.notices = api.NOTICES;
+  out.contactEmail = api.CONTACT_EMAIL;
   out.generatedKey = api.makeKey();
   console.log(JSON.stringify(out));
 })();
@@ -597,14 +601,17 @@ class EnquiryFunctionTests(unittest.TestCase):
         self.assertEqual(warnings.count('enquiry: spam rejected (timing)'), 7)
         self.assertEqual(len(warnings), 12)
 
-    def test_missing_binding_is_503_and_names_no_email_address(self):
+    def test_missing_binding_is_503_and_offers_only_the_business_email(self):
+        # Night Shift Task 31: the message names the public business address and no other address.
+        self.assertEqual(self.r['contactEmail'], CONTACT_EMAIL)
         for key in ('noBinding', 'noEnv'):
             with self.subTest(case=key):
                 result = self.r[key]
                 self.assertEqual(result['status'], 503)
                 self.assertIs(result['body']['ok'], False)
-                self.assertIn('nothing was sent', result['body']['message'])
-                self.assertNotIn('@', result['body']['message'])
+                self.assertEqual(result['body']['message'], 'Enquiries are temporarily unavailable, so nothing was sent. '
+                                                            'Please try again later or email cendavo.au@gmail.com.')
+                self.assertEqual(result['body']['message'].count('@'), 1)
         self.assertEqual(self.r['invalidBeatsNoBinding']['status'], 400)
 
     def test_database_failure_is_503_without_internals(self):
@@ -612,6 +619,8 @@ class EnquiryFunctionTests(unittest.TestCase):
         self.assertEqual(result['status'], 503)
         self.assertEqual(result['calls'], 1)
         self.assertIs(result['body']['ok'], False)
+        self.assertEqual(result['body']['message'], 'We could not confirm your enquiry. Please try again in a few minutes '
+                                                    'or email cendavo.au@gmail.com.')
         self.assertNotIn(self.r['secret'], result['text'])
         for fragment in ('D1_ERROR', 'enquiries_secret_internal', 'table', 'SQL', 'Error'):
             self.assertNotIn(fragment, result['text'])
@@ -920,7 +929,18 @@ class EnquiryClientTests(unittest.TestCase):
         self.assertEqual(outcomes['invalidKey']['message'], self.r['messages']['idempotencyKey'])
         for kind in ('unavailable', 'network', 'retry', 'error'):
             self.assertIn('Your details are still in the form', outcomes[kind]['message'])
-            self.assertNotIn('@', outcomes[kind]['message'])
+        # Night Shift Task 31: failures that leave the visitor stuck offer the business address (once, ending the notice,
+        # and no other address); the retry notice is unchanged and names none.
+        self.assertEqual(self.r['contactEmail'], CONTACT_EMAIL)
+        for kind in ('unavailable', 'network', 'error', 'garbage', 'undefined'):
+            with self.subTest(fallback=kind):
+                self.assertTrue(outcomes[kind]['message'].endswith(' email cendavo.au@gmail.com.'))
+                self.assertEqual(outcomes[kind]['message'].count('@'), 1)
+        for kind in ('success', 'invalid', 'invalidKey', 'retry'):
+            with self.subTest(no_email=kind):
+                self.assertNotIn('@', outcomes[kind]['message'])
+        self.assertEqual(self.r['notices']['retry'], 'Your enquiry was not sent. Your details are still in the form. '
+                                                     'Please wait a moment and press send again.')
         self.assertEqual(outcomes['retry']['message'], self.r['notices']['retry'])
         self.assertEqual(outcomes['retry']['errors'], {})
         self.assertIn('not sent', self.r['notices']['retry'])

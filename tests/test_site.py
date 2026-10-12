@@ -5,6 +5,73 @@ from html.parser import HTMLParser
 from pathlib import Path
 from scripts.build_site import build, OUT
 
+ROOT = Path(__file__).resolve().parents[1]
+# Night Shift Task 31: the public business address, written out here rather than imported from the code under test.
+CONTACT_EMAIL = 'cendavo.au@gmail.com'
+MAIL_LINK = f'<a class="mail" href="mailto:{CONTACT_EMAIL}">{CONTACT_EMAIL}</a>'
+
+
+class ContactEmailTests(unittest.TestCase):
+    """Night Shift Task 31: cendavo.au@gmail.com on Contact, in the privacy note and in every footer, defined once per language."""
+    ROUTES = ['index.html', 'work/index.html', 'services/index.html', 'pricing/index.html', 'demo/index.html',
+              'about/index.html', 'contact/index.html', '404.html']
+
+    @classmethod
+    def setUpClass(cls):
+        build()
+        cls.html = {route: (OUT / route).read_text() for route in cls.ROUTES}
+
+    def test_every_footer_has_one_mailto_link_after_the_location(self):
+        for route, html in self.html.items():
+            with self.subTest(route=route):
+                footer = html.split('<footer class="footer">', 1)[1].split('</footer>', 1)[0]
+                self.assertEqual(footer.count('mailto:'), 1)
+                self.assertIn(f'<br>Sydney, Australia.<br>{MAIL_LINK}</p>', footer)
+                links = re.search(r'<nav class="footer-links"[^>]*>(.*?)</nav>', footer).group(1)
+                self.assertNotIn('mailto:', links)
+                self.assertNotIn('@', footer.replace(MAIL_LINK, ''))
+
+    def test_every_mailto_link_is_well_formed(self):
+        for route, html in self.html.items():
+            links = re.findall(r'<a\b([^>]*)\bhref="(mailto:[^"]*)"([^>]*)>(.*?)</a>', html)
+            with self.subTest(route=route):
+                self.assertEqual(len(links), 3 if route == 'contact/index.html' else 1)
+                self.assertEqual(html.count('mailto:'), len(links))
+                self.assertNotIn('{{', html)  # no placeholder left behind
+            for before, href, after, text in links:
+                with self.subTest(route=route, href=href):
+                    self.assertRegex(href, r'^mailto:cendavo\.au@gmail\.com$')  # no query string, cc or subject
+                    self.assertEqual(text, CONTACT_EMAIL)  # the visible text is the address itself
+                    self.assertNotIn('target=', before + after)
+
+    def test_address_is_defined_once_per_language(self):
+        from scripts import build_site
+        self.assertEqual(build_site.CONTACT_EMAIL, CONTACT_EMAIL)
+        definitions = {ROOT / 'scripts/build_site.py': f"CONTACT_EMAIL = '{CONTACT_EMAIL}'",
+                       ROOT / 'assets/enquiry.js': f"var CONTACT_EMAIL = '{CONTACT_EMAIL}';",
+                       ROOT / 'functions/api/enquiry.js': f"export const CONTACT_EMAIL = '{CONTACT_EMAIL}';"}
+        for path, definition in definitions.items():
+            with self.subTest(path=path.name):
+                source = path.read_text()
+                self.assertEqual(source.count(definition), 1)
+                self.assertEqual(source.count(CONTACT_EMAIL), 1)  # the definition is the only literal copy
+        sources = [p for d in ('pages', 'assets', 'functions') for p in (ROOT / d).rglob('*')
+                   if p.suffix in ('.html', '.js', '.css', '.mjs') and p not in definitions]
+        self.assertTrue(sources)
+        for path in sources:
+            with self.subTest(path=str(path.relative_to(ROOT))):
+                self.assertNotIn(CONTACT_EMAIL, path.read_text(errors='ignore'))
+        self.assertIn('{{CONTACT_EMAIL}}', (ROOT / 'pages/contact.html').read_text())
+
+    def test_contact_mail_line_sits_beside_the_form(self):
+        html = self.html['contact/index.html']
+        side = html.split('<div class="ct-side">', 1)[1].split('<div class="ct-form bone">', 1)[0]
+        self.assertEqual(side.count(f'<p class="ct-mail">Prefer email? Write to {MAIL_LINK}</p>'), 1)
+        self.assertLess(side.index('class="ct-next"'), side.index('class="ct-mail"'))
+        css = (OUT / 'assets/site.css').read_text()
+        self.assertIn('.mail{text-decoration-thickness:1px;text-underline-offset:.2em;overflow-wrap:anywhere}', css)
+        self.assertNotIn('text-decoration:none', css.split('.mail{', 1)[1].split('}', 1)[0])
+
 
 class SiteBuildTests(unittest.TestCase):
     @classmethod
@@ -131,11 +198,19 @@ class SiteBuildTests(unittest.TestCase):
         self.assertIn('<p data-enquiry-status class="status" role="status"></p>', html)
         self.assertIn('stored in a Cloudflare database', html)
         # Task 30: enquiries are also emailed to the owner through Resend, so the notice must say so.
-        notice = re.search(r'<p class="notice" id="enquiry-privacy">([^<]+)</p>', html).group(1)
+        # Task 31: the note may hold one element, the mailto link, and it ends the deletion sentence.
+        notice = re.search(r'<p class="notice" id="enquiry-privacy">(.*?)</p>', html).group(1)
+        self.assertEqual(re.findall(r'<[^>]+>', notice), [f'<a class="mail" href="mailto:{CONTACT_EMAIL}">', '</a>'])
         self.assertIn('also emailed to Cendavo through our email delivery provider, Resend', notice)
         self.assertIn('not added to mailing lists or sold', notice)
+        self.assertTrue(notice.endswith(f'you can ask us to delete them at any time by emailing {MAIL_LINK}.'))
         self.assertNotIn('A$', html)
-        self.assertNotIn('@', html.split('<main', 1)[1].split('</main>', 1)[0])
+        # Task 31: the business address is the only "@" in the page's main content, in exactly two links (beside the form
+        # and in the privacy note). Nothing else (no other address, no placeholder email) may appear.
+        main = html.split('<main', 1)[1].split('</main>', 1)[0]
+        self.assertEqual(main.count(MAIL_LINK), 2)
+        self.assertIn(f'<p class="ct-mail">Prefer email? Write to {MAIL_LINK}</p>', main)
+        self.assertNotIn('@', main.replace(MAIL_LINK, ''))
 
     def test_contact_honeypot_is_hidden_from_people_and_assistive_tech(self):
         html = (OUT / 'contact/index.html').read_text()
@@ -1196,7 +1271,8 @@ class InnerPageTests(unittest.TestCase):
         # Layout wrappers only: the service select sits in a styling wrapper, controls keep their hooks.
         self.assertIn('<div class="select"><select id="enquiry-service" name="service" required aria-describedby="enquiry-service-error">', main)
         self.assertIn('<p class="notice" id="enquiry-privacy">', main)
-        self.assertNotIn('@', main)
+        self.assertEqual(main.count(MAIL_LINK), 2)  # Task 31: beside the form and in the privacy note
+        self.assertNotIn('@', main.replace(MAIL_LINK, ''))
         self.assertNotIn('<script', main)
 
     def test_demo_table_scrolls_inside_a_labelled_region(self):

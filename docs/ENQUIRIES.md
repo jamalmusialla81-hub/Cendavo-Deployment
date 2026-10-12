@@ -22,7 +22,7 @@ There is no `wrangler.toml`. The binding is configured in the Cloudflare dashboa
 3. **Bind it to the Pages project.** Workers & Pages → `cendavo-deployment` → Settings → Bindings → *Add* → D1 database. Variable name **`ENQUIRIES_DB`**, database `cendavo-enquiries`. Add it for **both Production and Preview**, then redeploy (a new push or *Retry deployment*) so the function picks it up.
 4. **Test it.** Send one enquiry from the preview URL and check that exactly one row appears (query below). Pressing submit twice or retrying after a network error must not create a second row.
 
-Until step 3 is done the form answers "Enquiries are temporarily unavailable, so nothing was sent" and keeps everything the visitor typed. The local `python3 -m http.server` preview has no functions at all, so there the form shows its generic "could not be sent" message.
+Until step 3 is done the form answers "Enquiries are temporarily unavailable, so nothing was sent", offers cendavo.au@gmail.com as a fallback and keeps everything the visitor typed. The local `python3 -m http.server` preview has no functions at all, so there the form shows its generic "could not be sent" message.
 
 The Git-linked build serves `dist/` and picks up `functions/` from the repository root. If you use the manual GitHub Actions deploy (`wrangler pages deploy dist`, run from the repository root), check once that the deployment lists the `/api/enquiry` function.
 
@@ -115,7 +115,7 @@ If either secret is missing or empty, alerts are skipped silently and enquiries 
 | --- | --- | --- |
 | 1. Optional budget range | Not collected; the nullable `budget` column is kept | Budget ranges would be invented price points, and each extra field costs conversions |
 | 4 and 7. Salted `user_agent_hash` | Not stored; no user-agent or IP data is kept | A salt is a secret to manage, the hash does not help qualify a lead, and storing less personal data is safer |
-| 6. "please email …" in the 503 message | No email address; the message says nothing was sent and to try again later | No email address is published |
+| 6. "please email …" in the 503 message | Built in Night Shift Task 31: the 503 and 500 messages, and the form's unavailable, network and generic error notices, end with "email cendavo.au@gmail.com". The 429 retry message names no address | The owner published cendavo.au@gmail.com (2026-10-12) |
 | 1. Business name | Optional | Fewer required fields |
 | 9. Demo "Other" fix | No change | Already present before this task (`value="Other"` with a regression test) |
 | Additions | Same-origin `Origin` check, collection notice on the form, owner queries in this file | Abuse protection, transparency, leads readable without an admin view |
