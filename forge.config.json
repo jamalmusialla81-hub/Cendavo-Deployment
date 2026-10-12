@@ -15,7 +15,7 @@
     "product_repairs": 3,
     "maintenance_attempts": 2
   },
-  "max_diff_chars": 250000,
+  "max_diff_chars": 700000,
   "package_registries": [
     "registry.npmjs.org",
     "pypi.org",
