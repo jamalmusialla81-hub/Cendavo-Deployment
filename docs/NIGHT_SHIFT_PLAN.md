@@ -330,3 +330,6 @@ Budgets: no regressions in existing size tests.
 
 ### Task 49 — SEO and headers
 JSON-LD `ProfessionalService` (name Cendavo, url, email cendavo.au@gmail.com, areaServed Sydney NSW Australia, serviceType: website design, redesign, website care; NO address, NO ratings/reviews) on the homepage; `robots.txt` gets `Sitemap: <site>/sitemap.xml`; sitemap entries get `lastmod` (build date); `_headers` adds `Strict-Transport-Security: max-age=31536000` and a restrictive `Permissions-Policy` (camera=(), microphone=(), geolocation=(), interest-cohort=()). Concept projects must not appear as real clients in any structured data. Tests.
+
+### Task 50 — land Task 47
+Task 47's builder completed the work but the test-weakening guard stopped it because a new test class copied the file's existing `@unittest.skipUnless(shutil.which('node'), ...)` decorator (known guard false positive, FORGE_FINDINGS #4). The supervisor removed that decorator (node is required and present), ran the full suite on a clean export (482 tests OK) and saved the result as `docs/design/glass/task47-complete.patch`. Apply it with `git apply --binary docs/design/glass/task47-complete.patch`, run the build and focused test modules, fix only genuine problems. Do not add skip decorators. **Never `cd` in Bash.**

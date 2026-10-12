@@ -1,0 +1,982 @@
+diff --git a/assets/enquiry.js b/assets/enquiry.js
+index 21ccb97..8282343 100644
+--- a/assets/enquiry.js
++++ b/assets/enquiry.js
+@@ -30,6 +30,9 @@
+   var PHONE = /^[0-9+() -]+$/;
+   var UUID_V4 = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
+   var TIMEOUT_MS = 15000;
++  // Task 47: the hidden bot trap's name in the page is deliberately meaningless, so browsers and password managers do not
++  // autofill it (a filled trap silently drops a real enquiry). The server still reads it as company_url.
++  var HONEYPOT = 'hp_xq';
+ 
+   function clean(value, multiline) {
+     if (value === undefined || value === null) return '';
+@@ -96,11 +99,37 @@
+     return { valid: Object.keys(errors).length === 0, values: values, errors: errors };
+   }
+ 
++  // The message for one field, or '' when it is valid: the same rules and wording as validateEnquiry (each field's rule
++  // reads only that field), used to re-check a field live once it has been marked invalid.
++  function fieldError(field, value) {
++    if (FIELDS.indexOf(field) === -1) return '';
++    var source = {};
++    source[field] = value;
++    return validateEnquiry(source).errors[field] || '';
++  }
++
++  // A UUID v4 idempotency key (it only de-duplicates retries; it is not a secret). Task 47: never throws, so the form
++  // still gets its submit handler where crypto is missing or partial; Math.random is the last resort.
+   function makeKey() {
+-    var c = typeof crypto !== 'undefined' ? crypto : null;
+-    if (c && typeof c.randomUUID === 'function') return c.randomUUID();
+-    var b = new Uint8Array(16);
+-    c.getRandomValues(b);
++    var c = typeof crypto !== 'undefined' && crypto ? crypto : null;
++    if (c && typeof c.randomUUID === 'function') {
++      try {
++        var id = String(c.randomUUID()).toLowerCase();
++        if (UUID_V4.test(id)) return id;
++      } catch (e) { /* fall through */ }
++    }
++    var b = [];
++    if (c && typeof c.getRandomValues === 'function' && typeof Uint8Array === 'function') {
++      try {
++        b = Array.prototype.slice.call(c.getRandomValues(new Uint8Array(16)));
++      } catch (e) {
++        b = [];
++      }
++    }
++    if (b.length !== 16) {
++      b = [];
++      for (var i = 0; i < 16; i++) b.push(Math.floor(Math.random() * 256));
++    }
+     b[6] = (b[6] & 0x0f) | 0x40;
+     b[8] = (b[8] & 0x3f) | 0x80;
+     var h = Array.prototype.map.call(b, function (x) { return (x + 256).toString(16).slice(1); }).join('');
+@@ -178,7 +207,7 @@
+     return { reset: false, tone: 'error', message: message, errors: errors };
+   }
+ 
+-  var api = { CONTACT_EMAIL: CONTACT_EMAIL, SERVICES: SERVICES, MESSAGES: MESSAGES, NOTICES: NOTICES, validateEnquiry: validateEnquiry, submitEnquiry: submitEnquiry, createSender: createSender, outcomeFor: outcomeFor, makeKey: makeKey };
++  var api = { CONTACT_EMAIL: CONTACT_EMAIL, SERVICES: SERVICES, MESSAGES: MESSAGES, NOTICES: NOTICES, validateEnquiry: validateEnquiry, submitEnquiry: submitEnquiry, createSender: createSender, outcomeFor: outcomeFor, makeKey: makeKey, fieldError: fieldError, HONEYPOT: HONEYPOT };
+   if (typeof module !== 'undefined' && module.exports) module.exports = api;
+   if (typeof document === 'undefined') return;
+ 
+@@ -223,13 +252,30 @@
+ 
+   function readFields() {
+     var fields = {};
+-    FIELDS.concat('company_url').forEach(function (field) {
++    FIELDS.forEach(function (field) {
+       var control = form.elements[field];
+       fields[field] = control ? control.value : '';
+     });
++    var trap = form.elements[HONEYPOT];
++    fields.company_url = trap ? trap.value : '';
+     return fields;
+   }
+ 
++  // Task 47: once a field shows an error, typing in it or leaving it re-checks just that field and clears the error as
++  // soon as it is fixed. Untouched fields are never checked early; focus and the status line never change here, and the
++  // error text is not a live region, so nothing is announced on each keystroke.
++  function recheck(event) {
++    var control = event && event.target;
++    if (!control || FIELDS.indexOf(control.name) === -1 || control.getAttribute('aria-invalid') !== 'true') return;
++    var message = fieldError(control.name, control.value);
++    var slot = form.querySelector('[data-error-for="' + control.name + '"]');
++    if (slot && slot.textContent !== message) slot.textContent = message;
++    if (!message) control.removeAttribute('aria-invalid');
++  }
++  form.addEventListener('input', recheck);
++  form.addEventListener('change', recheck);
++  form.addEventListener('focusout', recheck);
++
+   form.addEventListener('submit', async function (event) {
+     event.preventDefault();
+     if (sending) return;
+@@ -264,4 +310,7 @@
+     }
+     announce(outcome.message, outcome.tone);
+   });
++  // Task 47: the button ships disabled, so nothing can be submitted (by click or Enter) unless this script is running
++  // and its handler is attached; without it the page's <noscript> notice offers the email address instead.
++  if (button) button.disabled = false;
+ })();
+diff --git a/assets/home.css b/assets/home.css
+index e8434e9..29d3983 100644
+--- a/assets/home.css
++++ b/assets/home.css
+@@ -298,6 +298,8 @@
+ .teaser-card,.teaser-card:first-child{grid-column:auto}
+ .teaser-card:last-child{margin-top:0}
+ .teaser-img,.teaser-card:first-child .teaser-img{aspect-ratio:4/3}
++/* Task 47: the project titles are at least a 24px tap target on phones. */
++.teaser-card h3 a{display:inline-block;min-height:32px;padding-block:4px}
+ .svc-list{grid-template-columns:1fr;gap:44px}
+ }
+ @media(max-width:760px){
+diff --git a/assets/home.js b/assets/home.js
+index 079d342..1168c52 100644
+--- a/assets/home.js
++++ b/assets/home.js
+@@ -25,6 +25,8 @@
+       return at(t, y1, y2);
+     };
+   };
++  // What most reveals hand back to CSS when they end.
++  const OT = 'opacity,transform';
+   const OUT = bezier(0.2, 0.8, 0.2, 1);
+   const IO = bezier(0.7, 0, 0.2, 1);
+   // Demo sweep, once: 50 -> 82 -> 18 -> 50 over 1.5 s. Any press, key, touch or use of the controls stops it.
+@@ -149,12 +151,12 @@
+       book?.classList.add('booked');
+     };
+     if (lines.length) tl.fromTo(lines, { yPercent: 108, y: 0 }, { yPercent: 0, y: 0, duration: 1, stagger: 0.08, clearProps: 'transform' }, 0);
+-    if (fades.length) tl.fromTo(fades, { y: 18, opacity: 0 }, { y: 0, opacity: 1, duration: 0.7, stagger: 0.08, clearProps: 'opacity,transform' }, 0.4);
++    if (fades.length) tl.fromTo(fades, { y: 18, opacity: 0 }, { y: 0, opacity: 1, duration: 0.7, stagger: 0.08, clearProps: OT }, 0.4);
+     const deck = $('.hero-cards');
+     if (deck) tl.fromTo(deck, { opacity: 0 }, { opacity: 1, duration: 0.2, clearProps: 'opacity' }, 0.6);
+     if (cards.length) {
+       tl.fromTo(cards, { opacity: 0, z: -420, rotationX: 18, rotationY: -14, transformPerspective: 900 },
+-        { opacity: 1, z: 0, rotationX: 0, rotationY: 0, duration: 1.4, stagger: 0.14, ease: OUT, clearProps: 'opacity,transform' }, 0.6);
++        { opacity: 1, z: 0, rotationX: 0, rotationY: 0, duration: 1.4, stagger: 0.14, ease: OUT, clearProps: OT }, 0.6);
+     }
+     if (book && slot) {
+       book.classList.remove('booked');
+@@ -177,9 +179,12 @@
+       { z: 260, rotationX: -10, rotationY: i % 2 ? 12 : -12, opacity: 0, ease: 'none', duration: 0.45, transformPerspective: 900, immediateRender: false }, 0.04 * i));
+   };
+ 
+-  // Section headings rise through a mask, once, as they come into view.
+-  const headings = () => $$('[data-rise]').filter(below).forEach(el => {
+-    gsap.fromTo(el, { clipPath: 'inset(0% 0% 100% 0%)', yPercent: 30 }, { clipPath: 'inset(0% 0% -12% 0%)', yPercent: 0, duration: 1, ease: OUT, clearProps: 'clipPath,transform', scrollTrigger: once(el) });
++  // Section headings rise through a mask, once, as they come into view. Task 47: inside a [data-rise-group] (a heading
++  // beside its paragraph) both share the group's trigger and the later sibling follows 0.12 s after the first, so the
++  // paragraph (which can sit higher on a wide screen) never rises before its heading.
++  const headings = () => $$('[data-rise]').forEach(el => {
++    const g = el.closest?.('[data-rise-group]') || el;
++    if (below(g)) gsap.fromTo(el, { clipPath: 'inset(0% 0% 100% 0%)', yPercent: 30 }, { clipPath: 'inset(0% 0% -12% 0%)', yPercent: 0, duration: 1, delay: g !== el && el.previousElementSibling ? .12 : 0, ease: OUT, clearProps: 'clipPath,transform', scrollTrigger: once(g) });
+   });
+ 
+   // Showreel: a rounded glass lens that opens to the full, square-edged frame (Task 44: no box) and tilts flat as it
+@@ -190,7 +195,7 @@
+     gsap.fromTo(frame, { clipPath: 'inset(9% 16% 9% 16% round 48px)', rotationX: 10, scale: 0.97, transformPerspective: 1600 },
+       { clipPath: 'inset(0% 0% 0% 0% round 0px)', rotationX: 0, scale: 1, ease: 'none', scrollTrigger: { trigger: frame, start: 'top 92%', end: 'top 25%', ...SCRUB } });
+     const panel = $('.reel-panel');
+-    if (panel && below(panel)) gsap.fromTo(panel, { y: 40, opacity: 0 }, { y: 0, opacity: 1, duration: 1, ease: OUT, clearProps: 'opacity,transform', scrollTrigger: once(panel) });
++    if (panel && below(panel)) gsap.fromTo(panel, { y: 40, opacity: 0 }, { y: 0, opacity: 1, duration: 1, ease: OUT, clearProps: OT, scrollTrigger: once(panel) });
+   };
+ 
+   // Marquee: the photo strip (each pill rides on its tile) and the type's masks glide continuously (a transform, and one
+@@ -232,7 +237,7 @@
+   const cardsIn = wide => $$('.teaser-card').filter(below).forEach((card, i) => {
+     const fan = [{ x: -160, rY: 32, rZ: -4 }, { x: 220, rY: -38, rZ: 5 }, { x: 260, rY: -30, rZ: -3 }][i % 3];
+     gsap.fromTo(card, { opacity: 0, y: 160, x: wide ? fan.x : 0, z: -500, rotationX: 22, rotationY: wide ? fan.rY : 0, rotationZ: wide ? fan.rZ : 0, transformPerspective: 1400, transformOrigin: '50% 100%' },
+-      { opacity: 1, y: 0, x: 0, z: 0, rotationX: 0, rotationY: 0, rotationZ: 0, duration: 1.6, delay: (i % 3) * 0.12, ease: OUT, clearProps: 'opacity,transform', scrollTrigger: once(card) });
++      { opacity: 1, y: 0, x: 0, z: 0, rotationX: 0, rotationY: 0, rotationZ: 0, duration: 1.6, delay: (i % 3) * 0.12, ease: OUT, clearProps: OT, scrollTrigger: once(card) });
+   });
+ 
+   // Fine pointers: a small tilt toward the pointer and a light sweep across the photo (keyboard focus gets neither).
+@@ -265,9 +270,9 @@
+   // The glass browser frame swings in once before the sweep; the closing panel lifts out of depth once.
+   const arrivals = () => {
+     const frame = $('.compare-frame');
+-    if (frame && below(frame)) gsap.fromTo(frame, { rotationY: -18, rotationX: 6, y: 60, opacity: 0, transformPerspective: 1600 }, { rotationY: 0, rotationX: 0, y: 0, opacity: 1, duration: 1.4, ease: OUT, clearProps: 'opacity,transform', scrollTrigger: once(frame) });
++    if (frame && below(frame)) gsap.fromTo(frame, { rotationY: -18, rotationX: 6, y: 60, opacity: 0, transformPerspective: 1600 }, { rotationY: 0, rotationX: 0, y: 0, opacity: 1, duration: 1.4, ease: OUT, clearProps: OT, scrollTrigger: once(frame) });
+     const panel = $('.band-panel');
+-    if (panel && below(panel)) gsap.fromTo(panel, { y: 90, opacity: 0, scale: 0.94, rotationX: 10, transformPerspective: 1400 }, { y: 0, opacity: 1, scale: 1, rotationX: 0, duration: 1.4, ease: OUT, clearProps: 'opacity,transform', scrollTrigger: once(panel) });
++    if (panel && below(panel)) gsap.fromTo(panel, { y: 90, opacity: 0, scale: 0.94, rotationX: 10, transformPerspective: 1400 }, { y: 0, opacity: 1, scale: 1, rotationX: 0, duration: 1.4, ease: OUT, clearProps: OT, scrollTrigger: once(panel) });
+   };
+ 
+   // Wide screens: the two glass phones fly in from depth as the closing band scrolls up (scrubbed, transform only).
+diff --git a/assets/pages.css b/assets/pages.css
+index da73a7d..2b1c3e8 100644
+--- a/assets/pages.css
++++ b/assets/pages.css
+@@ -87,6 +87,8 @@
+ .ct-form{position:relative;z-index:2;grid-row:2;grid-column:7/13;padding:clamp(22px,3.4vw,48px);border-radius:28px;background:var(--warm);box-shadow:inset 0 0 0 1px rgba(14,14,13,.04)}
+ .ct-form-h{margin:0 0 8px;font:780 clamp(1.6rem,1rem + 1.4vw,2.4rem)/1 var(--font-display);font-stretch:88%;letter-spacing:-.025em}
+ .ct-form .notice{margin:0;color:var(--mute);line-height:1.5}
++/* Task 47: shown only without JavaScript (the form cannot send then); full ink, so it reads before the disabled form. */
++.ct-noscript{margin:12px 0 8px;padding:14px 16px;border-radius:14px;background:var(--paper);color:var(--ink);font-size:1rem}
+ .field-row{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px}
+ .select{position:relative}
+ .select select{appearance:none;-webkit-appearance:none;padding-right:44px;cursor:pointer}
+diff --git a/assets/site.css b/assets/site.css
+index 8e110a7..67690e9 100644
+--- a/assets/site.css
++++ b/assets/site.css
+@@ -73,7 +73,8 @@ p{margin-bottom:var(--space-4);max-width:var(--measure)}
+ .button.dark:hover,.site-header .button:hover{background:var(--ink-2)}
+ .button.small{min-height:48px;padding:0 18px;font-size:.95rem}
+ .button.large{min-height:60px;padding:0 28px;font-size:1.0625rem}
+-.button[disabled]{opacity:.75;cursor:progress}
++.button[disabled]{opacity:.75;cursor:not-allowed}
++.form[aria-busy="true"] .button[disabled]{cursor:progress}
+ 
+ /* Footer */
+ .footer{border-top:1px solid var(--line-dark);padding-top:clamp(56px,7vw,96px)}
+@@ -139,6 +140,14 @@ td.actions{display:flex;gap:6px;flex-wrap:wrap;margin:0}
+    (the demo's side panel here, the closing bands in home.css and pages.css). Amber is below 3:1 on paper, so it is never a ring. */
+ :focus-visible{outline:2px solid var(--ink);outline-offset:3px}
+ .demo-side :focus-visible{outline-color:var(--bone)}
++/* Task 47: the demo's date field keeps a full ring while focus is anywhere inside it, including its calendar button (the
++   button rule stands alone: a browser that does not know the pseudo-element drops only that rule). */
++input[type="date"]:focus-visible,input[type="date"]:focus-within{outline:2px solid var(--ink);outline-offset:3px}
++input[type="date"]::-webkit-calendar-picker-indicator:focus-visible{outline:2px solid var(--ink);outline-offset:2px;border-radius:4px}
++/* Task 47: the demo's CSV button is a solid light pill on the ink panel (the glass outline button was translucent there,
++   so its text contrast depended on what showed through). */
++#export-demo{border-color:#FBFAF7;background:#FBFAF7;color:#0E0E0D;-webkit-backdrop-filter:none;backdrop-filter:none}
++#export-demo:hover{border-color:#FFFFFF;background:#FFFFFF;color:#0E0E0D}
+ main:focus{outline:none;box-shadow:none}
+ .skip-link{position:absolute;left:12px;top:-100px;z-index:100;padding:12px 18px;border-radius:var(--radius-sm);background:var(--ink);color:#fff;font-weight:700}
+ .skip-link:focus{top:12px}
+@@ -163,6 +172,10 @@ main:focus{outline:none;box-shadow:none}
+ .js .nav-links.open a::after{display:none}
+ .js .nav>.button{order:0;margin-bottom:0}
+ .js .menu[aria-expanded="true"]~.button{order:4;margin-bottom:var(--space-4)}
++/* Task 47: site.js sets .menu-lock while the menu is open, so the page behind it stays put (mobile layouts only). */
++html.menu-lock,html.menu-lock body{overflow:hidden}
++/* The menu scrolls inside itself instead, so its last link stays reachable on short (landscape) screens. */
++html.menu-lock .site-header .nav{max-height:calc(100svh - 24px);overflow-y:auto;overscroll-behavior:contain}
+ }
+ @media(max-width:860px){
+ .demo-shell,.demo-grid{grid-template-columns:minmax(0,1fr)}
+diff --git a/assets/site.js b/assets/site.js
+index f520552..091131b 100644
+--- a/assets/site.js
++++ b/assets/site.js
+@@ -4,12 +4,19 @@ document.documentElement.classList.add('js');
+ const menu = document.querySelector('[data-menu]');
+ const nav = document.querySelector('[data-nav]');
+ const header = document.querySelector('.site-header');
++// Task 47: while the mobile menu is open the page behind it does not scroll. html.menu-lock sets overflow:hidden only inside
++// the mobile breakpoint (site.css), and Lenis (motion pages, window.__glass.lenis, created later by glass.js) is stopped
++// too, since it scrolls on its own. Closing, Escape and widening to the desktop layout all release it.
+ const setMenu = open => {
+   nav.classList.toggle('open', open);
+   menu.setAttribute('aria-expanded', String(open));
++  document.documentElement.classList.toggle('menu-lock', open);
++  window.__glass?.lenis?.[open ? 'stop' : 'start']();
+   if (open) showHeader();
+ };
+ menu?.addEventListener('click', () => setMenu(!nav.classList.contains('open')));
++// Widening to the desktop layout closes the menu (Lenis.start is a no-op when it is not stopped).
++if (menu) window.matchMedia?.('(max-width: 1080px)').addEventListener?.('change', e => e.matches || setMenu(false));
+ document.addEventListener('keydown', event => {
+   if (event.key !== 'Escape' || !menu || !nav?.classList.contains('open')) return;
+   setMenu(false);
+@@ -34,7 +41,7 @@ function showHeader() {
+ if (header) {
+   window.addEventListener('scroll', () => {
+     const y = window.scrollY || 0;
+-    const next = navHidden(hidden, lastY, y, Boolean(nav?.classList.contains('open')));
++    const next = navHidden(hidden, lastY, y, nav?.classList.contains('open'));
+     if (Math.abs(y - lastY) > NAV_STEP || y <= NAV_TOP) lastY = y;
+     if (next === hidden) return;
+     hidden = next;
+diff --git a/pages/contact.html b/pages/contact.html
+index aef0c8b..69721e3 100644
+--- a/pages/contact.html
++++ b/pages/contact.html
+@@ -16,13 +16,14 @@
+ <div class="ct-gl-spot" aria-hidden="true"></div>
+ <div class="ct-form">
+ <h2 class="ct-form-h">Your enquiry</h2>
++<noscript><p class="notice ct-noscript">This form needs JavaScript, which is turned off or blocked in your browser, so it cannot send anything. Please email your enquiry to <a class="mail" href="mailto:{{CONTACT_EMAIL}}">{{CONTACT_EMAIL}}</a> instead.</p></noscript>
+ <form data-enquiry class="form" method="post" novalidate><p class="notice">Fields marked <span class="req" aria-hidden="true">*</span> are required.</p>
+ <div class="field-row"><div class="field"><label for="enquiry-name">Name <span class="req" aria-hidden="true">*</span></label><input id="enquiry-name" name="name" type="text" autocomplete="name" required maxlength="100" aria-describedby="enquiry-name-error"><p class="field-error" id="enquiry-name-error" data-error-for="name"></p></div><div class="field"><label for="enquiry-email">Email <span class="req" aria-hidden="true">*</span></label><input id="enquiry-email" name="email" type="email" autocomplete="email" required maxlength="254" aria-describedby="enquiry-email-error"><p class="field-error" id="enquiry-email-error" data-error-for="email"></p></div></div>
+ <div class="field-row"><div class="field"><label for="enquiry-phone">Phone <span class="optional">(optional)</span></label><input id="enquiry-phone" name="phone" type="tel" autocomplete="tel" maxlength="30" aria-describedby="enquiry-phone-error"><p class="field-error" id="enquiry-phone-error" data-error-for="phone"></p></div><div class="field"><label for="enquiry-business">Business name <span class="optional">(optional)</span></label><input id="enquiry-business" name="business" type="text" autocomplete="organization" maxlength="120" aria-describedby="enquiry-business-error"><p class="field-error" id="enquiry-business-error" data-error-for="business"></p></div></div>
+ <div class="field-row"><div class="field"><label for="enquiry-website">Current website <span class="optional">(optional)</span></label><input id="enquiry-website" name="website" type="text" inputmode="url" autocomplete="url" maxlength="200" placeholder="e.g. example.com.au" aria-describedby="enquiry-website-error"><p class="field-error" id="enquiry-website-error" data-error-for="website"></p></div><div class="field"><label for="enquiry-service">What do you need? <span class="req" aria-hidden="true">*</span></label><div class="select"><select id="enquiry-service" name="service" required aria-describedby="enquiry-service-error"><option value="">Choose a service</option><option value="website-design">A new website</option><option value="website-redesign">A redesign of my current website</option><option value="maintenance">Ongoing website maintenance</option><option value="not-sure">Not sure yet</option></select></div><p class="field-error" id="enquiry-service-error" data-error-for="service"></p></div></div>
+ <div class="field"><label for="enquiry-message">About your project <span class="req" aria-hidden="true">*</span></label><textarea id="enquiry-message" name="message" required minlength="10" maxlength="2000" aria-describedby="enquiry-message-hint enquiry-message-error"></textarea><p class="field-hint" id="enquiry-message-hint">What does your business do, and what should the website help with? 10 to 2000 characters.</p><p class="field-error" id="enquiry-message-error" data-error-for="message"></p></div>
+-<div class="hp" aria-hidden="true"><label for="enquiry-company-url">Leave this field empty</label><input id="enquiry-company-url" name="company_url" type="text" tabindex="-1" autocomplete="off"></div>
+-<div class="form-foot"><button class="button large" type="submit">Send enquiry</button><p class="form-promise">A person reads every enquiry and replies in plain language, with no hard sell.</p><p class="notice" id="enquiry-privacy">We use your name, email, optional phone, business and website details and your message only to reply to this enquiry. They are stored in a Cloudflare database used by Cendavo and also emailed to Cendavo through our email delivery provider, Resend. They are not added to mailing lists or sold, and you can ask us to delete them at any time by emailing <a class="mail" href="mailto:{{CONTACT_EMAIL}}">{{CONTACT_EMAIL}}</a>.</p></div></form><p data-enquiry-status class="status" role="status"></p>
++<div class="hp" aria-hidden="true"><label for="enquiry-hp">Leave this field empty</label><input id="enquiry-hp" name="hp_xq" type="text" tabindex="-1" autocomplete="off"></div>
++<div class="form-foot"><button class="button large" type="submit" disabled>Send enquiry</button><p class="form-promise">A person reads every enquiry and replies in plain language, with no hard sell.</p><p class="notice" id="enquiry-privacy">We use your name, email, optional phone, business and website details and your message only to reply to this enquiry. They are stored in a Cloudflare database used by Cendavo and may also be emailed to Cendavo through our email delivery provider, Resend. They are not added to mailing lists or sold, and you can ask us to delete them at any time by emailing <a class="mail" href="mailto:{{CONTACT_EMAIL}}">{{CONTACT_EMAIL}}</a>.</p></div></form><p data-enquiry-status class="status" role="status"></p>
+ </div>
+ </div>
+ </section>
+diff --git a/pages/index.html b/pages/index.html
+index f6727f7..8cdf62a 100644
+--- a/pages/index.html
++++ b/pages/index.html
+@@ -14,7 +14,7 @@
+ <p class="hero-cap lg">On screen<span>Concept projects for fictional businesses</span></p>
+ </div></section>
+ <section class="reel band-warm" aria-labelledby="reel-title"><div class="wrap reel-grid">
+-<div class="reel-head"><h2 id="reel-title" data-rise>Twenty seconds of what we build</h2><p id="reel-desc" data-rise>The Cendavo mark in white glass, the lines “Your work is excellent” and “Your website should say so”, then the Harbourside, Greenline and Fade &amp; Co concept sites on a laptop and a phone, a booking from a phone, a before and after, and our three services. No sound.</p></div>
++<div class="reel-head" data-rise-group><h2 id="reel-title" data-rise>Twenty seconds of what we build</h2><p id="reel-desc" data-rise>The Cendavo mark in white glass, the lines “Your work is excellent” and “Your website should say so”, then the Harbourside, Greenline and Fade &amp; Co concept sites on a laptop and a phone, a booking from a phone, a before and after, and our three services. No sound.</p></div>
+ <figure class="reel-fig" data-reel>
+ <div class="reel-frame"><video class="reel-video" id="reel-video" muted loop playsinline preload="none" controls poster="/assets/glass/glass-reel-poster.jpg" width="1600" height="900" data-narrow-src="/assets/glass/glass-reel-vertical-720.mp4" data-narrow-poster="/assets/glass/glass-reel-vertical-poster.jpg" aria-label="Showreel" aria-describedby="reel-desc"><source src="/assets/glass/glass-reel-1600.mp4" type="video/mp4"></video><button class="reel-toggle" type="button" data-reel-toggle hidden>Play showreel</button></div>
+ <div class="reel-panel"><ol class="chapters" data-chapters="reel-video" aria-label="Showreel chapters" hidden><li><button type="button" data-t="0"><span class="ch-t">0:00</span>Cendavo</button></li><li><button type="button" data-t="1.5"><span class="ch-t">0:01</span>Your work is excellent</button></li><li><button type="button" data-t="6"><span class="ch-t">0:06</span>Three concept sites</button></li><li><button type="button" data-t="12"><span class="ch-t">0:12</span>Book from a phone</button></li><li><button type="button" data-t="15.4"><span class="ch-t">0:15</span>Before / after</button></li><li><button type="button" data-t="17.7"><span class="ch-t">0:17</span>New websites, redesigns, care plans</button></li></ol></div>
+@@ -29,7 +29,7 @@
+ </div>
+ </section>
+ <section class="work" id="work" aria-labelledby="work-title"><div class="wrap">
+-<div class="work-head"><h2 id="work-title" data-rise>Concept projects</h2><div data-rise><p>Three fictional businesses, designed the way we would design yours. The photos are real; the businesses are not.</p><a class="ulink strong" href="/demo/">See a demonstration project</a><a class="ulink strong" href="/work/">See all work</a></div></div>
++<div class="work-head" data-rise-group><h2 id="work-title" data-rise>Concept projects</h2><div data-rise><p>Three fictional businesses, designed the way we would design yours. The photos are real; the businesses are not.</p><a class="ulink strong" href="/demo/">See a demonstration project</a><a class="ulink strong" href="/work/">See all work</a></div></div>
+ <div class="teaser">
+ <article class="teaser-card" aria-labelledby="t1-title">
+ <figure class="teaser-img" data-hover-src="/assets/video/loop-hb-desktop.mp4"><img src="/assets/images/detail-headlight-800.jpg" srcset="/assets/images/detail-headlight-800.jpg 800w, /assets/images/detail-headlight-1600.jpg 1600w" sizes="(max-width: 860px) 100vw, 50vw" width="1600" height="1075" alt="The headlight of a bronze car catching the light in a black studio" loading="lazy" decoding="async"></figure>
+diff --git a/pages/work.html b/pages/work.html
+index 759b296..37b2b9b 100644
+--- a/pages/work.html
++++ b/pages/work.html
+@@ -24,15 +24,15 @@
+ </div>
+ </header>
+ <div class="wrap cs-body">
+-<section class="cs-brief" aria-labelledby="hb-brief"><h3 id="hb-brief">The brief</h3><p class="cs-lede">Customers kept asking the same three questions: how long does it take, do you come to me, and when are you free? The site had to answer all three before anyone picked up the phone.</p></section>
+-<section class="cs-does" aria-labelledby="hb-does"><h3 id="hb-does">What the site does for the business</h3><ul class="cs-list" data-stagger>
++<section class="cs-brief" aria-labelledby="hb-title hb-brief"><h3 id="hb-brief">The brief</h3><p class="cs-lede">Customers kept asking the same three questions: how long does it take, do you come to me, and when are you free? The site had to answer all three before anyone picked up the phone.</p></section>
++<section class="cs-does" aria-labelledby="hb-title hb-does"><h3 id="hb-does">What the site does for the business</h3><ul class="cs-list" data-stagger>
+ <li><b>Leads with the finish.</b> A full-width photo of a car mid-wash does more selling than a paragraph of adjectives.</li>
+ <li><b>Explains packages by time.</b> Express wash, full detail and paint correction, each with how long it takes, so customers can plan their day.</li>
+ <li><b>Books in two steps.</b> Choose a package and a time, add the address. No account, no back-and-forth messages.</li>
+ <li><b>Lists the suburbs served up front,</b> so nobody books a job across the bridge by mistake.</li>
+ </ul></section>
+ </div>
+-<section class="cs-screens" aria-labelledby="hb-screens"><div class="wrap">
++<section class="cs-screens" aria-labelledby="hb-title hb-screens"><div class="wrap">
+ <h3 id="hb-screens" class="cs-screens-h">Key screens</h3>
+ <figure class="bench b-hb" data-bench="hb">
+ <div class="bench-stage" role="img" aria-label="A laptop and a phone playing short screen recordings of the Harbourside Mobile Detailing concept: the homepage with a full-width photo of a black car being washed, the headline Showroom finish, in your driveway, and three packages with how long each takes. Small illustrative cards show the suburbs served and a confirmed booking for a full detail on Tuesday at 1 pm.">
+@@ -55,7 +55,7 @@
+ </div>
+ <figure class="photo gl-cover-media" data-reveal><img src="/assets/images/garden-path-1600.jpg" srcset="/assets/images/garden-path-800.jpg 800w, /assets/images/garden-path-1600.jpg 1600w" sizes="(max-width: 860px) 100vw, 58vw" width="1600" height="1067" alt="A wide paved garden path running between clipped hedges and a stacked stone wall" loading="lazy" decoding="async"></figure>
+ </header>
+-<section class="cs-screens" aria-labelledby="gl-screens"><div class="wrap">
++<section class="cs-screens" aria-labelledby="gl-title gl-screens"><div class="wrap">
+ <h3 id="gl-screens" class="cs-screens-h">Key screens</h3>
+ <figure class="bench b-gl" data-bench="gl">
+ <div class="bench-stage" role="img" aria-label="A laptop and a phone playing short screen recordings of the Greenline Landscapes concept: the homepage with the serif headline Gardens built to be lived in beside a photo of a stone garden path, and the site-visit request form on the phone. Small illustrative cards show a new site-visit request from Lindfield and three garden photos attached.">
+@@ -69,8 +69,8 @@
+ </figure>
+ </div></section>
+ <div class="wrap cs-body">
+-<section class="cs-brief" aria-labelledby="gl-brief"><h3 id="gl-brief">The brief</h3><p class="gl-pull">Every quote started with a wasted drive. Show the finished gardens first, then ask enough that the first site visit is a real one.</p></section>
+-<section class="cs-does" aria-labelledby="gl-does"><h3 id="gl-does">What the site does for the business</h3><ul class="cs-list" data-stagger>
++<section class="cs-brief" aria-labelledby="gl-title gl-brief"><h3 id="gl-brief">The brief</h3><p class="gl-pull">Every quote started with a wasted drive. Show the finished gardens first, then ask enough that the first site visit is a real one.</p></section>
++<section class="cs-does" aria-labelledby="gl-title gl-does"><h3 id="gl-does">What the site does for the business</h3><ul class="cs-list" data-stagger>
+ <li><b>Lets finished projects sell.</b> Each project has its suburb, what was built and a before and after.</li>
+ <li><b>Asks the right questions first.</b> The site-visit form asks about the space, access and timing, and lets people attach photos from their phone.</li>
+ <li><b>Loads quickly on a weak signal,</b> because people often look it up standing in their own backyard.</li>
+@@ -83,7 +83,7 @@
+ <h2 id="fc-title" class="cs-title" data-rise>Fade &amp; Co</h2></div>
+ <dl class="cs-facts"><div><dt>Trade</dt><dd>Barbershop, two chairs</dd></div><div><dt>Area</dt><dd>Inner west</dd></div><div><dt>Pages</dt><dd>Home, services, book, find us</dd></div></dl>
+ </header>
+-<section class="cs-screens" aria-labelledby="fc-screens"><div class="wrap">
++<section class="cs-screens" aria-labelledby="fc-title fc-screens"><div class="wrap">
+ <h3 id="fc-screens" class="cs-screens-h">Key screens</h3>
+ <div class="fc-stage">
+ <figure class="photo fc-photo" data-reveal><img src="/assets/images/barber-interior-800.jpg" srcset="/assets/images/barber-interior-800.jpg 800w, /assets/images/barber-interior-1600.jpg 1600w" sizes="(max-width: 1023px) 100vw, 24vw" width="1600" height="1096" alt="A row of leather barber chairs and mirrors in a warmly lit barbershop" loading="lazy" decoding="async"></figure>
+@@ -100,8 +100,8 @@
+ </div>
+ </div></section>
+ <div class="wrap cs-body">
+-<section class="cs-brief" aria-labelledby="fc-brief"><h3 id="fc-brief">The brief</h3><p class="cs-lede">Most people who look up a barber want to know three things: are you open, how long is the wait, and can I book? Fade &amp; Co’s old page made them scroll past a gallery to find out.</p></section>
+-<section class="cs-does" aria-labelledby="fc-does"><h3 id="fc-does">What the site does for the business</h3><ul class="cs-list" data-stagger>
++<section class="cs-brief" aria-labelledby="fc-title fc-brief"><h3 id="fc-brief">The brief</h3><p class="cs-lede">Most people who look up a barber want to know three things: are you open, how long is the wait, and can I book? Fade &amp; Co’s old page made them scroll past a gallery to find out.</p></section>
++<section class="cs-does" aria-labelledby="fc-title fc-does"><h3 id="fc-does">What the site does for the business</h3><ul class="cs-list" data-stagger>
+ <li><b>Today’s hours on the first screen,</b> taken from the regular opening times.</li>
+ <li><b>Choose your barber or take the first free chair.</b> Regulars can stay with the person who knows their cut.</li>
+ <li><b>Directions one tap away,</b> with a note about where to park.</li>
+diff --git a/tests/test_demo_js.py b/tests/test_demo_js.py
+index d1acf67..5548fb8 100644
+--- a/tests/test_demo_js.py
++++ b/tests/test_demo_js.py
+@@ -2395,5 +2395,329 @@ class HeaderPauseAndDragScriptTests(unittest.TestCase):
+         self.assertFalse(r['motion']['sweepAfterDrag'])  # the visitor's choice is never swept over
+ 
+ 
++
++# Task 47 (owner-mandated): the enquiry form's page script in a stub DOM (start-up order, live re-checks, the honeypot's
++# payload key) and makeKey without a working crypto; site.js's mobile-menu scroll lock; the homepage's grouped reveals.
++ENQUIRY = Path(__file__).resolve().parents[1] / 'assets' / 'enquiry.js'
++
++ENQUIRY_PAGE_SCRIPT = HARNESS + r"""
++const source = fs.readFileSync(process.argv[1], 'utf8');
++const FIELDS = ['name', 'email', 'phone', 'business', 'website', 'service', 'message'];
++function page(env) {
++  const log = [], sent = [];
++  const controls = {};
++  FIELDS.concat('hp_xq').forEach(name => {
++    const el = element(name); el.name = name; el.value = '';
++    el.focus = () => log.push('focus:' + name);
++    controls[name] = el;
++  });
++  const slots = {}; FIELDS.forEach(name => { slots[name] = element('slot-' + name); });
++  const button = element('button'); button.textContent = 'Send enquiry';
++  let disabled = true;  // as the HTML ships it
++  Object.defineProperty(button, 'disabled', { get: () => disabled, set: v => { disabled = v; log.push('disabled=' + v); } });
++  const status = element('status');
++  const form = element('form');
++  form.elements = controls;
++  form.reset = () => FIELDS.concat('hp_xq').forEach(name => { controls[name].value = ''; });
++  form.querySelector = s => {
++    if (s === '[type="submit"]') return button;
++    const m = s.match(/^\[data-error-for="(\w+)"\]$/);
++    return m ? slots[m[1]] || null : null;
++  };
++  const add = form.addEventListener;
++  form.addEventListener = (type, fn) => { log.push('listen:' + type); add.call(form, type, fn); };
++  const doc = { querySelector: s => (s === '[data-enquiry]' ? form : s === '[data-enquiry-status]' ? status : null) };
++  const sandbox = { document: doc, window: {}, requestAnimationFrame: fn => fn(), performance: { now: () => 5000 }, setTimeout, clearTimeout, URL,
++    fetch: async (url, init) => { sent.push(JSON.parse(init.body)); return { status: 201, json: async () => ({ ok: true, id: 1 }) }; } };
++  if (env.crypto) sandbox.crypto = require('crypto').webcrypto;
++  let error = null;
++  try { vm.runInNewContext(source, sandbox); } catch (e) { error = String(e); }
++  const fire = (type, el) => (form.listeners[type] || []).map(fn => fn({ type, target: el, preventDefault() {} }));
++  const submit = () => Promise.all(fire('submit', form));
++  const view = () => Object.fromEntries(FIELDS.map(name => [name, { error: slots[name].textContent, invalid: controls[name].getAttribute('aria-invalid') }]));
++  return { log, sent, controls, button, status, form, fire, submit, view, error, disabled: () => disabled };
++}
++(async () => {
++  const out = {};
++  for (const [label, env] of [['withCrypto', { crypto: true }], ['noCrypto', { crypto: false }]]) {
++    const p = page(env);
++    out[label] = { error: p.error, log: p.log.slice(), disabled: p.disabled() };
++  }
++  // Live re-checks.
++  const p = page({ crypto: true });
++  p.controls.email.value = 'bad';
++  p.fire('focusout', p.controls.email);  // never marked invalid: leaving it does not check it early
++  p.fire('input', p.controls.email);
++  out.beforeSubmit = p.view();
++  await p.submit();  // everything empty: the required fields are marked and the first one is focused
++  out.afterSubmit = p.view();
++  out.statusAfterSubmit = p.status.textContent;
++  const mark = p.log.length;
++  p.controls.name.value = 'Sam';
++  p.fire('input', p.controls.name);
++  out.nameFixed = p.view().name;
++  p.controls.email.value = 'sam@';
++  p.fire('input', p.controls.email);
++  out.emailStillWrong = p.view().email;
++  p.controls.email.value = 'sam@example.com';
++  p.fire('input', p.controls.email);
++  out.emailTypedRight = p.view().email;
++  p.controls.message.value = 'too short';
++  p.fire('focusout', p.controls.message);
++  out.messageStillShort = p.view().message;
++  p.controls.message.value = 'Hello there, a website please.';
++  p.fire('focusout', p.controls.message);
++  out.messageFixed = p.view().message;
++  p.controls.service.value = 'not-sure';
++  p.fire('change', p.controls.service);
++  out.serviceFixed = p.view().service;
++  p.controls.phone.value = 'abc';  // never marked invalid, so typing in it does not check it
++  p.fire('input', p.controls.phone);
++  out.phoneUntouched = p.view().phone;
++  p.controls.name.value = '';  // cleared once fixed: no longer invalid, so it is not checked until the next submit
++  p.fire('input', p.controls.name);
++  out.nameClearedAfterFix = p.view().name;
++  out.sideEffects = p.log.slice(mark);
++  out.statusAfterRechecks = p.status.textContent;
++  // The honeypot travels to the server as company_url; the page's own name for it is never sent.
++  const q = page({ crypto: true });
++  q.controls.name.value = 'Sam'; q.controls.email.value = 'sam@example.com'; q.controls.service.value = 'not-sure';
++  q.controls.message.value = 'Hello there, a website please.'; q.controls.hp_xq.value = 'https://spam.example';
++  await q.submit();
++  out.payload = q.sent[0];
++  console.log(JSON.stringify(out));
++})();
++"""
++
++MAKE_KEY_SCRIPT = r"""
++const vm = require('vm');
++const fs = require('fs');
++const source = fs.readFileSync(process.argv[1], 'utf8');
++const real = require('crypto').webcrypto;
++const cases = {
++  none: undefined,
++  nullCrypto: null,
++  empty: {},
++  throwingRandomUUID: { randomUUID() { throw new Error('insecure context'); } },
++  badRandomUUID: { randomUUID: () => 'not-a-uuid' },
++  throwingGetRandomValues: { getRandomValues() { throw new Error('quota'); } },
++  shortGetRandomValues: { getRandomValues: () => new Uint8Array(4) },
++  getRandomValuesOnly: { getRandomValues: b => real.getRandomValues(b) },
++  full: real,
++};
++const out = {};
++for (const [name, crypto] of Object.entries(cases)) {
++  const module = { exports: {} };
++  const sandbox = { module, URL };
++  if (name !== 'none') sandbox.crypto = crypto;
++  vm.runInNewContext(source, sandbox);
++  const keys = [];
++  let error = null;
++  try { for (let i = 0; i < 50; i++) keys.push(module.exports.makeKey()); } catch (e) { error = String(e); }
++  out[name] = { error, keys, unique: new Set(keys).size };
++}
++const module = { exports: {} };
++vm.runInNewContext(source, { module, URL });
++const api = module.exports;
++out.fieldError = {
++  emailBad: api.fieldError('email', 'bad'), emailGood: api.fieldError('email', 'sam@example.com'), nameEmpty: api.fieldError('name', '  '),
++  phoneEmpty: api.fieldError('phone', ''), phoneBad: api.fieldError('phone', 'abc'), websiteBad: api.fieldError('website', 'nope'),
++  serviceBad: api.fieldError('service', 'gold'), messageShort: api.fieldError('message', 'short'), unknown: api.fieldError('idempotencyKey', ''),
++  proto: api.fieldError('constructor', 'x'),
++};
++out.messages = api.MESSAGES;
++out.honeypot = api.HONEYPOT;
++console.log(JSON.stringify(out));
++"""
++
++SHELL_LOCK_SCRIPT = HARNESS + r"""
++const source = fs.readFileSync(process.argv[1], 'utf8');
++function run(env) {
++  const header = element('header'), menu = element('menu'), nav = element('nav');
++  menu.attrs['aria-expanded'] = 'false';
++  menu.focus = () => {};
++  const root = element('html');
++  const parts = { '[data-menu]': [menu], '[data-nav]': [nav], '.site-header': [header] };
++  const doc = { documentElement: root, listeners: {}, addEventListener(type, fn) { (this.listeners[type] = this.listeners[type] || []).push(fn); },
++    querySelector: s => (parts[s] || [])[0] || null, querySelectorAll: s => parts[s] || [] };
++  const queries = {};
++  const lenis = { stops: 0, starts: 0, stop() { this.stops++; }, start() { this.starts++; } };
++  const { win } = makeWindow({ width: 390, height: 844, fine: false, reduce: false }, {
++    scrollY: 0, location: { pathname: '/' },
++    matchMedia: query => ({ matches: query === '(max-width: 1080px)', addEventListener(type, fn) { (queries[query] = queries[query] || []).push([type, fn]); } }),
++  });
++  vm.runInNewContext(source, { window: win, document: doc, getComputedStyle: () => ({ display: 'inline-flex' }) });
++  if (env.lenis) win.__glass = Object.assign(win.__glass || {}, { lenis });  // glass.js creates it after site.js has run
++  const steps = [];
++  const state = () => ({ lock: root.classList.contains('menu-lock'), open: nav.classList.contains('open'), expanded: menu.attrs['aria-expanded'],
++    stops: lenis.stops, starts: lenis.starts });
++  const step = (name, act) => { act(); steps.push([name, state()]); };
++  const click = () => (menu.listeners.click || []).forEach(fn => fn({ type: 'click' }));
++  const layout = matches => (queries['(max-width: 1080px)'] || []).forEach(([type, fn]) => type === 'change' && fn({ matches }));
++  step('start', () => {});
++  step('open', click);
++  step('close', click);
++  step('open again', click);
++  step('Escape', () => (doc.listeners.keydown || []).forEach(fn => fn({ key: 'Escape' })));
++  step('open once more', click);
++  step('still a phone layout', () => layout(true));
++  step('widen to the desktop layout', () => layout(false));
++  step('desktop layout with the menu closed', () => layout(false));
++  return { steps, watchers: (queries['(max-width: 1080px)'] || []).map(([type]) => type) };
++}
++console.log(JSON.stringify({ lenis: run({ lenis: true }), plain: run({ lenis: false }) }));
++"""
++
++HOME_GROUP_SCRIPT = HARNESS + r"""
++const source = fs.readFileSync(process.argv[1], 'utf8');
++function run(env) {
++  const below = name => { const el = element(name); el.getBoundingClientRect = () => ({ left: 0, top: 3000, width: 400, height: 300 }); return el; };
++  const head = below('reelHead');
++  const title = below('reelTitle'), desc = element('reelDesc');  // on a wide screen the paragraph can sit higher than its heading
++  desc.getBoundingClientRect = () => ({ left: 600, top: 2900, width: 400, height: 300 });
++  title.previousElementSibling = null; desc.previousElementSibling = title;
++  title.closest = desc.closest = s => (s === '[data-rise-group]' ? head : null);
++  const shown = element('shownHead'), shownTitle = element('shownTitle'), shownText = below('shownText');
++  shownTitle.previousElementSibling = null; shownText.previousElementSibling = shownTitle;
++  shownTitle.closest = shownText.closest = s => (s === '[data-rise-group]' ? shown : null);
++  const lone = below('lone'); lone.closest = () => null; lone.previousElementSibling = element('before');
++  const parts = { '[data-rise]': [title, desc, shownTitle, shownText, lone] };
++  const root = element('html'); root.classList = classList(['js'].concat(env.reduce ? [] : ['motion']));
++  const doc = { documentElement: root, querySelector: s => (parts[s] || [])[0] || null, querySelectorAll: s => parts[s] || [] };
++  const { win } = makeWindow(env, { requestAnimationFrame: () => 1, cancelAnimationFrame() {} });
++  const stub = makeGsap(env); win.gsap = stub.gsap; win.ScrollTrigger = stub.ScrollTrigger;
++  vm.runInNewContext(source, { window: win, document: doc });
++  return stub.log.tweens.filter(t => t.vars && t.vars.scrollTrigger).map(t => ({ name: t.names[0], trigger: t.vars.scrollTrigger.trigger.name,
++    start: t.vars.scrollTrigger.start, once: t.vars.scrollTrigger.once, delay: t.vars.delay || 0, from: t.from }));
++}
++console.log(JSON.stringify({ wide: run({ width: 1440, height: 900, fine: true, reduce: false }), phone: run({ width: 390, height: 844, fine: false, reduce: false }),
++  reduced: run({ width: 1440, height: 900, fine: true, reduce: true }) }));
++"""
++
++UUID_V4 = r'^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'
++
++
++class EnquiryRobustnessScriptTests(unittest.TestCase):
++    def node_json(self, script, path):
++        out = subprocess.run(['node', '-e', script, str(path)], capture_output=True, text=True, check=True)
++        return json.loads(out.stdout)
++
++    @classmethod
++    def setUpClass(cls):
++        if not shutil.which('node'):
++            return
++        run = lambda script, path: json.loads(subprocess.run(['node', '-e', script, str(path)], capture_output=True, text=True, check=True).stdout)
++        cls.page = run(ENQUIRY_PAGE_SCRIPT, ENQUIRY)
++        cls.keys = run(MAKE_KEY_SCRIPT, ENQUIRY)
++
++    def test_button_is_enabled_only_after_the_submit_handler_is_attached(self):
++        for label in ('withCrypto', 'noCrypto'):
++            with self.subTest(label=label):
++                r = self.page[label]
++                self.assertIsNone(r['error'])
++                self.assertIn('listen:submit', r['log'])
++                self.assertEqual(r['log'].count('disabled=false'), 1)
++                self.assertLess(r['log'].index('listen:submit'), r['log'].index('disabled=false'))
++                self.assertNotIn('disabled=true', r['log'])
++                self.assertFalse(r['disabled'])
++
++    def test_make_key_never_throws_and_always_returns_a_uuid_v4(self):
++        for name in ('none', 'nullCrypto', 'empty', 'throwingRandomUUID', 'badRandomUUID', 'throwingGetRandomValues',
++                     'shortGetRandomValues', 'getRandomValuesOnly', 'full'):
++            with self.subTest(crypto=name):
++                r = self.keys[name]
++                self.assertIsNone(r['error'])
++                self.assertEqual(len(r['keys']), 50)
++                for key in r['keys']:
++                    self.assertRegex(key, UUID_V4)
++                self.assertEqual(r['unique'], 50)
++
++    def test_field_error_reuses_the_validation_rules_and_messages(self):
++        f, m = self.keys['fieldError'], self.keys['messages']
++        self.assertEqual(f['emailBad'], m['email'])
++        self.assertEqual(f['emailGood'], '')
++        self.assertEqual(f['nameEmpty'], m['name'])
++        self.assertEqual(f['phoneEmpty'], '')  # optional
++        self.assertEqual(f['phoneBad'], m['phone'])
++        self.assertEqual(f['websiteBad'], m['website'])
++        self.assertEqual(f['serviceBad'], m['service'])
++        self.assertEqual(f['messageShort'], m['message'])
++        self.assertEqual(f['unknown'], '')  # only the visible fields
++        self.assertEqual(f['proto'], '')
++
++    def test_a_field_is_rechecked_live_only_after_it_has_shown_an_error(self):
++        r, m = self.page, self.keys['messages']
++        empty = {'error': '', 'invalid': None}
++        # Before any submit nothing is checked, not even a wrong email that was typed and left.
++        self.assertEqual(r['beforeSubmit'], {name: empty for name in r['beforeSubmit']})
++        for name in ('name', 'email', 'service', 'message'):
++            self.assertEqual(r['afterSubmit'][name], {'error': m[name], 'invalid': 'true'})
++        self.assertEqual(r['afterSubmit']['phone'], empty)
++        self.assertEqual(r['nameFixed'], empty)
++        self.assertEqual(r['emailStillWrong'], {'error': m['email'], 'invalid': 'true'})
++        self.assertEqual(r['emailTypedRight'], empty)
++        self.assertEqual(r['messageStillShort'], {'error': m['message'], 'invalid': 'true'})
++        self.assertEqual(r['messageFixed'], empty)
++        self.assertEqual(r['serviceFixed'], empty)
++        self.assertEqual(r['phoneUntouched'], empty)
++        self.assertEqual(r['nameClearedAfterFix'], empty)
++        # Re-checks never move focus, never touch the button and never change the status line.
++        self.assertEqual(r['sideEffects'], [])
++        self.assertTrue(r['statusAfterSubmit'])
++        self.assertEqual(r['statusAfterRechecks'], r['statusAfterSubmit'])
++
++    def test_honeypot_is_sent_as_company_url(self):
++        payload = self.page['payload']
++        self.assertEqual(self.keys['honeypot'], 'hp_xq')
++        self.assertEqual(payload['company_url'], 'https://spam.example')
++        self.assertNotIn('hp_xq', payload)
++        self.assertEqual(sorted(payload), sorted(['name', 'email', 'phone', 'business', 'website', 'service', 'message',
++                                                  'company_url', 'idempotencyKey', 'elapsedMs']))
++        self.assertRegex(payload['idempotencyKey'], UUID_V4)
++
++    def test_open_mobile_menu_locks_the_page_and_every_way_out_releases_it(self):
++        r = self.node_json(SHELL_LOCK_SCRIPT, SITE)
++        for case in ('lenis', 'plain'):
++            with self.subTest(case=case):
++                steps = dict((name, s) for name, s in r[case]['steps'])
++                self.assertEqual(r[case]['watchers'], ['change'])
++                self.assertFalse(steps['start']['lock'])
++                for name, locked in (('open', True), ('close', False), ('open again', True), ('Escape', False), ('open once more', True),
++                                     ('still a phone layout', True), ('widen to the desktop layout', False),
++                                     ('desktop layout with the menu closed', False)):
++                    with self.subTest(step=name):
++                        self.assertEqual(steps[name]['lock'], locked)
++                        self.assertEqual(steps[name]['open'], locked)
++                        self.assertEqual(steps[name]['expanded'], str(locked).lower())
++        lenis = dict((name, s) for name, s in r['lenis']['steps'])
++        # Lenis scrolls on its own, so it is stopped while the menu is open and started again on every way out.
++        self.assertEqual((lenis['open']['stops'], lenis['open']['starts']), (1, 0))
++        self.assertEqual((lenis['close']['stops'], lenis['close']['starts']), (1, 1))
++        self.assertEqual((lenis['Escape']['stops'], lenis['Escape']['starts']), (2, 2))
++        self.assertEqual((lenis['still a phone layout']['stops'], lenis['still a phone layout']['starts']), (3, 2))
++        self.assertEqual(lenis['widen to the desktop layout']['starts'], 3)
++        plain = dict((name, s) for name, s in r['plain']['steps'])
++        self.assertEqual((plain['open']['stops'], plain['open']['starts']), (0, 0))
++
++    def test_reel_heading_and_paragraph_rise_from_one_trigger_heading_first(self):
++        r = self.node_json(HOME_GROUP_SCRIPT, HOME)
++        for case in ('wide', 'phone'):
++            with self.subTest(case=case):
++                by = {t['name']: t for t in r[case]}
++                # The pair on screen at load is never hidden; the group below the fold rises from its own trigger.
++                self.assertEqual(sorted(by), ['lone', 'reelDesc', 'reelTitle'])
++                title, desc = by['reelTitle'], by['reelDesc']
++                self.assertEqual((title['trigger'], desc['trigger']), ('reelHead', 'reelHead'))
++                self.assertEqual(title['start'], desc['start'])
++                self.assertTrue(title['once'] and desc['once'])
++                self.assertEqual(title['delay'], 0)
++                self.assertGreater(desc['delay'], title['delay'])
++                self.assertLessEqual(desc['delay'], 0.2)
++                self.assertEqual(title['from'], desc['from'])
++                # A heading outside any group keeps its own trigger and no delay.
++                self.assertEqual((by['lone']['trigger'], by['lone']['delay']), ('lone', 0))
++        self.assertEqual(r['reduced'], [])  # reduced motion: nothing is hidden or animated
++
++
+ if __name__ == '__main__':
+     unittest.main()
+diff --git a/tests/test_site.py b/tests/test_site.py
+index 9a8ee6d..15b951d 100644
+--- a/tests/test_site.py
++++ b/tests/test_site.py
+@@ -36,7 +36,8 @@ class ContactEmailTests(unittest.TestCase):
+         for route, html in self.html.items():
+             links = re.findall(r'<a\b([^>]*)\bhref="(mailto:[^"]*)"([^>]*)>(.*?)</a>', html)
+             with self.subTest(route=route):
+-                self.assertEqual(len(links), 3 if route == 'contact/index.html' else 1)
++                # Contact: beside the form, in the no-JavaScript notice (Task 47) and in the privacy note.
++                self.assertEqual(len(links), 4 if route == 'contact/index.html' else 1)
+                 self.assertEqual(html.count('mailto:'), len(links))
+                 self.assertNotIn('{{', html)  # no placeholder left behind
+             for before, href, after, text in links:
+@@ -198,18 +199,22 @@ class SiteBuildTests(unittest.TestCase):
+             self.assertIn(f'<option value="{value}">', html)
+         self.assertIn('<p data-enquiry-status class="status" role="status"></p>', html)
+         self.assertIn('stored in a Cloudflare database', html)
+-        # Task 30: enquiries are also emailed to the owner through Resend, so the notice must say so.
++        # Task 30: enquiries may also be emailed to the owner through Resend, so the notice must say so. Task 47: the email
++        # copy is only sent when the alert is configured, so the note says "may" and never claims it always happens.
+         # Task 31: the note may hold one element, the mailto link, and it ends the deletion sentence.
+         notice = re.search(r'<p class="notice" id="enquiry-privacy">(.*?)</p>', html).group(1)
+         self.assertEqual(re.findall(r'<[^>]+>', notice), [f'<a class="mail" href="mailto:{CONTACT_EMAIL}">', '</a>'])
+-        self.assertIn('also emailed to Cendavo through our email delivery provider, Resend', notice)
++        self.assertIn('stored in a Cloudflare database', notice)
++        self.assertIn('may also be emailed to Cendavo through our email delivery provider, Resend', notice)
++        self.assertNotIn('and also emailed', notice)
+         self.assertIn('not added to mailing lists or sold', notice)
+         self.assertTrue(notice.endswith(f'you can ask us to delete them at any time by emailing {MAIL_LINK}.'))
+         self.assertNotIn('A$', html)
+-        # Task 31: the business address is the only "@" in the page's main content, in exactly two links (beside the form
+-        # and in the privacy note). Nothing else (no other address, no placeholder email) may appear.
++        # Task 31: the business address is the only "@" in the page's main content, in exactly three links (beside the form,
++        # in the no-JavaScript notice (Task 47) and in the privacy note). Nothing else (no other address, no placeholder
++        # email) may appear.
+         main = html.split('<main', 1)[1].split('</main>', 1)[0]
+-        self.assertEqual(main.count(MAIL_LINK), 2)
++        self.assertEqual(main.count(MAIL_LINK), 3)
+         self.assertIn(f'<p class="ct-mail">Prefer email? Write to {MAIL_LINK}</p>', main)
+         self.assertNotIn('@', main.replace(MAIL_LINK, ''))
+ 
+@@ -217,7 +222,19 @@ class SiteBuildTests(unittest.TestCase):
+         html = (OUT / 'contact/index.html').read_text()
+         honeypot = re.search(r'<div class="hp" aria-hidden="true">.*?</div>', html)
+         self.assertIsNotNone(honeypot)
+-        self.assertRegex(honeypot.group(0), r'<input id="enquiry-company-url" name="company_url" type="text" tabindex="-1" autocomplete="off">')
++        # Task 47: a name and id with no meaning for autofill (a filled trap silently drops a real enquiry); enquiry.js
++        # still sends its value to the server as company_url.
++        field = re.search(r'<input id="([^"]+)" name="([^"]+)" type="text" tabindex="-1" autocomplete="off">', honeypot.group(0))
++        self.assertIsNotNone(field)
++        self.assertEqual(honeypot.group(0).count('<input'), 1)
++        self.assertIn(f'<label for="{field.group(1)}">', honeypot.group(0))
++        for word in ('company', 'url', 'website', 'name', 'email', 'mail', 'phone', 'tel', 'org', 'address', 'addr'):
++            with self.subTest(word=word):
++                self.assertNotIn(word, field.group(1).lower())
++                self.assertNotIn(word, field.group(2).lower())
++        script = (ROOT / 'assets/enquiry.js').read_text()
++        self.assertIn(f"var HONEYPOT = '{field.group(2)}';", script)
++        self.assertIn('fields.company_url = trap ? trap.value', script)
+         css = (OUT / 'assets/site.css').read_text()
+         self.assertIn('.hp{position:absolute;left:-10000px', css)
+         self.assertIn('.field-error{', css)
+@@ -1358,7 +1375,7 @@ class InnerPageTests(unittest.TestCase):
+             with self.subTest(project=slug):
+                 article = re.search(rf'<article [^>]*id="{slug}"[^>]*>(.*?)</article>', main, re.S).group(1)
+                 self.assertEqual(article.count(' data-bench='), 1)
+-                screens = re.search(r'<section class="cs-screens" aria-labelledby="([^"]+)">(.*?)</section>', article, re.S)
++                screens = re.search(rf'<section class="cs-screens" aria-labelledby="{short}-title ([^"]+)">(.*?)</section>', article, re.S)
+                 self.assertIsNotNone(screens)
+                 self.assertRegex(screens.group(2), rf'<h3 id="{screens.group(1)}"[^>]*>Key screens</h3>')
+                 bench = re.search(rf'<figure class="bench b-{short}" data-bench="{short}">(.*?)</figure>', screens.group(2), re.S)
+@@ -1428,7 +1445,7 @@ class InnerPageTests(unittest.TestCase):
+         # Layout wrappers only: the service select sits in a styling wrapper, controls keep their hooks.
+         self.assertIn('<div class="select"><select id="enquiry-service" name="service" required aria-describedby="enquiry-service-error">', main)
+         self.assertIn('<p class="notice" id="enquiry-privacy">', main)
+-        self.assertEqual(main.count(MAIL_LINK), 2)  # Task 31: beside the form and in the privacy note
++        self.assertEqual(main.count(MAIL_LINK), 3)  # Task 31: beside the form and in the privacy note; Task 47: the no-JS notice
+         self.assertNotIn('@', main.replace(MAIL_LINK, ''))
+         self.assertNotIn('<script', main)
+ 
+@@ -2011,7 +2028,7 @@ class DesignCritiqueFixTests(unittest.TestCase):
+         self.assertNotIn('ct-expect', html)
+         self.assertNotRegex(self.pages_css, r'\.exp(?![\w-])')
+         foot = re.search(r'<div class="form-foot">(.*?)</div></form>', main, re.S).group(1)
+-        self.assertRegex(foot, r'^<button class="button large" type="submit">Send enquiry</button><p class="form-promise">[^<]{20,120}</p>'
++        self.assertRegex(foot, r'^<button class="button large" type="submit" disabled>Send enquiry</button><p class="form-promise">[^<]{20,120}</p>'
+                                r'<p class="notice" id="enquiry-privacy">')
+         line = re.search(r'<p class="form-promise">([^<]+)</p>', foot).group(1)
+         for claim in ('person', 'plain language', 'no hard sell'):
+@@ -2172,7 +2189,9 @@ class WorkArtDirectionTests(unittest.TestCase):
+ 
+     def test_harbourside_is_unchanged(self):
+         import hashlib
+-        self.assertEqual(hashlib.sha256(self.article('harbourside').encode()).hexdigest(), HARBOURSIDE_SHA256)
++        # Task 47: its three regions are named with the project title too (aria-labelledby="hb-title hb-...").
++        frozen = undo_edits(self, self.article('harbourside'), tuple((f'aria-labelledby="hb-title hb-{part}"', f'aria-labelledby="hb-{part}"') for part in ('screens', 'brief', 'does')))
++        self.assertEqual(hashlib.sha256(frozen.encode()).hexdigest(), HARBOURSIDE_SHA256)
+         self.assertEqual(re.findall(r'<article [^>]*id="([^"]+)"', self.source), ['harbourside', 'greenline', 'fade-co'])
+ 
+     def test_greenline_is_mirrored_with_a_pull_line(self):
+@@ -2250,7 +2269,7 @@ class WorkArtDirectionTests(unittest.TestCase):
+         # Resolve padding on the Fade & Co screens section the way the cascade does: of the top-level rules whose selector is
+         # a compound of classes the section carries, the highest specificity wins, then the later rule. Daylight (Task 34):
+         # the screens keep their bottom padding before the brief.
+-        section = re.search(r'<section class="([^"]+)" aria-labelledby="fc-screens">', self.source).group(1).split()
++        section = re.search(r'<section class="([^"]+)" aria-labelledby="fc-title fc-screens">', self.source).group(1).split()
+         self.assertEqual(section, ['cs-screens'])
+         winner = None
+         rules = re.findall(r'([^{}]+)\{([^{}]*)\}', re.sub(r'/\*.*?\*/', '', self.base, flags=re.S))
+@@ -3432,6 +3451,23 @@ class DaylightTests(unittest.TestCase):
+ # Daylight (Task 34): the enquiry form, with every class attribute removed, is byte-identical to the form before Task 34
+ # (pages/contact.html at 2a91fbb, from <form data-enquiry ...> to the status line): only classes and wrappers may change.
+ CONTACT_FORM_SHA256 = 'bc95f8284ba6d12d27966bb5e5b2a7206d54325654f2452f2c0947cd3e5fe29d'
++# Task 47 (owner-mandated) changed exactly these strings inside the frozen form: the submit button ships disabled until
++# enquiry.js attaches its handler, the honeypot got a name browsers do not autofill, and the privacy note says "may" (the
++# email copy is only sent when the alert is configured). The freeze hashes still cover everything else: each test undoes
++# exactly these edits (each must appear once) and compares with the earlier baseline.
++TASK47_FORM_EDITS = (
++    (' type="submit" disabled>Send enquiry</button>', ' type="submit">Send enquiry</button>'),
++    ('<label for="enquiry-hp">Leave this field empty</label><input id="enquiry-hp" name="hp_xq" ',
++     '<label for="enquiry-company-url">Leave this field empty</label><input id="enquiry-company-url" name="company_url" '),
++    (' used by Cendavo and may also be emailed to Cendavo ', ' used by Cendavo and also emailed to Cendavo '),
++)
++
++
++def undo_edits(test, text, edits):
++    for new, old in edits:
++        test.assertEqual(text.count(new), 1, new)
++        text = text.replace(new, old)
++    return text
+ # The demonstration app's markup, from its .demo-shell wrapper to the end of pages/demo.html, unchanged since before Task 34.
+ DEMO_APP_SHA256 = 'edf5d1891ad9896aa8b44f0a53635fdfee7d6bc965ffb5d2a1b81bcffa44525e'
+ VOID_TAGS = {'area', 'base', 'br', 'col', 'embed', 'hr', 'img', 'input', 'link', 'meta', 'source', 'track', 'wbr'}
+@@ -3477,7 +3513,8 @@ class DaylightInnerPageTests(unittest.TestCase):
+         self.assertEqual(source.count('<form'), 1)
+         form = re.search(r'<form data-enquiry.*?</form><p data-enquiry-status class="status" role="status"></p>', source, re.S)
+         self.assertIsNotNone(form)
+-        self.assertEqual(hashlib.sha256(re.sub(r' class="[^"]*"', '', form.group(0)).encode()).hexdigest(), CONTACT_FORM_SHA256)
++        frozen = undo_edits(self, form.group(0), TASK47_FORM_EDITS)
++        self.assertEqual(hashlib.sha256(re.sub(r' class="[^"]*"', '', frozen).encode()).hexdigest(), CONTACT_FORM_SHA256)
+         # The built page carries the same form (the build only fills in the contact address).
+         self.assertEqual(main_of(self.html['contact/index.html']).count('<form data-enquiry class="form" method="post" novalidate>'), 1)
+         self.assertNotIn('data-ph', self.html['contact/index.html'])
+@@ -3756,7 +3793,7 @@ class GlassPageSceneTests(unittest.TestCase):
+         # Contact: the form block is byte-for-byte what it was, there is one form, and the scene host is outside it.
+         source = (ROOT / 'pages/contact.html').read_text()
+         form = re.search(r'<form.*?</form>', source, re.S).group(0)
+-        self.assertEqual(hashlib.sha256(form.encode()).hexdigest(), self.CONTACT_FORM_SHA256)
++        self.assertEqual(hashlib.sha256(undo_edits(self, form, TASK47_FORM_EDITS).encode()).hexdigest(), self.CONTACT_FORM_SHA256)
+         contact = main_of(self.html['contact/index.html'])
+         self.assertEqual(contact.count('<form'), 1)
+         built = re.search(r'<form.*?</form>', contact, re.S).group(0)
+@@ -4307,3 +4344,110 @@ class HeroFitPauseGripTests(unittest.TestCase):
+                        "stage.addEventListener('pointercancel', letGo)", 'setPointerCapture', 'releasePointerCapture'):
+             self.assertIn(needle, self.home_js)
+         self.assertIn('<input', main_of(self.home)[main_of(self.home).index('data-compare-controls'):])
++
++
++class EnquiryRobustnessAndAccessTests(unittest.TestCase):
++    """Task 47 (owner-mandated): the enquiry form never loses input silently, and six small accessibility fixes."""
++
++    @classmethod
++    def setUpClass(cls):
++        build()
++        cls.contact = (OUT / 'contact/index.html').read_text()
++        cls.site_css = (OUT / 'assets/site.css').read_text()
++        cls.home_css = (OUT / 'assets/home.css').read_text()
++        cls.pages_css = (OUT / 'assets/pages.css').read_text()
++
++    def test_without_javascript_the_form_cannot_send_and_the_page_offers_email(self):
++        main = main_of(self.contact)
++        form = re.search(r'<form [^>]*data-enquiry[^>]*>', main).group(0)
++        # POST stays (a native GET would put personal details in the URL); the button ships disabled, so neither a click
++        # nor Enter in a field (implicit submission) can send the form until enquiry.js has attached its handler.
++        self.assertIn('method="post"', form)
++        self.assertNotIn('action=', form)
++        self.assertEqual(re.findall(r'<button [^>]*type="submit"[^>]*>', main), ['<button class="button large" type="submit" disabled>'])
++        notice = re.search(r'<noscript>(.*?)</noscript>', main, re.S)
++        self.assertIsNotNone(notice)
++        self.assertLess(main.index('<noscript>'), main.index('<form '))
++        self.assertIn(MAIL_LINK, notice.group(1))
++        self.assertIn('cannot send', notice.group(1))
++        self.assertEqual(main.count('<noscript>'), 1)
++        self.assertTrue(rules_for(base_rules(self.pages_css), '.ct-noscript'))
++        # The disabled button only shows a "busy" cursor while a send is actually in progress.
++        self.assertIn('cursor:not-allowed', rules_for(base_rules(self.site_css), '.button[disabled]')[0])
++        self.assertIn('cursor:progress', rules_for(base_rules(self.site_css), '.form[aria-busy="true"] .button[disabled]')[0])
++
++    def test_enquiry_script_enables_the_button_only_after_its_submit_handler(self):
++        script = (ROOT / 'assets/enquiry.js').read_text()
++        self.assertEqual(script.count('button.disabled = false;'), 2)  # after a send, and once at start-up
++        self.assertLess(script.index("form.addEventListener('submit'"), script.rindex('if (button) button.disabled = false;'))
++        self.assertNotIn('innerHTML', script)
++
++    def test_export_button_has_solid_colours_with_enough_contrast(self):
++        for selector in ('#export-demo', '#export-demo:hover'):
++            with self.subTest(selector=selector):
++                rule = rules_for(base_rules(self.site_css), selector)
++                self.assertEqual(len(rule), 1)
++                background = re.search(r'background:(#[0-9A-Fa-f]{6})(?:;|$)', rule[0])
++                colour = re.search(r'(?:^|;)color:(#[0-9A-Fa-f]{6})(?:;|$)', rule[0])
++                self.assertIsNotNone(background)
++                self.assertIsNotNone(colour)
++                self.assertGreaterEqual(contrast(background.group(1), colour.group(1)), 4.5)
++        self.assertIn('backdrop-filter:none', rules_for(base_rules(self.site_css), '#export-demo')[0])
++        self.assertIn('id="export-demo"', (OUT / 'demo/index.html').read_text())
++
++    def test_date_input_keeps_a_visible_focus_ring_including_its_calendar_button(self):
++        base = base_rules(self.site_css)
++        for selector in ('input[type="date"]:focus-visible', 'input[type="date"]:focus-within',
++                         'input[type="date"]::-webkit-calendar-picker-indicator:focus-visible'):
++            with self.subTest(selector=selector):
++                rule = rules_for(base, selector)
++                self.assertEqual(len(rule), 1)
++                self.assertRegex(rule[0], r'outline:2px solid var\(--ink\)')
++        # The vendor pseudo-element sits in a rule of its own, so browsers that do not know it keep the other one.
++        self.assertNotRegex(base, r'focus-within,input\[type="date"\]::-webkit')
++        self.assertIn('<input name="date" type="date" required>', (OUT / 'demo/index.html').read_text())
++
++    def test_home_project_titles_are_big_enough_to_tap_on_phones(self):
++        phone = media_blocks(self.home_css, 'max-width:860px')
++        rule = rules_for(phone, '.teaser-card h3 a')
++        self.assertEqual(len(rule), 1)
++        self.assertIn('display:inline-block', rule[0])
++        self.assertGreaterEqual(int(re.search(r'min-height:(\d+)px', rule[0]).group(1)), 24)
++        home = main_of((OUT / 'index.html').read_text())
++        self.assertEqual(len(re.findall(r'<article class="teaser-card"[^>]*>.*?<h3 id="t\d-title"><a href="/work/#', home, re.S)), 3)
++
++    def test_every_work_region_has_a_unique_name_that_includes_its_project(self):
++        main = main_of((OUT / 'work/index.html').read_text())
++        texts = {}
++        for ident, body in re.findall(r'<h[1-6][^>]*\bid="([^"]+)"[^>]*>(.*?)</h[1-6]>', main, re.S):
++            texts[ident] = re.sub(r'\s+', ' ', re.sub(r'<[^>]+>', '', body)).replace('&amp;', '&').strip()
++        names = []
++        for tag, ids in re.findall(r'<(section|article|aside|nav|div)\b[^>]*\baria-labelledby="([^"]+)"', main):
++            parts = ids.split()
++            for ident in parts:
++                with self.subTest(id=ident):
++                    self.assertIn(f'id="{ident}"', main)
++                    self.assertIn(ident, texts)
++            names.append(' '.join(texts.get(ident, '') for ident in parts))
++        self.assertGreaterEqual(len(names), 9)
++        self.assertEqual(len(names), len(set(names)), names)
++        for short, project in (('hb', 'Harbourside Mobile Detailing'), ('gl', 'Greenline Landscapes'), ('fc', 'Fade & Co')):
++            for part in ('screens', 'brief', 'does'):
++                with self.subTest(region=f'{short}-{part}'):
++                    self.assertIn(f'aria-labelledby="{short}-title {short}-{part}"', main)
++                    self.assertTrue(texts[f'{short}-title'].startswith(project))
++
++    def test_menu_scroll_lock_applies_only_in_the_mobile_layout(self):
++        css = re.sub(r'/\*.*?\*/', '', self.site_css, flags=re.S)
++        self.assertNotIn('menu-lock', base_rules(css))
++        mobile = media_blocks(css, 'max-width:1080px')
++        self.assertIn('overflow:hidden', rules_for(mobile, 'html.menu-lock')[0])
++        self.assertIn('overflow:hidden', rules_for(mobile, 'html.menu-lock body')[0])
++        # The open menu scrolls inside itself, so short landscape screens can still reach its last link.
++        self.assertIn('overflow-y:auto', rules_for(mobile, 'html.menu-lock .site-header .nav')[0])
++        self.assertEqual(css.count('menu-lock'), 3)
++
++    def test_reel_heading_and_paragraph_share_one_reveal_group(self):
++        home = main_of((OUT / 'index.html').read_text())
++        self.assertRegex(home, r'<div class="reel-head" data-rise-group><h2 id="reel-title" data-rise>[^<]+</h2><p id="reel-desc" data-rise>')
++        self.assertRegex(home, r'<div class="work-head" data-rise-group><h2 id="work-title" data-rise>')
