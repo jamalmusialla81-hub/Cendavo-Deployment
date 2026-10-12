@@ -370,7 +370,8 @@ REEL_TAG = '<script src="/assets/reel.js" defer></script>'
 SCENES_TAG = '<script src="/assets/scenes.js" defer></script>'
 SCENES_ROUTES = ['work/index.html', 'services/index.html', 'pricing/index.html', 'about/index.html']
 # Daylight (Task 34): About adds the launch film, so it loads reel.js too.
-REEL_ROUTES = ['index.html', 'work/index.html', 'services/index.html', 'about/index.html']
+# Task 41: Pricing loads it for the ambient loop behind its closing panel.
+REEL_ROUTES = ['index.html', 'work/index.html', 'services/index.html', 'pricing/index.html', 'about/index.html']
 # Pages that show the homepage mini-site, the device bench or the phone-framed clips and so load the mockup kit (kit.css).
 # Pricing's quote sheet moved to pricing.css in Daylight (Task 34).
 KIT_ROUTES = ['index.html', 'work/index.html', 'services/index.html']
@@ -389,7 +390,8 @@ STATIC_ROUTES = ['contact/index.html', 'demo/index.html']
 # About the launch film.
 # Liquid Glass (Task 37): the homepage's hero has no <video> (the WebGL scene makes its own, after load); it shows the
 # showreel, the marquee's footage, the closing band's footage and its two glass phones.
-VIDEOS_PER_ROUTE = {'index.html': 5, 'services/index.html': 3, 'work/index.html': 7, 'about/index.html': 1}
+# Task 41: Work, Services, Pricing and About add the ambient glass loop behind their closing panel (wide screens only).
+VIDEOS_PER_ROUTE = {'index.html': 5, 'services/index.html': 4, 'work/index.html': 8, 'about/index.html': 2, 'pricing/index.html': 1}
 # Daylight (Task 34) adds the inner-page choreography hooks from the prototype (lists, benches and their cues, drawn lines,
 # the Services illustrations, the Work queue and the Pricing quote sheet).
 MOTION_HOOKS = ('data-ph', 'data-reveal', 'data-parallax', 'data-devices', 'data-rise', 'data-work', 'data-intro', 'data-stagger',
@@ -397,7 +399,7 @@ MOTION_HOOKS = ('data-ph', 'data-reveal', 'data-parallax', 'data-devices', 'data
 # Hooks for reel.js (Task 28 showreel, Task 29 clips; Task 33 hero loops, Pause motion and showreel chapters); playback,
 # not motion, so they may appear wherever a video is.
 REEL_HOOKS = ('data-reel', 'data-reel-toggle', 'data-loop', 'data-motion-toggle', 'data-chapters', 'data-reel-ui', 'data-progress',
-              'data-time', 'data-hover-src')
+              'data-time', 'data-hover-src', 'data-poster')  # data-poster: a loop's still, set only near the screen
 # Daylight (Task 33/34): every motion page loads GSAP, ScrollTrigger and motion.js but no page loads details.js (no card tilt
 # or cursor ring under the Daylight motion rules).
 HOME_GSAP_TAGS = GSAP_TAGS[:3]
@@ -1558,7 +1560,8 @@ class ImagePerformanceAndSharingTests(unittest.TestCase):
                 # Task 34 adds Work's six device loops and the Services Care plan phone loop, the same way.
                 video_sources = re.findall(r'<source (?:data-)?src="[^"]+\.mp4" type="video/mp4">', main)
                 # Liquid Glass (Task 37): the homepage's four silent loops (marquee and closing footage, two glass phones).
-                self.assertEqual(main.count('<source data-src='), {'index.html': 4, 'work/index.html': 6, 'services/index.html': 1}.get(route, 0))
+                # Task 41: plus the ambient glass loop behind the closing panel on Work, Services, Pricing and About.
+                self.assertEqual(main.count('<source data-src='), {'index.html': 4, 'work/index.html': 7, 'services/index.html': 2, 'pricing/index.html': 1, 'about/index.html': 1}.get(route, 0))
                 self.assertEqual(len(video_sources), VIDEOS_PER_ROUTE.get(route, 0))
                 self.assertEqual(main.count('<source '), len(parser.images) + len(video_sources))
         self.assertGreaterEqual(total, 40)
@@ -2428,6 +2431,77 @@ class LiquidGlassTests(unittest.TestCase):
         self.assertEqual(strip_js('a();\n  // note\n  /* block\n   still */ b();\n/* one */\n  c(); // kept\n'), 'a();\nb();\nc(); // kept\n')
 
 
+class GlassPolishTests(unittest.TestCase):
+    """Task 41: the liquid-glass showreel's files, the Contact glass C's own space, the Work queue mock and the ambient loop
+    behind the inner closing panels. (Pause motion on every moving page: DaylightInnerPageTests and tests/test_demo_js.py.)"""
+
+    @classmethod
+    def setUpClass(cls):
+        build()
+        cls.contact = main_of((OUT / 'contact/index.html').read_text())
+        cls.work = main_of((OUT / 'work/index.html').read_text())
+        cls.pages_css = base_rules((OUT / 'assets/pages.css').read_text())
+        cls.full_pages_css = (OUT / 'assets/pages.css').read_text()
+
+    def test_the_old_showreel_is_gone_from_the_build(self):
+        self.assertEqual(list((OUT / 'assets/video').glob('cendavo-showreel*')), [])
+        for path in OUT.rglob('*'):
+            if path.is_file() and path.suffix in ('.html', '.js', '.css', '.txt', '.xml'):
+                with self.subTest(path=str(path.relative_to(OUT))):
+                    self.assertNotIn('cendavo-showreel', path.read_text(errors='ignore'))
+        home = main_of((OUT / 'index.html').read_text())
+        self.assertIn('Showreel · concept projects, fictional businesses', home)
+        desc = re.search(r'<p id="reel-desc"[^>]*>([^<]+)</p>', home).group(1)
+        self.assertIn('white glass', desc)
+        self.assertTrue(desc.endswith('No sound.'))
+
+    def test_contact_glass_c_has_its_own_box_outside_the_form(self):
+        host = re.search(r'<div class="pg-gl" data-gl data-gl-kind="mark" [^>]*></div>', self.contact).group(0)
+        self.assertIn('data-gl-anchor=".ct-gl-spot"', host)
+        self.assertEqual(self.contact.count('<div class="ct-gl-spot" aria-hidden="true"></div>'), 1)
+        form_start = self.contact.index('<div class="ct-form">')
+        self.assertLess(self.contact.index('ct-gl-spot"'), form_start)  # before the form panel, never inside it
+        # A fixed size (no layout shift when the scene arrives), at the top-right; gone where WebGL never runs (<=760px).
+        spot = rules_for(self.pages_css, '.ct-gl-spot')[0]
+        for needle in ('width:176px', 'height:176px', 'grid-row:1', 'justify-self:end'):
+            self.assertIn(needle, spot)
+        self.assertIn('.ct-gl-spot{display:none}', self.full_pages_css.split('@media(max-width:760px){', 1)[1].split('}}', 1)[0] + '}')
+        # The form panel sits above the scene layer (.pg-gl is z-index 0).
+        form = rules_for(self.pages_css, '.ct-form')[0]
+        self.assertIn('position:relative', form)
+        self.assertIn('z-index:2', form)
+        self.assertIn('z-index:0', rules_for(self.pages_css, '.pg-gl')[0])
+        # The scene centres the C on that box: no negative corner offsets any more.
+        module = (OUT / 'assets/glass-page.js').read_text()
+        self.assertIn('mark: [0, 0, 1.0]', module)
+        self.assertNotIn('mark: [-0.5, -0.5', module)
+
+    def test_work_queue_tile_is_a_static_illustrative_mock(self):
+        tile = re.search(r'<span class="wk-tile-img wk-demo-mini" aria-hidden="true">(.*?)</span><span class="wk-tile-name">Request queue</span>', self.work, re.S)
+        self.assertIsNotNone(tile)
+        groups = re.findall(r'<i><em>([A-Za-z-]+) <s>(\d)</s></em>((?:<b>[^<]+</b>)+)</i>', tile.group(1))
+        self.assertEqual([(name, int(n), re.findall(r'<b>([^<]+)</b>', rows)) for name, n, rows in groups], [
+            ('New', 2, ['Website redesign', 'Booking question']), ('Follow-up', 1, ['Quote sent']), ('Done', 1, ['Site visit booked'])])
+        self.assertNotIn('<b></b>', tile.group(1))
+        self.assertNotIn('data-', tile.group(0).split('aria-hidden="true">', 1)[1])  # static: no script hooks
+
+    def test_ambient_loop_layer_sits_over_the_photo_and_skips_phones(self):
+        for route in ('work/index.html', 'services/index.html', 'pricing/index.html', 'about/index.html'):
+            with self.subTest(route=route):
+                main = main_of((OUT / route).read_text())
+                media = main.index('<div class="close-media" aria-hidden="true" data-parallax>')
+                loop = main.index('<div class="close-loop" aria-hidden="true"><video class="close-video" data-loop="wide"')
+                self.assertLess(media, loop)  # the photo stays underneath as the fallback
+                self.assertEqual(main.count('glass-ambient-1600.mp4'), 1)
+                self.assertNotRegex(main, r'[\s<](?:src|poster)="/assets/glass/glass-ambient')  # no video bytes or still on first load
+        layer = rules_for(self.pages_css, '.close-loop')[0]
+        self.assertIn('pointer-events:none', layer)
+        self.assertIn('filter:blur(6px)', rules_for(self.pages_css, '.close-video')[0])
+        phones = self.full_pages_css.split('@media(max-width:640px){', 1)[1]
+        self.assertIn('.close-loop{display:none}', phones.split('\n}\n', 1)[0])
+        self.assertNotIn('close-loop', (OUT / 'contact/index.html').read_text())
+
+
 if __name__ == '__main__':
     unittest.main()
 
@@ -2821,16 +2895,16 @@ class ShowreelMarkupTests(unittest.TestCase):
             with self.subTest(flag=flag):
                 self.assertIn(flag, attrs)
         self.assertEqual(attrs['preload'], 'none')
-        self.assertEqual(attrs['poster'], '/assets/video/cendavo-showreel-poster-1600.jpg')
+        self.assertEqual(attrs['poster'], '/assets/glass/glass-reel-poster.jpg')  # Task 41: the liquid-glass reel
         self.assertEqual((attrs['width'], attrs['height']), ('1600', '900'))
         self.assertNotIn('autoplay', tag)
         self.assertNotIn('src', attrs)  # the file comes from <source>
         sources = re.findall(r'<source ([^>]*)>', self.section.group(1))
-        self.assertEqual(sources, ['src="/assets/video/cendavo-showreel-1600.mp4" type="video/mp4"'])
+        self.assertEqual(sources, ['src="/assets/glass/glass-reel-1600.mp4" type="video/mp4"'])
         # The phone cut is named in the markup for home.js; every referenced file ships with the site.
-        self.assertEqual(attrs['data-narrow-src'], '/assets/video/cendavo-showreel-vertical-720.mp4')
-        self.assertEqual(attrs['data-narrow-poster'], '/assets/video/cendavo-showreel-vertical-poster-720.jpg')
-        for path in (attrs['poster'], attrs['data-narrow-src'], attrs['data-narrow-poster'], '/assets/video/cendavo-showreel-1600.mp4'):
+        self.assertEqual(attrs['data-narrow-src'], '/assets/glass/glass-reel-vertical-720.mp4')
+        self.assertEqual(attrs['data-narrow-poster'], '/assets/glass/glass-reel-vertical-poster.jpg')
+        for path in (attrs['poster'], attrs['data-narrow-src'], attrs['data-narrow-poster'], '/assets/glass/glass-reel-1600.mp4'):
             with self.subTest(path=path):
                 self.assertTrue((OUT / path.lstrip('/')).is_file())
         # Described for assistive technology by the visible line under the heading.
@@ -3240,9 +3314,11 @@ class DaylightTests(unittest.TestCase):
         self.assertLessEqual(total, FIRST_LOAD_BUDGET, f'first load is {total} bytes')
 
     def test_pause_motion_is_a_real_toggle_button_hidden_without_js(self):
-        button = '<button class="motion-btn" type="button" data-motion-toggle aria-pressed="false" hidden>Pause motion</button>'
-        self.assertEqual(self.hero.count(button), 1)
+        # Task 41: the homepage's button is the site-wide fixed one (after <main>, same corner as every other page).
+        button = '<button class="motion-btn motion-fab" type="button" data-motion-toggle aria-pressed="false" hidden>Pause motion</button>'
+        self.assertEqual(self.html.count(button), 1)
         self.assertEqual(self.html.count('data-motion-toggle'), 1)
+        self.assertIn('</main>' + button + '<footer', self.html)
         rule = rules_for(base_rules(self.css['home.css']), '.motion-btn')[0]
         self.assertGreaterEqual(int(re.search(r'min-height:(\d+)px', rule).group(1)), 44)
         self.assertTrue(rules_for(base_rules(self.css['home.css']), '.motion-btn[aria-pressed="true"]::before'))  # pressed looks different
@@ -3253,11 +3329,14 @@ class DaylightTests(unittest.TestCase):
         self.assertIsNotNone(chapters)
         self.assertIn('id="reel-video"', section)
         items = re.findall(r'<li><button type="button" data-t="([\d.]+)"><span class="ch-t">(\d:\d\d)</span>([^<]+)</button></li>', chapters.group(1))
-        self.assertEqual(len(items), 7)
+        # Task 41: the liquid-glass reel (22.2 s) has six chapters, at the owner's times, in order.
+        self.assertEqual([(float(t), title) for t, _, title in items], [
+            (0, 'Cendavo'), (1.5, 'Your work is excellent'), (6, 'Three concept sites'), (12, 'Book from a phone'),
+            (15.4, 'Before / after'), (17.7, 'New websites, redesigns, care plans')])
         times = [float(t) for t, _, _ in items]
         self.assertEqual(times, sorted(times))
-        self.assertEqual(times[0], 0)
-        self.assertLess(times[-1], 20)  # the film is 20 seconds long
+        self.assertLess(times[-1], 22.2)  # the reel is 22.2 seconds long
+        self.assertEqual(len({title for _, _, title in items}), len(items))  # distinct names, as 0:00 and 0:01 sound alike
         for t, label, _ in items:
             self.assertEqual(label, f'0:{int(float(t)):02d}')
 
@@ -3471,6 +3550,19 @@ class DaylightInnerPageTests(unittest.TestCase):
                     self.assertNotIn('autoplay', attrs)
                     self.assertNotIn('src', attrs)
                     self.assertTrue(attrs.get('width') and attrs.get('height'))
+                    if 'close-video' in attrs.get('class', ''):
+                        # Task 41: the decorative ambient loop behind the closing panel: wide screens only, its still fetched
+                        # only near the screen, no file before reel.js plays it, inside an aria-hidden layer.
+                        self.assertEqual(attrs.get('aria-hidden'), 'true')
+                        self.assertEqual(attrs.get('data-loop'), 'wide')
+                        self.assertNotIn('poster', attrs)
+                        self.assertEqual(attrs.get('data-poster'), '/assets/glass/glass-ambient-poster.jpg')
+                        self.assertEqual(sources, [{'data-src': '/assets/glass/glass-ambient-1600.mp4', 'type': 'video/mp4'}])
+                        self.assertNotIn('controls', attrs)
+                        self.assertTrue(any(a.get('class') == 'close-loop' and a.get('aria-hidden') == 'true' for a in ancestors))
+                        for path in (attrs['data-poster'], sources[0]['data-src']):
+                            self.assertTrue((OUT / path.lstrip('/')).is_file())
+                        continue
                     self.assertRegex(attrs.get('poster', ''), r'^/assets/video/[a-z0-9-]+\.jpg$')
                     self.assertTrue((OUT / attrs['poster'].lstrip('/')).is_file())
                     self.assertEqual(len(sources), 1)
@@ -3547,17 +3639,36 @@ class DaylightInnerPageTests(unittest.TestCase):
         self.assertIn("video.setAttribute('preload', 'none')", reel)
         self.assertIn("video.setAttribute('aria-hidden', 'true')", reel)
 
-    def test_pause_motion_button_only_where_loops_play(self):
+    def test_pause_motion_button_on_every_page_that_moves(self):
+        # Task 41 (WCAG 2.2.2): every page with ongoing motion (WebGL, the drift, the marquee, video loops) gets exactly one
+        # fixed Pause motion button right after <main>, hidden until site.js runs; Demo and the 404 page have none.
         button = '<button class="motion-btn motion-fab" type="button" data-motion-toggle aria-pressed="false" hidden>Pause motion</button>'
-        for route in self.ROUTES:
-            if route == 'index.html':
-                continue  # the homepage's button sits in its hero stage (DaylightTests)
-            main = main_of(self.html[route])
+        moving = ('index.html', 'work/index.html', 'services/index.html', 'pricing/index.html', 'about/index.html', 'contact/index.html')
+        for route in moving:
             with self.subTest(route=route):
-                self.assertEqual(main.count(button), 1 if 'data-loop' in main else 0)
-                self.assertEqual(main.count('data-motion-toggle'), 1 if 'data-loop' in main else 0)
-        self.assertIn('data-loop', self.html['work/index.html'])
-        self.assertIn('data-loop', self.html['services/index.html'])
+                html = (OUT / route).read_text()
+                self.assertEqual(html.count('data-motion-toggle'), 1)
+                self.assertIn('</main>' + button + '<footer', html)
+                self.assertNotIn('data-motion-toggle', main_of(html))
+                self.assertLess(html.index('/assets/site.js'), html.index('/assets/glass-boot.js'))  # site.js drives it
+        for route in ('demo/index.html', '404.html'):
+            with self.subTest(route=route):
+                self.assertNotIn('data-motion-toggle', (OUT / route).read_text())
+        # One position for every page, set in the shared glass.css (no page sheet moves it), clear of the home bar.
+        glass = base_rules((OUT / 'assets/glass.css').read_text())
+        fab = rules_for(glass, '.motion-fab')[0]
+        for needle in ('position:fixed', 'env(safe-area-inset-bottom)', 'z-index:45'):
+            self.assertIn(needle, fab)
+        self.assertTrue(rules_for(glass, '.motion-fab:not([hidden])~.footer'))  # room under the footer's last line
+        for sheet in ('home.css', 'pages.css'):
+            css = (OUT / 'assets' / sheet).read_text()
+            self.assertNotIn('.motion-fab{', css)
+            self.assertNotRegex(css, r'\.motion-btn\{[^}]*position:fixed')
+        site = (OUT / 'assets/site.js').read_text()
+        self.assertIn("document.querySelector('[data-motion-toggle]')", site)
+        reel = (OUT / 'assets/reel.js').read_text()
+        self.assertNotIn('data-motion-toggle', reel)  # reel.js only follows the shared state
+        self.assertNotIn('motion.hidden', reel)
 
 
 class GlassPageSceneTests(unittest.TestCase):
@@ -3567,7 +3678,7 @@ class GlassPageSceneTests(unittest.TestCase):
 
     PAGES = {'work/index.html': ('slab', '.wk-clip', False), 'services/index.html': ('panes', '.sv-hero-media', True),
              'pricing/index.html': ('sheets', '.quote-desk', False), 'about/index.html': ('photos', '.ab-photos', True),
-             'contact/index.html': ('mark', '.ct-form', False)}
+             'contact/index.html': ('mark', '.ct-gl-spot', False)}
     # Task 40: the Contact form block as it stood before the scene was added (pages/contact.html source, placeholders intact).
     CONTACT_FORM_SHA256 = 'd2e002ac26f55a10571d853e20320bd8ee5fe26a07ee0e99003c9e3c10559220'
 

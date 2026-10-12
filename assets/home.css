@@ -52,7 +52,7 @@
 .hero-cap span{font:400 .82rem/1.4 var(--font-text);color:var(--ink-soft)}
 /* One Pause motion control for the whole page (WCAG 2.2.2): it stops the videos, the marquee, the atmosphere and the 3D
    loop. It floats in the corner as a glass pill. */
-.motion-btn{position:fixed;right:20px;bottom:20px;z-index:45;display:inline-flex;align-items:center;gap:8px;min-height:44px;padding:0 16px;border:1px solid rgba(255,255,255,.85);border-radius:var(--radius-pill);background:rgba(255,255,255,.66);-webkit-backdrop-filter:blur(14px) saturate(1.7);backdrop-filter:blur(14px) saturate(1.7);box-shadow:inset 0 1px 0 #fff,0 12px 30px -14px rgba(58,40,12,.4);font:600 .875rem/1 var(--font-display);color:var(--ink)}
+.motion-btn{display:inline-flex;align-items:center;gap:8px;min-height:44px;padding:0 16px;border:1px solid rgba(255,255,255,.85);border-radius:var(--radius-pill);background:rgba(255,255,255,.66);-webkit-backdrop-filter:blur(14px) saturate(1.7);backdrop-filter:blur(14px) saturate(1.7);box-shadow:inset 0 1px 0 #fff,0 12px 30px -14px rgba(58,40,12,.4);font:600 .875rem/1 var(--font-display);color:var(--ink)}
 .motion-btn::before{content:"";width:8px;height:10px;border-inline:2.5px solid currentColor}
 .motion-btn[aria-pressed="true"]::before{width:0;height:0;border:5px solid transparent;border-left:8px solid currentColor;border-right:0}
 .motion-btn:hover{background:#fff}
@@ -298,7 +298,6 @@
 .work-head .ulink{display:flex;width:fit-content}
 .work-head .ulink+.ulink{margin-left:0}
 .band-panel{padding:24px 20px}
-.motion-btn{right:12px;bottom:12px}
 }
 
 /* Motion: only for people who have not asked for reduced motion; only transform and opacity move.

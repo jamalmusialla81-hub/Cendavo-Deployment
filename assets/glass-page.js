@@ -8,7 +8,8 @@
      panes - Services: three stacked glass panes (New website / Redesign / Care plan) fanning out, upper panes further back
      sheets - Pricing: two frosted sheets and a warm disc behind the HTML quote card, which stays in front as text
      photos - About: a big glass C with the three studio photos floating behind it (the DOM collage steps back)
-     mark   - Contact: a small glass C behind the form panel's top-left corner, a headlight photo behind it; the form is untouched
+     mark   - Contact: a small glass C in its own fixed box (.ct-gl-spot) at the hero's top-right, above the form panel and
+              never behind it (Task 41), a headlight photo behind it; the form is untouched
    The loop runs only while the hero is on screen, the tab is visible and Pause motion is off (registered on the shared
    G.pauseFns fan-out, never by replacing G.onPauseChange); otherwise setAnimationLoop(null) stops it and videos pause. */
 import * as THREE from './vendor/three/three.module.min.js';
@@ -176,7 +177,7 @@ export function start(host, shared) {
 
   /* fit to the anchor: centre and scale from its rectangle, relative to the canvas */
   const P = { x: 0, y: 0, s: 1 };
-  const fit = { slab: [0.02, -0.06, 0.66], panes: [-0.08, 0.05, 1.1], sheets: [0, 0, 1.0], photos: [0, 0, 1.0], mark: [-0.5, -0.5, 0.3] }[kind];
+  const fit = { slab: [0.02, -0.06, 0.66], panes: [-0.08, 0.05, 1.1], sheets: [0, 0, 1.0], photos: [0, 0, 1.0], mark: [0, 0, 1.0] }[kind];
   const halfH = Math.tan(THREE.MathUtils.degToRad(15)) * 14;
   function layout() {
     const w = Math.max(1, host.clientWidth), h = Math.max(1, host.clientHeight);

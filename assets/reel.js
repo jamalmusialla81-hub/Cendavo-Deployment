@@ -11,10 +11,10 @@
   const fine = Boolean(win.matchMedia?.('(hover: hover) and (pointer: fine)').matches);
   const items = [], previews = [];
   let loaded = doc.readyState === 'complete';
-  let held = Boolean(still || saveData); // Pause motion pressed
-  const motion = doc.querySelector('[data-motion-toggle]');
-  const fab = Boolean(motion?.classList?.contains('motion-fab')); // the fixed button shows only while a loop is on screen
-  const showFab = () => { if (fab && doc.activeElement !== motion) motion.hidden = !items.some(it => it.loop && it.inView); };
+  // Pause motion (Task 41): the button belongs to site.js, which runs first and keeps the shared state in window.__glass;
+  // this controller only follows it (see the pauseFns listener at the end).
+  const glass = win.__glass = win.__glass || { paused: false, heroP: 0, pointer: { x: 0, y: 0 } };
+  let held = Boolean(still || saveData || glass.paused); // Pause motion pressed
   const playing = it => !it.video.paused;
   const attempt = it => {
     const video = it.video, source = video.querySelector('source');
@@ -31,9 +31,9 @@
     else if (!go && playing(it)) it.video.pause();
   };
   const add = (video, loop, label = () => {}) => {
-    const it = { video, loop, label, wanted: !still && !saveData };
+    const it = { video, loop, label, wanted: !held };
     video.muted = true;
-    if (win.IntersectionObserver) new win.IntersectionObserver(e => { it.inView = e[e.length - 1].isIntersecting; sync(it); showFab(); }, { threshold: 0.4 }).observe(video);
+    if (win.IntersectionObserver) new win.IntersectionObserver(e => { it.inView = e[e.length - 1].isIntersecting; sync(it); }, { threshold: 0.4 }).observe(video);
     // Liquid Glass (Task 37): a loop far down the page may carry data-poster instead of poster, so its still is fetched only
     // when it comes near the screen (not with the first load).
     if (video.dataset?.poster && win.IntersectionObserver) {
@@ -146,25 +146,15 @@
       new win.IntersectionObserver(e => (e[e.length - 1].isIntersecting ? start() : stop()), { rootMargin: '-35% 0px -35% 0px' }).observe(frame);
     }
   });
-  const loops = Array.from(doc.querySelectorAll('video[data-loop]')).filter(v => !(narrowNow && v.dataset.loop === 'wide')).map(v => add(v, true));
-  // Liquid Glass (Task 37): the same state is shared with the glass shell and the WebGL hero, so Pause motion also stops the
-  // drifting atmosphere and the 3D render loop (window.__glass.onPauseChange).
-  const glass = win.__glass = win.__glass || { paused: false, heroP: 0, pointer: { x: 0, y: 0 } };
-  if (motion && loops.length) {
-    const show = () => motion.setAttribute('aria-pressed', String(held));
-    glass.paused = held;
-    motion.addEventListener('click', () => {
-      held = !held;
-      glass.paused = held;
-      glass.onPauseChange?.(held);
-      items.forEach(it => { it.wanted = !held; sync(it); it.label(); });
-      if (held) previews.forEach(stop => stop());
-      show();
-    });
-    motion.addEventListener('blur', showFab);
-    show();
-    if (!fab) motion.hidden = false;
-  }
+  Array.from(doc.querySelectorAll('video[data-loop]')).filter(v => !(narrowNow && v.dataset.loop === 'wide')).forEach(v => add(v, true));
+  // Pause motion pressed or released (site.js, through the shared fan-out that glass.js and the WebGL scenes also join):
+  // every video and preview follows it.
+  (glass.pauseFns = glass.pauseFns || []).push(paused => {
+    held = Boolean(paused);
+    items.forEach(it => { it.wanted = !held; sync(it); it.label(); });
+    if (held) previews.forEach(stop => stop());
+  });
+  if (!glass.onPauseChange) glass.onPauseChange = paused => glass.pauseFns.forEach(fn => fn(paused));
   const start = () => { loaded = true; items.forEach(sync); };
   if (!loaded) win.addEventListener('load', () => (win.requestIdleCallback ? win.requestIdleCallback(start, { timeout: 2000 }) : win.setTimeout(start, 200)));
   doc.addEventListener('visibilitychange', () => { items.forEach(sync); if (doc.hidden) previews.forEach(stop => stop()); });

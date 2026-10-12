@@ -132,7 +132,7 @@ function run(env) {
   // The glass booking card as the HTML ships it: its final state (10:30 picked and booked).
   const book = element('book'); book.classList = classList(['booked']);
   const slot = element('slot'); slot.classList = classList(['on']);
-  // reel.js (loaded first) has already set aria-pressed: "true" when Save-Data or reduced motion holds the motion.
+  // site.js (loaded first, Task 41) has already set aria-pressed: "true" when Save-Data or reduced motion holds the motion.
   const toggle = element('toggle'); toggle.attrs['aria-pressed'] = env.held ? 'true' : 'false';
   // The class motion-boot.js would have set: .ph-wait (openings held by CSS) unless its failsafe already removed it.
   const root = element('html'); root.classList = classList(['js'].concat(env.reduce ? [] : ['motion'], env.wait ? ['ph-wait'] : []));
@@ -183,7 +183,7 @@ function run(env) {
     out.marquee = log.creates.filter(c => c.trigger && c.trigger.name === 'marq').length;
     out.notOnce = log.creates.filter(c => !c.once).length;
     if (hero && env.press) {
-      toggle.attrs['aria-pressed'] = 'true';  // reel.js flips it first (it is loaded first)
+      toggle.attrs['aria-pressed'] = 'true';  // site.js flips it first (it is loaded first)
       (toggle.listeners.click || []).forEach(fn => fn({ type: 'click' }));
       out.afterPress = { progressed: hero.progressed.slice(), stage: stage() };
       toggle.attrs['aria-pressed'] = 'false';
@@ -224,9 +224,10 @@ console.log(JSON.stringify({
 # rejects like iOS Low Power Mode), a fake IntersectionObserver the test drives by hand, matchMedia, Save-Data and optional
 # GSAP. Task 29: several reels on one page (the Services clips) must work independently, each with its own button name.
 REEL_SCRIPT = HARNESS + r"""
-const source = fs.readFileSync(process.argv[1], 'utf8');
-const WIDE = { src: '/assets/video/cendavo-showreel-1600.mp4', poster: '/assets/video/cendavo-showreel-poster-1600.jpg' };
-const NARROW = { src: '/assets/video/cendavo-showreel-vertical-720.mp4', poster: '/assets/video/cendavo-showreel-vertical-poster-720.jpg' };
+// Task 41: site.js owns the Pause motion button and runs first on every page (deferred, in order), so it runs first here.
+const source = fs.readFileSync(require('path').join(require('path').dirname(process.argv[1]), 'site.js'), 'utf8') + '\n' + fs.readFileSync(process.argv[1], 'utf8');
+const WIDE = { src: '/assets/glass/glass-reel-1600.mp4', poster: '/assets/glass/glass-reel-poster.jpg' };
+const NARROW = { src: '/assets/glass/glass-reel-vertical-720.mp4', poster: '/assets/glass/glass-reel-vertical-poster.jpg' };
 const settle = () => new Promise(resolve => setImmediate(resolve));
 function makeVideo(env, name, src) {
   const video = element(name, { source: [src || element('source')] });
@@ -376,7 +377,8 @@ async function runHero(env) {
 # stops on leave, blur, a hidden tab or Pause motion, and never starts under reduced motion or Save-Data. The film's bar
 # and time follow the video while it plays.
 PREVIEW_SCRIPT = HARNESS + r"""
-const source = fs.readFileSync(process.argv[1], 'utf8');
+// Task 41: site.js owns the Pause motion button and runs first on every page (deferred, in order), so it runs first here.
+const source = fs.readFileSync(require('path').join(require('path').dirname(process.argv[1]), 'site.js'), 'utf8') + '\n' + fs.readFileSync(process.argv[1], 'utf8');
 const settle = () => new Promise(resolve => setImmediate(resolve));
 function makeVideo(name) {
   const video = element(name, { source: [element('source')] });
@@ -1043,7 +1045,7 @@ class DemoScriptTests(unittest.TestCase):
             self.assertEqual(scrub['ease'], 'none')
 
     def test_pause_motion_jumps_the_choreography_to_its_end(self):
-        # The Pause motion button (owned by reel.js, which flips aria-pressed first) also ends the opening at once in its
+        # The Pause motion button (owned by site.js since Task 41, which flips aria-pressed first) also ends the opening at once in its
         # final state; pressing it again never replays it. With Save-Data the button starts pressed, so the opening is skipped
         # straight to its end.
         r = self.node_json(HOME_SCRIPT, HOME)
@@ -1091,8 +1093,8 @@ class DemoScriptTests(unittest.TestCase):
     def test_showreel_picks_the_cut_for_the_screen(self):
         # (a) At 640px and below the vertical cut and poster; above it the 1600 ones (home.css switches the frame at the same width).
         r = self.node_json(REEL_SCRIPT, REEL)
-        wide = ('/assets/video/cendavo-showreel-1600.mp4', '/assets/video/cendavo-showreel-poster-1600.jpg')
-        narrow = ('/assets/video/cendavo-showreel-vertical-720.mp4', '/assets/video/cendavo-showreel-vertical-poster-720.jpg')
+        wide = ('/assets/glass/glass-reel-1600.mp4', '/assets/glass/glass-reel-poster.jpg')
+        narrow = ('/assets/glass/glass-reel-vertical-720.mp4', '/assets/glass/glass-reel-vertical-poster.jpg')
         for name, expected in (('desktop', wide), ('wide', wide), ('phone', narrow), ('edge', narrow)):
             with self.subTest(case=name):
                 self.assertIsNone(r[name]['error'])
@@ -1698,9 +1700,10 @@ step('back to the top', () => scroll(40));
 console.log(JSON.stringify({ steps, focused, passive: (listeners.scroll || []).every(l => l.options && l.options.passive), js: root.classList.contains('js') }));
 """
 
-# reel.js's Pause motion button also pauses the glass layer and the WebGL loop (window.__glass), and every video.
+# The Pause motion button (site.js since Task 41; reel.js follows it) also pauses the glass layer and the WebGL loop (window.__glass), and every video.
 PAUSE_SCRIPT = HARNESS + r"""
-const source = fs.readFileSync(process.argv[1], 'utf8');
+// Task 41: site.js owns the Pause motion button and runs first on every page (deferred, in order), so it runs first here.
+const source = fs.readFileSync(require('path').join(require('path').dirname(process.argv[1]), 'site.js'), 'utf8') + '\n// Task 41 reel.js\n' + fs.readFileSync(process.argv[1], 'utf8');
 function run(env) {
   const videos = ['loop', 'phone'].map(name => {
     const src = element('source'); src.dataset.src = '/assets/video/' + name + '.mp4';
@@ -1709,26 +1712,36 @@ function run(env) {
     return v;
   });
   const motion = element('motion'); motion.hidden = true; motion.attrs['aria-pressed'] = 'false';
-  const parts = { 'video[data-loop]': videos, '[data-motion-toggle]': [motion] };
+  const parts = { 'video[data-loop]': env.noLoops ? [] : videos, '[data-motion-toggle]': [motion] };
   const doc = { documentElement: element('html'), readyState: 'complete', hidden: false, listeners: {}, addEventListener(type, fn) { (this.listeners[type] = this.listeners[type] || []).push(fn); },
     querySelector: s => (parts[s] || [])[0] || null, querySelectorAll: s => parts[s] || [] };
   const observers = [];
   class FakeObserver { constructor(cb) { this.cb = cb; this.targets = []; observers.push(this); } observe(t) { this.targets.push(t); } }
   const { win } = makeWindow(env, { IntersectionObserver: FakeObserver, navigator: { connection: { saveData: Boolean(env.saveData) } } });
   const calls = [];
-  if (env.shared) win.__glass = { paused: false, onPauseChange: p => calls.push(p) };
-  vm.runInNewContext(source, { window: win, document: doc });
-  observers.forEach(o => o.targets.forEach(t => o.cb([{ isIntersecting: true, target: t }])));
-  const out = { initial: win.__glass.paused, playing: videos.map(v => !v.paused) };
+  // The WebGL scene (or the glass layer) as it joins the shared state: a listener on the pauseFns fan-out. With shared, the
+  // fan-out is already installed, as glass-scene.js / glass-page.js / glass.js do.
+  if (env.shared) { const G = win.__glass = { paused: false, pauseFns: [p => calls.push(p)] }; G.onPauseChange = p => G.pauseFns.forEach(fn => fn(p)); }
+  // Task 41: Pricing and Contact have WebGL but no video loops, and only Pricing loads reel.js; neither hides the button.
+  vm.runInNewContext(env.noReel ? source.split('\n// Task 41 reel.js\n')[0] : source, { window: win, document: doc, getComputedStyle: () => ({}) });
+  if (env.lateScene) (win.__glass.pauseFns = win.__glass.pauseFns || []).push(p => calls.push(p));  // a scene imported after idle
+  const out = { initial: win.__glass.paused, hidden: motion.hidden, aria: motion.attrs['aria-pressed'], playing: videos.map(v => !v.paused) };
+  if (env.offScreen) observers.forEach(o => o.targets.forEach(t => o.cb([{ isIntersecting: false, target: t }])));
+  else observers.forEach(o => o.targets.forEach(t => o.cb([{ isIntersecting: true, target: t }])));
+  out.hiddenAfterScroll = motion.hidden;
+  out.playing = videos.map(v => !v.paused);
   (motion.listeners.click || []).forEach(fn => fn({ type: 'click' }));
   out.pressed = { paused: win.__glass.paused, aria: motion.attrs['aria-pressed'], playing: videos.map(v => !v.paused) };
   (motion.listeners.click || []).forEach(fn => fn({ type: 'click' }));
   out.released = { paused: win.__glass.paused, aria: motion.attrs['aria-pressed'], playing: videos.map(v => !v.paused) };
   out.calls = calls;
+  out.listeners = (motion.listeners.click || []).length;
   return out;
 }
 const desktop = { width: 1440, height: 900, fine: true, reduce: false };
-console.log(JSON.stringify({ shared: run({ ...desktop, shared: true }), alone: run(desktop), saveData: run({ ...desktop, saveData: true, shared: true }) }));
+console.log(JSON.stringify({ shared: run({ ...desktop, shared: true }), alone: run(desktop), saveData: run({ ...desktop, saveData: true, shared: true }),
+  noLoops: run({ ...desktop, noLoops: true, noReel: true, lateScene: true }), noLoopsReel: run({ ...desktop, noLoops: true, shared: true }),
+  offScreen: run({ ...desktop, offScreen: true, shared: true }), reducedNoLoops: run({ ...desktop, reduce: true, noLoops: true, noReel: true, shared: true }) }));
 """
 
 # glass.js: Lenis only with motion allowed, the drift held by Pause motion, refraction only in Chromium.
@@ -1899,6 +1912,29 @@ const { pathToFileURL } = require('url');
         save = r['saveData']
         self.assertTrue(save['initial'])  # Save-Data: held from the start, so WebGL never runs
         self.assertEqual(save['playing'], [False, False])
+
+    def test_pause_motion_works_on_every_page_that_moves_with_or_without_video(self):
+        # Task 41 (WCAG 2.2.2): site.js owns the button, so Pricing and Contact (WebGL and the drift, no video loops; Contact
+        # has no reel.js at all) get a working, visible control too. It is shown once site.js runs and never hides again when
+        # no loop is on screen; a press reaches the WebGL scene through the shared fan-out, even one imported later.
+        r = self.node_json(PAUSE_SCRIPT, REEL)
+        for name in ('noLoops', 'noLoopsReel', 'shared', 'offScreen'):
+            with self.subTest(case=name):
+                case = r[name]
+                self.assertFalse(case['hidden'])
+                self.assertFalse(case['hiddenAfterScroll'])
+                self.assertEqual(case['aria'], 'false')
+                self.assertEqual(case['pressed']['aria'], 'true')
+                self.assertTrue(case['pressed']['paused'])
+                self.assertEqual(case['released']['aria'], 'false')
+                self.assertFalse(case['released']['paused'])
+                self.assertEqual(case['calls'], [True, False])  # the WebGL pause hook fired once each way
+                self.assertEqual(case['listeners'], 1)  # one owner: reel.js adds no second click handler
+        self.assertEqual(r['offScreen']['playing'], [False, False])  # nothing on screen plays, the button stays
+        reduced = r['reducedNoLoops']
+        self.assertTrue(reduced['initial'])  # reduced motion: starts pressed
+        self.assertEqual((reduced['aria'], reduced['hidden']), ('true', False))
+        self.assertEqual(reduced['pressed']['aria'], 'false')  # a press releases it
 
     def test_glass_layer_keeps_lenis_drift_and_refraction_to_where_they_belong(self):
         r = self.node_json(GLASS_SCRIPT, GLASS)

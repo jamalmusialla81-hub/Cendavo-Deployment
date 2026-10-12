@@ -63,3 +63,7 @@
 @media(prefers-reduced-motion:no-preference){
 .site-header{transition:transform var(--dur-1) var(--ease-io)}
 }
+/* Pause motion (Task 41): one fixed button, the same corner on every page that moves, clear of the iPhone home bar; the
+   footer gains room below so the button never sits over its last line. The header (z-index 50) and its menu stay above it. */
+.motion-fab{position:fixed;right:max(12px,env(safe-area-inset-right));bottom:max(12px,env(safe-area-inset-bottom));z-index:45;box-shadow:0 12px 30px -14px rgba(58,40,12,.4)}
+.motion-fab:not([hidden])~.footer{padding-bottom:64px}

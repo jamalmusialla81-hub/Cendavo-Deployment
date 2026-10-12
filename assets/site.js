@@ -42,6 +42,28 @@ if (header) {
   }, { passive: true });
   header.addEventListener('focusin', showHeader);
 }
+// Pause motion (Task 41, WCAG 2.2.2): build_site.py puts one fixed button on every page with ongoing motion (WebGL, the
+// drifting atmosphere, the marquee, video loops). It works on its own, video or not: it holds the shared state
+// window.__glass.paused and tells every listener through __glass.onPauseChange (the pauseFns fan-out, which glass.js,
+// reel.js and the WebGL scenes join). It is shown once this runs and stays put; reduced motion or Save-Data start it pressed.
+{
+  const toggle = document.querySelector('[data-motion-toggle]');
+  if (toggle) {
+    const G = window.__glass = window.__glass || { paused: false, heroP: 0, pointer: { x: 0, y: 0 } };
+    const fns = G.pauseFns = G.pauseFns || [];
+    if (!G.onPauseChange) G.onPauseChange = paused => fns.forEach(fn => fn(paused));
+    const still = Boolean(window.matchMedia?.('(prefers-reduced-motion: reduce)').matches);
+    G.paused = still || Boolean(window.navigator?.connection?.saveData);
+    const show = () => toggle.setAttribute('aria-pressed', String(G.paused));
+    toggle.addEventListener('click', () => {
+      G.paused = !G.paused;
+      show();
+      G.onPauseChange?.(G.paused);
+    });
+    show();
+    toggle.hidden = false;
+  }
+}
 // 404 (Task 34): the browser window on the page names the address that was asked for, as text only (never markup).
 const asked = document.querySelector('[data-nf-path]');
 if (asked) {

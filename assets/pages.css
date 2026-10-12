@@ -53,7 +53,11 @@
 .close{position:relative;isolation:isolate;overflow:hidden;padding:clamp(80px,9vw,128px) 0 clamp(64px,7vw,88px);background:var(--ink);color:#fff}
 .close-media{position:absolute;inset:0;z-index:-1;overflow:hidden;opacity:.34}
 .close-media img{width:100%;height:100%;object-fit:cover}
-.close-media::after{content:"";position:absolute;inset:0;background:linear-gradient(180deg,var(--ink) 0%,rgba(14,14,13,.55) 40%,rgba(14,14,13,.7) 70%,var(--ink) 100%)}
+/* Task 41: the ambient glass loop, softly blurred, in its own still layer over the drifting photo (which stays as the
+   fallback: an unplayed video without its still is transparent); wide screens only. */
+.close-loop{position:absolute;inset:0;z-index:-1;overflow:hidden;opacity:.4;pointer-events:none}
+.close-video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;filter:blur(6px);transform:scale(1.06)}
+.close-media::after,.close-loop::after{content:"";position:absolute;inset:0;background:linear-gradient(180deg,var(--ink) 0%,rgba(14,14,13,.55) 40%,rgba(14,14,13,.7) 70%,var(--ink) 100%)}
 .close-h{margin:0;max-width:none;font-size:min(9.4rem,9.6vw);font-weight:820;font-stretch:90%;line-height:.9;letter-spacing:-.04em}
 .cl{display:block;white-space:nowrap}
 .close-foot{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:24px 48px;margin-top:clamp(36px,5vw,64px);padding-top:28px;border-top:1px solid rgba(255,255,255,.18)}
@@ -65,7 +69,6 @@
 .motion-btn::before{content:"";width:8px;height:10px;border-inline:2.5px solid currentColor}
 .motion-btn[aria-pressed="true"]::before{width:0;height:0;border:5px solid transparent;border-left:8px solid currentColor;border-right:0}
 .motion-btn:hover{border-color:var(--ink)}
-.motion-fab{position:fixed;right:max(16px,calc(var(--gut) - 8px));bottom:16px;z-index:40;box-shadow:var(--shadow-2)}
 
 /* Contact: the steps left, the form on a warm panel right. The form markup is the enquiry contract (site.css styles it). */
 .ct{padding:clamp(40px,6vw,88px) 0 clamp(72px,8vw,120px)}
@@ -83,7 +86,11 @@
 .ct-steps span:not(.ct-n){color:var(--ink-2);font-size:1rem}
 .ct-mail{margin:28px 0 0;padding-top:20px;border-top:1px solid var(--line);color:var(--ink-2)}
 .ct-mail .mail{font-weight:700}
-.ct-form{grid-column:7/13;padding:clamp(22px,3.4vw,48px);border-radius:28px;background:var(--warm);box-shadow:inset 0 0 0 1px rgba(14,14,13,.04)}
+/* Task 41: the glass C's own fixed-size box at the top-right (the scene fits the C to it), so the form never clips it;
+   the form panel sits above the scene layer all the same. */
+.ct-side{grid-row:1/span 2}
+.ct-gl-spot{grid-column:10/13;grid-row:1;justify-self:end;width:176px;height:176px;margin-bottom:16px}
+.ct-form{position:relative;z-index:2;grid-row:2;grid-column:7/13;padding:clamp(22px,3.4vw,48px);border-radius:28px;background:var(--warm);box-shadow:inset 0 0 0 1px rgba(14,14,13,.04)}
 .ct-form-h{margin:0 0 8px;font:780 clamp(1.6rem,1rem + 1.4vw,2.4rem)/1 var(--font-display);font-stretch:88%;letter-spacing:-.025em}
 .ct-form .notice{margin:0;color:var(--mute);line-height:1.5}
 .field-row{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px}
@@ -125,7 +132,7 @@
 .nf-sug a:hover{background:linear-gradient(90deg,var(--warm),transparent)}
 
 @media(max-width:1023px){
-.ct-side,.ct-form{grid-column:1/-1}
+.ct-side,.ct-form,.ct-gl-spot{grid-column:1/-1;grid-row:auto}
 .ct-side{padding-right:0}
 .ct-form{margin-top:48px}
 }
@@ -139,11 +146,12 @@
 .faq{margin-top:12px}
 .faq details p{padding-right:0}
 }
+@media(max-width:760px){.ct-gl-spot{display:none}}
 @media(max-width:640px){
+.close-loop{display:none}
 .field-row{grid-template-columns:minmax(0,1fr)}
 .ct-form{border-radius:22px}
 .form-foot .button,.close-foot .button,.pg-actions .button{width:100%}
-.motion-fab{right:12px;bottom:12px}
 }
 
 /* Motion: only for people who have not asked for reduced motion; only transform and opacity move, hover within 200 ms.
