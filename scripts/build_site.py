@@ -32,31 +32,37 @@ NAV = [('Home', '/'), ('Work', '/work/'), ('Services', '/services/'), ('Pricing'
 # Links left out of the desktop header row (CSS, 1081px+) but kept in the mobile menu and the footer (Night Shift Task 16).
 HEADER_OPTIONAL = {'/demo/'}
 # Page-specific scripts: each is loaded only on the page that uses it.
-# Page-specific stylesheets: the homepage's sections and device mockups (home.css) load only on /;
-# every inner page loads the shared inner-page stylesheet (pages.css) instead. The mockup kit (kit.css: device frames,
-# concept mini-sites and the quote sheet) loads, before the page stylesheet, only on the pages that show mockups.
+# Page-specific stylesheets: the homepage's sections and device mockups (home.css) load only on /. Every inner page loads
+# the shared Daylight inner-page stylesheet (pages.css: page hero, sections, questions, closing band, Contact, Demo, 404),
+# and Work, Services, Pricing and About add their own sheet after it (Task 34). The mockup kit (kit.css: the homepage's
+# "after" mini-site, the device bench that plays the concept loops and the social-clip phone frame) loads, before the page
+# stylesheets, only on the pages that show those.
 PAGE_STYLES = {'index': '<link rel="stylesheet" href="/assets/home.css">'}
 INNER_STYLE = '<link rel="stylesheet" href="/assets/pages.css">'
-# Services loads it too (Task 29): its two social videos sit in the kit's phone frame.
-KIT_PAGES = ('index', 'work', 'services', 'pricing')
+OWN_STYLE = ('work', 'services', 'pricing', 'about')
+KIT_PAGES = ('index', 'work', 'services')
 KIT_STYLE = '<link rel="stylesheet" href="/assets/kit.css">'
 
 
 def page_styles(key):
-    return (KIT_STYLE if key in KIT_PAGES else '') + PAGE_STYLES.get(key, INNER_STYLE)
+    own = f'<link rel="stylesheet" href="/assets/{key}.css">' if key in OWN_STYLE else ''
+    return (KIT_STYLE if key in KIT_PAGES else '') + PAGE_STYLES.get(key, INNER_STYLE + own)
 # Motion (Night Shift Task 10). GSAP 3.13 (vendored in /assets/vendor/gsap/, GSAP Standard "No Charge" License; see
 # LICENSE.txt there) loads, deferred, only on the pages that animate: GSAP, then ScrollTrigger, then motion.js (shared
-# reveals), then details.js (card tilt, cursor ring, step count-up; Task 29) on the inner motion pages, then reel.js (the
-# shared silent-video controller) on the pages with video, then home.js on /. The Daylight homepage (Task 33) skips
-# details.js: its motion rules allow no decorative rotation, so its cards neither tilt nor get a cursor ring. These pages
-# also load motion-boot.js in <head> (external, not deferred) to set the .js/.motion classes before first paint. There is
-# no first-visit intro any more. Pricing and About reuse the shared scripts only. Contact (the enquiry form) and Demo (the
-# browser app) load no GSAP and no motion scripts.
+# openings and reveals), then scenes.js on the inner motion pages, then reel.js (the one silent-video controller) on the
+# pages with video, then home.js on /. No page loads details.js since Daylight (Task 34): the motion rules allow no
+# decorative rotation, so cards neither tilt nor get a cursor ring. These pages also load motion-boot.js in <head>
+# (external, not deferred) to set the .js/.motion classes before first paint. Contact (the enquiry form), Demo (the
+# browser app) and the 404 page load no GSAP and no motion scripts.
 MOTION_PAGES = ('index', 'work', 'services', 'pricing', 'about')
 GSAP_CORE = '<script src="/assets/vendor/gsap/gsap.min.js" defer></script><script src="/assets/vendor/gsap/ScrollTrigger.min.js" defer></script><script src="/assets/motion.js" defer></script>'
-GSAP = GSAP_CORE + '<script src="/assets/details.js" defer></script>'
+# The inner motion pages add scenes.js (Task 34: device benches, drawn lines, the Services vignettes, the Work queue and the
+# film frame) after motion.js; the homepage does not need it, which keeps its first-party script within the 30 KB budget.
+SCENES = '<script src="/assets/scenes.js" defer></script>'
 REEL = '<script src="/assets/reel.js" defer></script>'
-PAGE_SCRIPTS = {'index': GSAP_CORE + REEL + '<script src="/assets/home.js" defer></script>', 'work': GSAP + REEL, 'services': GSAP + REEL, 'pricing': GSAP, 'about': GSAP, 'demo': '<script src="/assets/demo.js" defer></script>', 'contact': '<script src="/assets/enquiry.js" defer></script>'}
+PAGE_SCRIPTS = {'index': GSAP_CORE + REEL + '<script src="/assets/home.js" defer></script>', 'work': GSAP_CORE + SCENES + REEL,
+                'services': GSAP_CORE + SCENES + REEL, 'pricing': GSAP_CORE + SCENES, 'about': GSAP_CORE + SCENES + REEL,
+                'demo': '<script src="/assets/demo.js" defer></script>', 'contact': '<script src="/assets/enquiry.js" defer></script>'}
 
 
 def boot_script(key):

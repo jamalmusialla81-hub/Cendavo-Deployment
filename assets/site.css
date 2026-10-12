@@ -10,12 +10,12 @@
 @font-face{font-family:"Atkinson Hyperlegible";src:url("/assets/fonts/archivo-var-latin.woff2") format("woff2");font-weight:700;font-style:normal;unicode-range:U+0030-0039;font-display:swap}
 :root{
 --paper:#FFFFFF;--warm:#F6F5F1;--warm-2:#EEECE5;--ink:#0E0E0D;--ink-2:#2A2926;--mute:#605D57;--amber:#D9A441;--amber-ink:#8C5A1C;--ok:#1E6B47;--danger:#A3341F;
-/* Night Shift surfaces, used only inside the inner pages' dark <main> (pages.css) until Task 34 */
+/* Night Shift greys, kept for the few ink surfaces (the demo's side panel, the homepage showreel button) */
 --bone:#EDEAE3;--bone-2:#E3DFD6;--stone:#A8A49B;--ink-soft:#4F4C46;--amber-hover:#E6B65A;
---line:rgba(237,234,227,.14);--line-dark:rgba(14,14,13,.14);
+--line:rgba(14,14,13,.1);--line-2:rgba(14,14,13,.16);--line-dark:rgba(14,14,13,.14);
 --space-1:4px;--space-2:8px;--space-3:12px;--space-4:16px;--space-5:20px;--space-6:24px;--space-8:32px;--space-10:40px;--space-12:48px;--space-16:64px;--space-20:80px;--space-24:96px;--space-32:128px;
 --radius-sm:2px;--radius-md:4px;--radius-lg:6px;--radius-pill:999px;
---shadow-1:0 1px 2px rgba(14,14,13,.08);--shadow-2:0 40px 70px -40px rgba(14,14,13,.55);--shadow-lift:0 0 0 1px rgba(14,14,13,.06),0 6px 14px -6px rgba(58,40,12,.16),0 22px 48px -18px rgba(14,14,13,.22);
+--shadow-1:0 1px 2px rgba(14,14,13,.08);--shadow-2:0 0 0 1px rgba(14,14,13,.07),0 1px 2px rgba(14,14,13,.05),0 10px 24px -12px rgba(58,40,12,.22);--shadow-lift:0 0 0 1px rgba(14,14,13,.06),0 6px 14px -6px rgba(58,40,12,.16),0 22px 48px -18px rgba(14,14,13,.22);
 --ease-out:cubic-bezier(.2,.8,.2,1);--ease-io:cubic-bezier(.7,0,.2,1);--dur-1:200ms;--dur-2:400ms;--dur-3:700ms;--dur-4:1000ms;
 --font-display:"Archivo","Helvetica Neue",Arial,sans-serif;
 --font-text:"Atkinson Hyperlegible","Helvetica Neue",Arial,sans-serif;
@@ -43,11 +43,7 @@ h3{font-size:var(--text-h3);font-weight:650;font-stretch:100%;line-height:1.1;le
 p{margin-bottom:var(--space-4);max-width:var(--measure)}
 ::selection{background:var(--amber);color:var(--ink)}
 .wrap{width:100%;max-width:var(--max);margin-inline:auto;padding-inline:var(--gut)}
-.bone,.section{background:var(--bone);color:var(--ink)}
-.bone p,.section p{color:var(--ink-soft)}
-.lead{font-size:clamp(1.125rem,1.05rem + .35vw,1.3125rem);color:var(--stone);max-width:38rem}
-.eyebrow{display:block;margin-bottom:var(--space-3);color:var(--ink-soft);font:600 var(--text-small)/1.3 var(--font-display)}
-.eyebrow.light,.page-hero .eyebrow{color:var(--stone)}
+.eyebrow{display:block;margin-bottom:var(--space-3);color:var(--amber-ink);font:600 var(--text-small)/1.3 var(--font-display)}
 
 /* Header and navigation */
 .site-header{position:sticky;top:0;z-index:50;background:rgba(255,255,255,.92);-webkit-backdrop-filter:saturate(1.6) blur(16px);backdrop-filter:saturate(1.6) blur(16px);border-bottom:1px solid var(--line-dark)}
@@ -71,8 +67,8 @@ p{margin-bottom:var(--space-4);max-width:var(--measure)}
 .button:hover{background:var(--amber-hover)}
 .button.go::after{content:"";flex:none;width:8px;height:8px;margin-left:2px;border-top:1.7px solid;border-right:1.7px solid;transform:rotate(45deg)}
 .button.outline{background:transparent;border-color:currentColor;color:inherit}
-.button.outline:hover{background:rgba(237,234,227,.1)}
-.bone .button.outline:hover,.section .button.outline:hover{background:rgba(14,14,13,.06)}
+.button.outline{border-color:var(--line-2)}
+.button.outline:hover{border-color:var(--ink);background:var(--warm)}
 .button.dark,.site-header .button{background:var(--ink);color:#fff}
 .button.dark:hover,.site-header .button:hover{background:var(--ink-2)}
 .button.small{min-height:48px;padding:0 18px;font-size:.95rem}
@@ -92,53 +88,18 @@ p{margin-bottom:var(--space-4);max-width:var(--measure)}
 .footer-sign{overflow:hidden;height:.6em;font:800 clamp(3.5rem,15.5vw,24rem)/.8 var(--font-display);font-stretch:125%;letter-spacing:-.02em;text-align:center;white-space:nowrap;color:#ECE9E1;user-select:none}
 .footer-word{display:block}
 
-/* FAQ (native details) */
-.faq{max-width:50rem}
-.faq details{border-top:1px solid var(--line)}
-.faq details:last-of-type{border-bottom:1px solid var(--line)}
-.section .faq details{border-color:var(--line-dark)}
-.faq summary{display:flex;align-items:center;justify-content:space-between;gap:var(--space-6);min-height:44px;padding:var(--space-5) 0;font:620 1.125rem/1.3 var(--font-display);cursor:pointer;list-style:none}
-.faq summary::-webkit-details-marker{display:none}
-.faq summary::after{content:"";flex:none;width:10px;height:10px;margin-right:var(--space-2);border-right:1.5px solid;border-bottom:1.5px solid;transform:rotate(45deg)}
-.faq details[open]>summary::after{transform:rotate(-135deg)}
-.faq details p{margin:0 0 var(--space-6);color:var(--stone)}
-.section .faq details p{color:var(--ink-soft)}
-
-/* Inner-page base (page hero, banner, sections, demo layout). Page sections live in pages.css; .card, .grid-3, .split, .panel and .price are no longer used by any page. */
-.page-hero{padding:clamp(56px,8vw,120px) 0 clamp(48px,6vw,88px)}
-.page-hero h1{max-width:18ch}
-.banner{max-width:var(--measure);margin-top:var(--space-6);padding:var(--space-5) var(--space-6);border-left:3px solid var(--amber);background:var(--ink-2);color:var(--bone)}
-.section{padding:var(--section) 0}
-.section.alt{background:var(--bone-2)}
-.card,.panel,.price,.demo-main{background:var(--paper);border:1px solid var(--line-dark);border-radius:var(--radius-lg);padding:var(--space-8)}
-.card .number{display:block;margin-bottom:var(--space-6);color:var(--ink-soft);font:650 .875rem/1 var(--font-display)}
-.card a{font-weight:700}
-.grid-3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:var(--space-5)}
-.split,.contact-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:var(--space-16);align-items:start}
-.panel ul{list-style:none;padding:0;margin:0}
-.panel li{display:flex;gap:var(--space-4);padding:var(--space-4) 0;border-bottom:1px solid var(--line-dark);font-weight:700}
-.panel li:last-child{border-bottom:0}
-.panel li::before{content:"";flex:none;width:12px;height:1.5px;margin-top:.8em;background:var(--amber)}
-.notice,.note{font-size:var(--text-small)}
-.price-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:var(--space-5)}
-.price{padding:var(--space-10)}
-.price.featured{background:var(--ink);color:var(--bone);border-color:var(--ink)}
-.price.featured p,.price.featured li{color:var(--stone)}
-.price .amount{margin:var(--space-3) 0;color:inherit;font:780 clamp(2.2rem,1.8rem + 1.5vw,3rem)/1.1 var(--font-display);font-stretch:88%;letter-spacing:-.02em}
-.price .amount span{font:400 1rem var(--font-text);letter-spacing:0}
-.price ul{padding-left:var(--space-5);min-height:140px}
-.price li{padding:var(--space-1) 0}
-.contact-grid .panel{margin-bottom:var(--space-5)}
-
-/* Forms (enquiry form hooks: .field-error, [aria-invalid], .status[data-tone], .hp) */
-.form{display:grid;gap:var(--space-4)}
-.field{display:grid;gap:var(--space-2);font-weight:700;font-size:var(--text-small)}
-.field input,.field select,.field textarea{width:100%;min-height:48px;padding:10px 12px;border:1px solid var(--ink-soft);border-radius:var(--radius-sm);background:var(--paper);color:var(--ink);font-weight:400;font-size:1rem}
-.field textarea{min-height:120px}
-.field .optional,.field-hint{font-weight:400;color:var(--ink-soft)}
-.field-hint{margin:0;font-size:.875rem}
+/* Forms (enquiry form hooks: .field-error, [aria-invalid], .status[data-tone], .hp). Daylight fields: white, rounded, an ink
+   border and an amber halo on focus (the ink outline stays the visible focus indicator). */
+.form{display:grid;gap:18px}
+.field{display:grid;gap:7px;align-content:start;min-width:0;font:650 .9375rem/1.25 var(--font-display)}
+.field input,.field select,.field textarea{width:100%;min-height:52px;padding:12px 14px;border:1px solid var(--line-2);border-radius:12px;background:#fff;color:var(--ink);font:400 1rem/1.4 var(--font-text)}
+.field input:hover,.field select:hover,.field textarea:hover{border-color:rgba(14,14,13,.36)}
+.field input:focus,.field select:focus,.field textarea:focus{border-color:var(--ink);box-shadow:0 0 0 3px rgba(217,164,65,.35)}
+.field textarea{min-height:140px;resize:vertical}
+.field .optional,.field-hint{font-weight:400;color:var(--mute)}
+.field-hint{margin:0;font:400 .875rem/1.4 var(--font-text)}
 .req{color:var(--danger)}
-.field-error{margin:0;color:var(--danger);font-weight:700;font-size:.875rem}
+.field-error{margin:0;color:var(--danger);font:700 .875rem/1.4 var(--font-text)}
 .field-error:empty{display:none}
 .field [aria-invalid="true"]{border-color:var(--danger);border-width:2px}
 .status{min-height:24px;margin:var(--space-3) 0 0;color:var(--ok);font-weight:700}
@@ -146,7 +107,9 @@ p{margin-bottom:var(--space-4);max-width:var(--measure)}
 
 /* Demonstration project (demo page) */
 .demo-shell{display:grid;grid-template-columns:280px minmax(0,1fr);gap:var(--space-6);align-items:start}
-.demo-side{padding:var(--space-8);border-radius:var(--radius-lg);background:var(--ink);color:var(--bone)}
+.demo-side{padding:var(--space-8);border-radius:22px;background:var(--ink);color:var(--bone)}
+.demo-main{padding:var(--space-8);border-radius:22px;background:#fff;box-shadow:var(--shadow-lift)}
+.eyebrow.light{color:var(--amber)}
 .demo-side h3{font-size:1.25rem}
 .demo-side p{color:var(--stone);font-size:var(--text-small)}
 .demo-side .notice{margin:var(--space-3) 0 0}
@@ -157,24 +120,23 @@ p{margin-bottom:var(--space-4);max-width:var(--measure)}
 .demo-toolbar h2{font-size:1.75rem;margin:0}
 .table-wrap{overflow-x:auto}
 .data-table{border-collapse:collapse;width:100%;font-size:.875rem}
-.data-table th{text-align:left;color:var(--ink-soft);font-size:.75rem;text-transform:uppercase;letter-spacing:.08em}
+.data-table th{text-align:left;color:var(--mute);font-size:.75rem;text-transform:uppercase;letter-spacing:.08em}
 .data-table th,.data-table td{padding:var(--space-4);border-bottom:1px solid var(--line-dark);white-space:nowrap}
 .pill{display:inline-block;padding:4px 10px;border-radius:var(--radius-pill);background:#E1EDE5;color:var(--ok);font-weight:700}
 .pill.open{background:#F3E6CC;color:#6E4A10}
-.pill.done{background:var(--bone-2);color:var(--ink-soft);text-decoration:line-through}
+.pill.done{background:var(--warm-2);color:var(--ink-2);text-decoration:line-through}
 tr.selected{background:#F3EBD8;outline:2px solid var(--ink);outline-offset:-2px}
 td.actions{display:flex;gap:6px;flex-wrap:wrap;margin:0}
-.table-action{min-height:36px;padding:7px 10px;border:0;border-radius:var(--radius-sm);background:var(--bone-2);color:var(--ink)}
+.table-action{min-height:36px;padding:7px 12px;border:0;border-radius:var(--radius-pill);background:var(--warm-2);color:var(--ink)}
 .table-action[aria-pressed="true"]{background:var(--ink);color:var(--bone)}
 .demo-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:var(--space-5);margin-top:var(--space-6)}
-.demo-box{padding:var(--space-5);border-radius:var(--radius-md);background:var(--bone)}
-.empty{padding:var(--space-5);color:var(--ink-soft);text-align:center}
+.demo-box{padding:var(--space-6);border-radius:18px;background:var(--warm)}
+.empty{padding:var(--space-5);color:var(--mute);text-align:center}
 
-/* Focus, skip link and utilities. Ink ring on paper and warm surfaces (the default); bone ring on ink surfaces (the inner
-   pages' <main> in pages.css, the homepage closing band in home.css). Amber is below 3:1 on paper, so it is never a ring. */
+/* Focus, skip link and utilities. Ink ring on paper and warm surfaces (the default); bone or white rings on the ink surfaces
+   (the demo's side panel here, the closing bands in home.css and pages.css). Amber is below 3:1 on paper, so it is never a ring. */
 :focus-visible{outline:2px solid var(--ink);outline-offset:3px}
-.bone :focus-visible,.section :focus-visible{outline-color:var(--ink)}
-.demo-side :focus-visible,.price.featured :focus-visible{outline-color:var(--bone)}
+.demo-side :focus-visible{outline-color:var(--bone)}
 main:focus{outline:none;box-shadow:none}
 .skip-link{position:absolute;left:12px;top:-100px;z-index:100;padding:12px 18px;border-radius:var(--radius-sm);background:var(--ink);color:#fff;font-weight:700}
 .skip-link:focus{top:12px}
@@ -201,14 +163,13 @@ main:focus{outline:none;box-shadow:none}
 .js .menu[aria-expanded="true"]~.button{order:4;margin-bottom:var(--space-4)}
 }
 @media(max-width:860px){
-.split,.contact-grid,.demo-shell,.grid-3,.price-grid,.demo-grid{grid-template-columns:minmax(0,1fr)}
-.split,.contact-grid{gap:var(--space-10)}
+.demo-shell,.demo-grid{grid-template-columns:minmax(0,1fr)}
 }
 @media(max-width:640px){
 .nav>.button{width:100%}
 .js .nav>.button{display:none}
 .js .menu[aria-expanded="true"]~.button{display:inline-flex}
-.demo-main,.demo-side,.price{padding:var(--space-5)}
+.demo-main,.demo-side{padding:var(--space-5)}
 }
 
 /* Motion: only for people who have not asked for reduced motion; transform only, hover feedback within 200 ms. GSAP pages use their own matchMedia guard. */
@@ -217,8 +178,8 @@ main:focus{outline:none;box-shadow:none}
 @media(prefers-reduced-motion:no-preference){
 /* Page transitions (Night Shift Task 29): cross-document View Transitions, only for people who have not asked for reduced
    motion; browsers without support navigate as usual. The header stays put, the page's one H1 morphs into the next page's,
-   and the new page wipes up over the old one (450 ms). Each name is given to one element per page. The cursor ring is
-   drawn by details.js on fine pointers only; it never takes clicks and the native cursor stays. */
+   and the new page wipes up over the old one (450 ms). Each name is given to one element per page. The cursor ring
+   belongs to details.js, which no page loads since Daylight (Task 34); it never takes clicks and the native cursor stays. */
 @view-transition{navigation:auto}
 .site-header{view-transition-name:site-header}
 main h1{view-transition-name:page-title}
@@ -230,10 +191,5 @@ main h1{view-transition-name:page-title}
 .cursor-ring{position:fixed;top:0;left:0;z-index:200;width:0;height:0;pointer-events:none;mix-blend-mode:difference}
 .cursor-ring span{position:absolute;top:-18px;left:-18px;width:36px;height:36px;border:1.5px solid #fff;border-radius:50%;pointer-events:none;transition:transform var(--dur-1) var(--ease-out)}
 .cursor-ring.is-link span{transform:scale(1.6)}
-/* Work index tiles (/work/ only until Task 34; the Daylight homepage cards use a 200 ms push-in instead): one soft light
-   sweeps across the photo on hover or keyboard focus. It snaps back unseen (no transition on the way out). */
-.motion .wk-tile-img{position:relative}
-.motion .wk-tile-img::after{content:"";position:absolute;inset:0;background:linear-gradient(105deg,transparent 30%,rgba(242,239,232,.16) 50%,transparent 70%);transform:translateX(-101%);pointer-events:none}
-.motion :is(.wk-tile a:hover,.wk-tile a:focus-visible) .wk-tile-img::after{transform:translateX(101%);transition:transform var(--dur-3) var(--ease-out)}
 }
 @media(prefers-reduced-motion:reduce){::view-transition-group(*),::view-transition-old(*),::view-transition-new(*){animation:none!important}}

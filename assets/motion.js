@@ -1,6 +1,7 @@
-// Shared motion for Home, Work, Services, Pricing and About (never Contact or Demo). Everything is visible without it. Start
-// states come from JS inside the reduced-motion guard; openings are also held by CSS while .ph-wait is on <html> (see
-// motion-boot.js). Only transform, opacity and clip-path animate (never visibility).
+// Shared motion for Home, Work, Services, Pricing and About (never Contact, Demo or 404). Everything is visible without
+// it: start states come from JS inside the reduced-motion guard, openings are also held by CSS while .ph-wait is on <html>
+// (motion-boot.js). Only transform, opacity and clip-path animate. Daylight (Task 34): the plan's two curves and four
+// durations. The inner pages' scroll scenes (benches, drawn lines, vignettes) are in scenes.js, which Home does not load.
 (() => {
   const doc = document;
   const root = doc.documentElement;
@@ -10,8 +11,26 @@
   const DIM = 0.45; // inactive "What we do" headings: bone at this opacity on ink stays above 3:1 (tested)
   const ownsOpening = !doc.querySelector('.hero-h'); // home.js opens the homepage hero and releases .ph-wait itself
   const release = () => root.classList.remove('ph-wait');
+  // The two Daylight curves (CSS cubic-bezier): entrances, and changes of state.
+  const bezier = (x1, y1, x2, y2) => {
+    const at = (t, a, b) => 3 * a * t * (1 - t) * (1 - t) + 3 * b * t * t * (1 - t) + t * t * t;
+    return x => {
+      if (x <= 0 || x >= 1) return x <= 0 ? 0 : 1;
+      let low = 0, high = 1, t = x;
+      for (let i = 0; i < 24; i++) {
+        if (at(t, x1, x2) < x) low = t; else high = t;
+        t = (low + high) / 2;
+      }
+      return at(t, y1, y2);
+    };
+  };
+  const IN = bezier(0.2, 0.8, 0.2, 1);
+  const IO = bezier(0.7, 0, 0.2, 1);
+  const SHOWN = 'opacity,transform';
+  // fromTo pair: rise y px into place.
+  const up = (y, duration, stagger) => [{ opacity: 0, y }, { opacity: 1, y: 0, duration, stagger: stagger || 0, clearProps: SHOWN }];
 
-  // Home "What we do": row n (hovered, focused or, on large screens, crossing mid-viewport) shows photo n. Without this
+  // "What we do" rows: row n (hovered, focused or, on large screens, crossing mid-viewport) shows photo n. Without this
   // script the first photo shows; without GSAP the swap is the guarded CSS crossfade.
   const rows = $$('.svc');
   const panel = doc.querySelector('.svc-panel');
@@ -47,20 +66,28 @@
   const mm = gsap.matchMedia();
   // Scroll reveals only below the fold: hiding what is already on screen would make it blink.
   const later = list => list.filter(item => item.getBoundingClientRect().top >= window.innerHeight);
+  const once = (trigger, start) => ({ trigger, start: start || 'top 82%', once: true });
 
   mm.add(MOTION, () => {
-    // Openings, only while CSS holds them (after the 2.5 s failsafe they stay shown): lines rise through their masks, photos
+    // Openings, only while CSS holds them (after the 2.5 s failsafe they stay shown): lines rise through their masks, frames
     // un-mask in turn, copy follows. fromTo applies the CSS start states before .ph-wait goes, so nothing flashes.
     if (ownsOpening && root.classList.contains('ph-wait')) {
       $$('[data-ph]').forEach(head => {
-        const tl = gsap.timeline({ defaults: { ease: 'power4.out' } });
+        const tl = gsap.timeline({ defaults: { ease: IN } });
         const lines = $$('h1 .ln > span', head);
         const media = $$('[data-ph-media]', head);
         const fades = $$('[data-ph-fade]', head);
-        if (lines.length) tl.fromTo(lines, { yPercent: 108, y: 0 }, { yPercent: 0, y: 0, duration: 0.9, stagger: 0.08, clearProps: 'transform' }, 0);
-        if (media.length) tl.fromTo(media, { clipPath: 'inset(0 0 0 100%)' }, { clipPath: 'inset(0 0 0 0%)', duration: 1, stagger: 0.12, ease: 'expo.inOut', clearProps: 'clipPath' }, 0.05);
-        if (fades.length) tl.fromTo(fades, { y: 18, opacity: 0 }, { y: 0, opacity: 1, duration: 0.6, stagger: 0.08, clearProps: 'opacity,transform' }, 0.3);
+        if (lines.length) tl.fromTo(lines, { yPercent: 108, y: 0 }, { yPercent: 0, y: 0, duration: 1, stagger: 0.08, clearProps: 'transform' }, 0);
+        if (media.length) tl.fromTo(media, { clipPath: 'inset(0 0 0 100%)' }, { clipPath: 'inset(0 0 0 0%)', duration: 1, stagger: 0.08, ease: IO, clearProps: 'clipPath' }, 0.05);
+        if (fades.length) tl.fromTo(fades, { y: 18, opacity: 0 }, { y: 0, opacity: 1, duration: 0.7, stagger: 0.08, clearProps: SHOWN }, 0.3);
       });
+      // Pricing: the quote sheet fills in line by line, then its fixed-price line is set, within 1.2 s.
+      const sheet = doc.querySelector('[data-sheet]');
+      if (sheet) {
+        gsap.timeline({ defaults: { ease: IN } })
+          .fromTo($$('.q-lines li', sheet), ...up(8, 0.4, 0.06), 0.4)
+          .fromTo($$('.q-total', sheet), { clipPath: 'inset(0% 100% 0% 0% round 12px)' }, { clipPath: 'inset(0% 0% 0% 0% round 12px)', duration: 0.4, ease: IO, clearProps: 'clipPath' }, 0.8);
+      }
     }
 
     // Section headings and short copy rise once as they scroll in; image frames un-mask once.
@@ -68,16 +95,21 @@
     const reveals = later($$('[data-reveal]'));
     if (rises.length) {
       gsap.set(rises, { opacity: 0, y: 28 });
-      ScrollTrigger.batch(rises, { start: 'top 88%', once: true, onEnter: batch => gsap.to(batch, { opacity: 1, y: 0, duration: 0.8, stagger: 0.08, ease: 'power3.out', clearProps: 'opacity,transform' }) });
+      ScrollTrigger.batch(rises, { start: 'top 88%', once: true, onEnter: batch => gsap.to(batch, { opacity: 1, y: 0, duration: 0.7, stagger: 0.08, ease: IN, clearProps: SHOWN }) });
     }
     if (reveals.length) {
       gsap.set(reveals, { clipPath: 'inset(0 0 100% 0)' });
-      ScrollTrigger.batch(reveals, { start: 'top 85%', once: true, onEnter: batch => gsap.to(batch, { clipPath: 'inset(0 0 0% 0)', duration: 1, stagger: 0.09, ease: 'expo.inOut', clearProps: 'clipPath' }) });
+      ScrollTrigger.batch(reveals, { start: 'top 85%', once: true, onEnter: batch => gsap.to(batch, { clipPath: 'inset(0 0 0% 0)', duration: 1, stagger: 0.08, ease: IO, clearProps: 'clipPath' }) });
     }
 
     // Device and document mockups slide up into place once.
     later($$('[data-devices]')).forEach(item => {
-      gsap.from(item, { y: 70, rotation: 3, opacity: 0, duration: 1, ease: 'power3.out', clearProps: 'transform,opacity', scrollTrigger: { trigger: item, start: 'top 85%', once: true } });
+      gsap.from(item, { y: 40, opacity: 0, duration: 1, ease: IN, clearProps: SHOWN, scrollTrigger: once(item, 'top 85%') });
+    });
+
+    // Lists arrive in reading order.
+    later($$('[data-stagger]')).forEach(list => {
+      gsap.fromTo(Array.from(list.children), { opacity: 0, y: 12 }, { opacity: 1, y: 0, duration: 0.7, stagger: 0.06, ease: IN, clearProps: SHOWN, scrollTrigger: once(list) });
     });
 
     // The incoming photo wipes up over the outgoing one; other headings dim.
@@ -87,8 +119,8 @@
       swap = (index, previous) => {
         gsap.killTweensOf(photos);
         if (photos[previous]) gsap.set(photos[previous], { clearProps: 'clipPath' });
-        if (photos[index]) gsap.fromTo(photos[index], { clipPath: 'inset(100% 0 0 0)' }, { clipPath: 'inset(0% 0 0 0)', duration: 0.8, ease: 'expo.inOut', clearProps: 'clipPath' });
-        gsap.to(heads, { opacity: at => (at === index ? 1 : DIM), duration: 0.4, ease: 'power2.out', overwrite: true });
+        if (photos[index]) gsap.fromTo(photos[index], { clipPath: 'inset(100% 0 0 0)' }, { clipPath: 'inset(0% 0 0 0)', duration: 0.7, ease: IO, clearProps: 'clipPath' });
+        gsap.to(heads, { opacity: at => (at === index ? 1 : DIM), duration: 0.4, ease: IN, overwrite: true });
       };
     }
 
@@ -98,7 +130,7 @@
       const details = event.currentTarget;
       if (!details.open) return;
       const answer = Array.from(details.children).filter(child => child.tagName !== 'SUMMARY');
-      gsap.fromTo(answer, { opacity: 0, y: -8 }, { opacity: 1, y: 0, duration: 0.35, ease: 'power2.out', clearProps: 'opacity,transform' });
+      gsap.fromTo(answer, { opacity: 0, y: -8 }, { opacity: 1, y: 0, duration: 0.4, ease: IN, clearProps: SHOWN });
     };
     faqs.forEach(details => details.addEventListener('toggle', onToggle));
     return () => {
@@ -122,8 +154,8 @@
   mm.add(MOTION + ' and (hover: hover) and (pointer: fine)', () => {
     const clamp = value => Math.max(-MAX_PULL, Math.min(MAX_PULL, value));
     const cleanups = $$('.button.go').map(button => {
-      const toX = gsap.quickTo(button, 'x', { duration: 0.4, ease: 'power3.out' });
-      const toY = gsap.quickTo(button, 'y', { duration: 0.4, ease: 'power3.out' });
+      const toX = gsap.quickTo(button, 'x', { duration: 0.4, ease: IN });
+      const toY = gsap.quickTo(button, 'y', { duration: 0.4, ease: IN });
       const move = event => {
         const box = button.getBoundingClientRect();
         toX(clamp((event.clientX - box.left - box.width / 2) * 0.2));

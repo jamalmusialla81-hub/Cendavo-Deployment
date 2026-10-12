@@ -13,3 +13,9 @@ document.addEventListener('keydown', event => {
   // Only move focus when the toggle is actually visible (narrow layouts).
   if (getComputedStyle(menu).display !== 'none') menu.focus();
 });
+// 404 (Task 34): the browser window on the page names the address that was asked for, as text only (never markup).
+const asked = document.querySelector('[data-nf-path]');
+if (asked) {
+  const path = window.location.pathname || '/';
+  asked.textContent = path.length > 42 ? path.slice(0, 41) + '…' : path;
+}

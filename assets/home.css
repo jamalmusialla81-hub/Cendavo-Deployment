@@ -289,7 +289,7 @@
 .ph-wait .hero-h .ln>span{transform:translateY(108%)}
 .ph-wait :is(.hero-sub,.hero .actions){opacity:0;transform:translateY(18px)}
 .ph-wait .stage{opacity:0}
-.dev-thumb{transition:transform var(--dur-2) var(--ease-io)}
+.dev-thumb{transition:transform var(--dur-1) var(--ease-io)}
 /* Concept cards: the photo pushes in a little on hover or keyboard focus, within 200 ms. */
 .motion .teaser-img img{transition:transform var(--dur-1) var(--ease-out)}
 .motion .teaser-card:is(:hover,:focus-within) .teaser-img img{transform:scale(1.03)}

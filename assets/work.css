@@ -1,0 +1,123 @@
+/* Work (Daylight, Task 34): intro with the "three signs" clip, the project index (tiles cross-fade to the project's
+   desktop loop, reel.js), three case studies with their device benches (kit.css), the demonstration project and the
+   closing band. Loaded only on /work/, after pages.css. */
+.wk-grid{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));column-gap:24px;align-items:center}
+.wk-hero-copy{grid-column:1/9}
+.wk-clip{grid-column:9/13;grid-template-columns:minmax(0,1fr);justify-items:start;gap:16px;margin-top:0}
+.wk-index{list-style:none;margin-top:clamp(8px,2vw,24px);margin-bottom:0;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:24px}
+.wk-tile a{display:grid;gap:6px;border-radius:16px;text-decoration:none}
+.wk-tile-img{position:relative;display:block;aspect-ratio:4/3;margin-bottom:10px;overflow:hidden;border-radius:14px;background:var(--warm-2)}
+.wk-tile-img img,.hover-video{width:100%;height:100%;object-fit:cover}
+.hover-video{position:absolute;inset:0;display:block;pointer-events:none}
+.wk-tile-name{justify-self:start;font:760 clamp(1.15rem,1rem + .5vw,1.45rem)/1.05 var(--font-display);font-stretch:88%;letter-spacing:-.015em}
+.wk-tile a:hover .wk-tile-name,.wk-tile a:focus-visible .wk-tile-name{text-decoration:underline;text-decoration-color:var(--amber);text-decoration-thickness:2px;text-underline-offset:.2em}
+.wk-tile-trade{color:var(--mute);font-size:.9375rem}
+.wk-demo-mini{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;padding:14px;background:var(--warm)}
+.wk-demo-mini i{display:flex;flex-direction:column;gap:6px;padding:8px;border-radius:10px;background:#fff;box-shadow:0 0 0 1px var(--line);font-style:normal}
+.wk-demo-mini b{display:block;height:6px;border-radius:3px;background:var(--warm-2)}
+.wk-demo-mini b+b{width:60%}
+.wk-demo-mini em{align-self:flex-start;margin-top:auto;padding:4px 7px;border-radius:999px;background:var(--warm);color:var(--amber-ink);font:600 .6875rem/1 var(--font-display);font-style:normal}
+
+/* Case studies */
+.cs{padding:clamp(72px,8vw,128px) 0 0}
+.cs-label{margin:0;color:var(--amber-ink);font-size:.875rem;font-weight:700}
+.cs-title{max-width:none;margin:10px 0 0;font-size:clamp(2.6rem,1rem + 5vw,6.4rem);font-weight:800;font-stretch:80%;line-height:.92;letter-spacing:-.035em}
+.cs-facts{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:0 24px;margin:28px 0 0}
+.cs-facts div{padding-top:12px;border-top:1px solid var(--line-2)}
+.cs-facts dt{color:var(--mute);font-size:.875rem}
+.cs-facts dd{margin:4px 0 0;font:650 1rem/1.35 var(--font-display);font-stretch:96%}
+.cs-body{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:40px 24px;padding-top:clamp(48px,6vw,88px);padding-bottom:clamp(24px,3vw,40px)}
+.cs-brief{grid-column:1/6}
+.cs-does{grid-column:7/13}
+.cs-brief h3,.cs-does h3,.cs-screens-h{margin:0 0 14px;font:700 1rem/1.2 var(--font-display);font-stretch:96%;letter-spacing:0}
+.cs-lede{margin:0;color:var(--ink);font:560 clamp(1.3rem,1rem + 1vw,1.9rem)/1.25 var(--font-display);font-stretch:94%;letter-spacing:-.015em}
+.cs-list{list-style:none;margin:0;padding:0;border-top:1px solid var(--ink)}
+.cs-list li{padding:16px 0;border-bottom:1px solid var(--line-2);color:var(--ink-2)}
+.cs-list b{color:var(--ink)}
+.cs-screens{padding-bottom:clamp(40px,5vw,72px)}
+/* Harbourside: the one dark photographic cover; the scrim keeps the white type above 4.5:1 wherever it sits */
+.cs-hb{padding-top:0}
+.cs-cover{position:relative;isolation:isolate;display:flex;align-items:flex-end;min-height:clamp(440px,62vw,720px);overflow:hidden;background:var(--ink);color:#fff}
+.cs-cover-media{position:absolute;inset:0;z-index:-1;margin:0;overflow:hidden}
+.cs-cover-media img{width:100%;height:100%;object-fit:cover}
+.cs-cover::after{content:"";position:absolute;inset:0;z-index:-1;background:linear-gradient(180deg,rgba(14,14,13,.2) 0%,rgba(14,14,13,.55) 30%,rgba(14,14,13,.88) 50%,rgba(14,14,13,.92) 100%)}
+.cs-cover-in{position:relative;padding-top:96px;padding-bottom:clamp(36px,4vw,56px)}
+/* The copy carries its own scrim: clear at its top edge, ink at .88 from 64px down (above the label, inside the 96px
+   padding) to the bottom, across the full width. However the title wraps, the type sits on .88 ink or darker. */
+.cs-cover-in::before{content:"";position:absolute;z-index:-1;top:0;bottom:0;left:-100vw;right:-100vw;background:linear-gradient(180deg,rgba(14,14,13,0) 0px,rgba(14,14,13,.88) 64px)}
+.cs-cover .cs-label{color:var(--amber)}
+.cs-cover .cs-title{max-width:12ch}
+.cs-cover .cs-facts{max-width:60rem}
+.cs-cover .cs-facts div{border-top-color:rgba(255,255,255,.28)}
+.cs-cover .cs-facts dt{color:rgba(255,255,255,.78)}
+.cs-cover :focus-visible{outline-color:#fff}
+/* Greenline: a light split cover and a serif pull line in the concept's own green */
+.gl-cover{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));column-gap:24px;align-items:end}
+.gl-cover-copy{grid-column:1/6;padding-bottom:8px}
+.gl-cover-media{grid-column:6/13;aspect-ratio:16/10.5}
+.gl-pull{margin:0;color:#1D2A22;font:500 clamp(1.5rem,1rem + 1.5vw,2.4rem)/1.18 Georgia,"Times New Roman",serif;letter-spacing:-.01em}
+.cs-gl .cs-screens{padding-top:clamp(48px,6vw,88px);padding-bottom:0}
+/* Fade & Co: a photo column beside the devices */
+.fc-head{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));column-gap:24px;align-items:end}
+.fc-head-t{grid-column:1/7}
+.fc-head .cs-facts{grid-column:7/13}
+.cs-fc .cs-screens-h{margin-top:clamp(40px,5vw,64px)}
+.fc-stage{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:24px;align-items:stretch}
+.fc-photo{grid-column:1/4;min-height:100%}
+.fc-stage .bench{grid-column:4/13}
+
+/* The demonstration project: a card, an illustrated queue (aria-hidden) and three steps */
+.wk-demo{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:40px 24px;align-items:center}
+.wk-demo-card{grid-column:1/6}
+.wk-demo-card .h2{margin:14px 0 22px;font-size:clamp(2.2rem,1rem + 3vw,4rem)}
+.wk-demo-card p{max-width:44ch;color:var(--ink-2)}
+.wk-demo-card .note{color:var(--mute)}
+.wk-demo-card .button{margin-top:16px}
+.queue{grid-column:7/13;position:relative;padding:22px;border-radius:22px;background:#fff;box-shadow:var(--shadow-lift);container-type:inline-size}
+.q-top{display:flex;align-items:center;justify-content:space-between;gap:12px;padding-bottom:16px;border-bottom:1px solid var(--line)}
+.q-top b{font:740 1.125rem/1 var(--font-display);font-stretch:94%}
+.q-cols{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-top:16px}
+.q-col{display:flex;flex-direction:column;gap:8px;min-height:200px;padding:10px;border-radius:14px;background:var(--warm)}
+.q-col>span{display:flex;justify-content:space-between;padding:4px 2px 6px;color:var(--ink-2);font:650 .8125rem/1 var(--font-display)}
+.q-col em{font-style:normal}
+.q-card{display:grid;gap:4px;padding:10px 11px;border-radius:10px;background:#fff;box-shadow:0 0 0 1px var(--line),0 4px 10px -6px rgba(14,14,13,.18);font-size:.8125rem;line-height:1.3}
+.q-card b{font:700 .875rem/1.2 var(--font-display);font-stretch:96%}
+.q-card small{color:var(--mute)}
+.q-card.is-cued{box-shadow:0 0 0 2px var(--amber),0 10px 20px -10px rgba(14,14,13,.3)}
+.q-draft{display:flex;align-items:center;gap:10px;margin-top:14px;padding:12px 14px;border-radius:12px;box-shadow:inset 0 0 0 1px var(--line-2);color:var(--ink-2);font-size:.875rem}
+.q-draft svg{flex:none;width:18px;height:18px;fill:none;stroke:var(--ok);stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round}
+.wk-demo-list{grid-column:1/-1;list-style:none;margin:16px 0 0;padding:0;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:24px}
+.wk-demo-list li{display:grid;gap:6px;padding-top:16px;border-top:1px solid var(--ink)}
+.wk-demo-list b{font:720 1.125rem/1.2 var(--font-display);font-stretch:94%}
+.wk-demo-list span{color:var(--ink-2);font-size:1rem}
+@container (max-width:460px){.q-cols{grid-template-columns:minmax(0,1fr)}.q-col{min-height:0}}
+
+@media(max-width:1023px){
+.wk-hero-copy,.wk-clip{grid-column:1/-1}
+.wk-clip{grid-template-columns:auto minmax(0,1fr);align-items:end;column-gap:24px;margin-top:40px}
+.wk-index{grid-template-columns:repeat(2,minmax(0,1fr))}
+.fc-head-t,.fc-head .cs-facts,.fc-photo,.fc-stage .bench{grid-column:1/-1}
+.fc-photo{aspect-ratio:16/7;min-height:0}
+}
+@media(max-width:960px){
+.wk-demo-card,.queue{grid-column:1/-1}
+.wk-demo-list{grid-template-columns:minmax(0,1fr)}
+}
+@media(max-width:860px){
+.cs-cover::after{background:rgba(14,14,13,.8)}
+.cs-brief,.cs-does,.gl-cover-copy,.gl-cover-media{grid-column:1/-1}
+.gl-cover-media{margin-top:32px}
+.cs-facts{grid-template-columns:minmax(0,1fr)}
+.cs-facts div{display:grid;grid-template-columns:7rem minmax(0,1fr);gap:12px;align-items:baseline;padding:10px 0}
+.cs-facts dd{margin:0}
+}
+@media(max-width:560px){
+.wk-clip{grid-template-columns:42% minmax(0,1fr);column-gap:16px}
+.wk-index{gap:20px 12px}
+}
+
+/* Motion: hover feedback within 200 ms, transform only */
+@media(prefers-reduced-motion:no-preference){
+.wk-tile-img img{transition:transform var(--dur-1) var(--ease-out)}
+.wk-tile a:is(:hover,:focus-visible) .wk-tile-img img{transform:scale(1.02)}
+}

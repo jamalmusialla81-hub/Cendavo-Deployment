@@ -280,6 +280,7 @@ async function run(env) {
     await viewOf(reels[0], true); out.multi.push(['first in view', snap()]);
     await viewOf(reels[1], true); out.multi.push(['second in view', snap()]);
     await pressOf(reels[1]); out.multi.push(['press second', snap()]);
+    await pressOf(reels[1]); out.multi.push(['press second again', snap()]);
     await viewOf(reels[0], false); out.multi.push(['first out of view', snap()]);
     await viewOf(reels[1], false); await viewOf(reels[1], true); out.multi.push(['second back in view', snap()]);
     return out;
@@ -354,6 +355,100 @@ async function runHero(env) {
   const heroes = { heroDesktop: desktop, heroComplete: { ...desktop, complete: true }, heroReduced: { ...desktop, reduce: true },
     heroSaveData: { ...phone, saveData: true }, heroPhone: { ...phone, narrow: true } };
   for (const [name, env] of Object.entries(heroes)) out[name] = await runHero(env);
+  console.log(JSON.stringify(out));
+})();
+"""
+
+# Daylight (Task 34): reel.js's Work tile previews and the About film's progress, against the stub DOM. A tile makes its
+# silent preview <video> only when first wanted (hover or focus on fine pointers, centred on touch), plays one at a time,
+# stops on leave, blur, a hidden tab or Pause motion, and never starts under reduced motion or Save-Data. The film's bar
+# and time follow the video while it plays.
+PREVIEW_SCRIPT = HARNESS + r"""
+const source = fs.readFileSync(process.argv[1], 'utf8');
+const settle = () => new Promise(resolve => setImmediate(resolve));
+function makeVideo(name) {
+  const video = element(name, { source: [element('source')] });
+  Object.assign(video, { paused: true, muted: false, plays: 0, loads: 0, currentTime: 0, duration: NaN, style: {} });
+  const fire = type => (video.listeners[type] || []).forEach(fn => fn({ type }));
+  video.fire = fire;
+  video.load = () => { video.loads++; };
+  video.play = () => { video.plays++; video.paused = false; fire('play'); fire('playing'); return Promise.resolve(); };
+  video.pause = () => { if (!video.paused) { video.paused = true; fire('pause'); } };
+  return video;
+}
+async function run(env) {
+  const created = [];
+  const tiles = ['hb', 'gl', 'fc'].map(name => {
+    const a = element('a-' + name);
+    const frame = element('frame-' + name);
+    frame.dataset.hoverSrc = '/assets/video/loop-' + name + '-desktop.mp4';
+    frame.closest = selector => (selector === 'a' ? a : null);
+    frame.appended = [];
+    frame.appendChild = child => { frame.appended.push(child); };
+    return { a, frame };
+  });
+  // Work also has device loops, so Pause motion is wired; one stands in for them.
+  const loop = makeVideo('loop'); loop.dataset.loop = '';
+  const motion = element('motion'); motion.hidden = true; motion.attrs['aria-pressed'] = 'false';
+  motion.classList = classList(['motion-btn', 'motion-fab']);
+  // The About film: a large reel with its button, progress bar and time.
+  const film = makeVideo('film'); film.parts.source[0].attrs.src = '/assets/video/cendavo-launch-1600.mp4'; film.attrs.controls = '';
+  const toggle = element('toggle'); toggle.hidden = true; toggle.textContent = 'Play film';
+  const ui = element('ui'); ui.hidden = true;
+  const bar = element('bar'); const time = element('time'); time.textContent = '0:00 / 0:20';
+  const reel = element('reel', { video: [film], '[data-reel-toggle]': [toggle], '[data-reel-ui]': [ui], '[data-progress]': [bar], '[data-time]': [time] });
+  const parts = { '[data-reel]': env.film ? [reel] : [], '[data-hover-src]': tiles.map(t => t.frame), 'video[data-loop]': [loop], '[data-motion-toggle]': [motion] };
+  const doc = { documentElement: element('html'), readyState: 'complete', hidden: false, listeners: {}, activeElement: null,
+    addEventListener(type, fn) { (this.listeners[type] = this.listeners[type] || []).push(fn); },
+    querySelector: s => (parts[s] || [])[0] || null, querySelectorAll: s => parts[s] || [],
+    createElement: tag => { const v = makeVideo('preview' + created.length); v.tagName = tag; created.push(v); return v; } };
+  const observers = [], frames = [];
+  class FakeObserver { constructor(callback, options) { this.callback = callback; this.options = options; this.targets = []; observers.push(this); } observe(target) { this.targets.push(target); } }
+  const { win } = makeWindow(env, { IntersectionObserver: FakeObserver, navigator: env.saveData ? { connection: { saveData: true } } : { connection: {} },
+    requestAnimationFrame: fn => frames.push(fn), cancelAnimationFrame: () => {} });
+  let error = null;
+  try { vm.runInNewContext(source, { window: win, document: doc, setImmediate }); } catch (e) { error = String(e); }
+  const fire = (el, type) => (el.listeners[type] || []).forEach(fn => fn({ type }));
+  const state = () => tiles.map(t => { const v = t.frame.appended[0]; return v ? (v.paused ? 'paused' : 'playing') : 'none'; });
+  const out = { error, steps: [], tileObservers: observers.filter(o => tiles.some(t => o.targets.includes(t.frame))).map(o => o.options) };
+  const step = async (name, act) => { act(); await settle(); out.steps.push([name, state()]); };
+  out.steps.push(['loaded', state()]);
+  if (env.fine) {
+    await step('hover first', () => fire(tiles[0].a, 'pointerenter'));
+    await step('hover second', () => fire(tiles[1].a, 'pointerenter'));
+    await step('leave second', () => fire(tiles[1].a, 'pointerleave'));
+    await step('focus third', () => fire(tiles[2].a, 'focus'));
+    await step('blur third', () => fire(tiles[2].a, 'blur'));
+    await step('hover first again', () => fire(tiles[0].a, 'pointerenter'));
+    await step('tab hidden', () => { doc.hidden = true; (doc.listeners.visibilitychange || []).forEach(fn => fn()); });
+    await step('hover while hidden', () => { fire(tiles[1].a, 'pointerleave'); fire(tiles[1].a, 'pointerenter'); });
+    doc.hidden = false; (doc.listeners.visibilitychange || []).forEach(fn => fn());
+    await step('pause motion', () => fire(motion, 'click'));
+    await step('hover while held', () => fire(tiles[2].a, 'pointerenter'));
+  } else {
+    const centre = async (i, on) => { observers.filter(o => o.targets.includes(tiles[i].frame)).forEach(o => o.callback([{ isIntersecting: on, target: tiles[i].frame }])); await settle(); };
+    await centre(0, true); out.steps.push(['first centred', state()]);
+    await centre(1, true); out.steps.push(['second centred', state()]);
+    await centre(1, false); out.steps.push(['second off centre', state()]);
+  }
+  out.created = created.map(v => ({ tag: v.tagName, src: v.src || null, attrs: v.attrs, muted: v.muted, className: v.className }));
+  out.listened = tiles.map(t => Object.keys(t.a.listeners).sort());
+  if (env.film) {
+    film.duration = 20; film.currentTime = 5;
+    fire(toggle, 'click'); await settle();
+    frames.splice(0).forEach(fn => fn());
+    out.film = { ui: ui.hidden, button: toggle.hidden, label: toggle.textContent, transform: bar.style.transform || null, time: time.textContent };
+    film.currentTime = 15; film.pause(); await settle();
+    out.filmPaused = { label: toggle.textContent, transform: bar.style.transform, time: time.textContent };
+  }
+  return out;
+}
+(async () => {
+  const desktop = { width: 1440, height: 900, fine: true, reduce: false };
+  const phone = { width: 390, height: 844, fine: false, reduce: false };
+  const out = {};
+  for (const [name, env] of Object.entries({ desktop: { ...desktop, film: true }, phone, reduced: { ...desktop, reduce: true },
+    saveData: { ...desktop, saveData: true }, phoneReduced: { ...phone, reduce: true } })) out[name] = await run(env);
   console.log(JSON.stringify(out));
 })();
 """
@@ -1139,9 +1234,13 @@ class DemoScriptTests(unittest.TestCase):
                 self.assertEqual(state['loads'], 0)  # no narrow cut: the source is left alone
                 self.assertEqual(state['src'], f'/assets/video/{name}.mp4')
                 self.assertEqual((state['playing'], state['label'], state['plays']), (False, f'Play {name}', 0))
+        # Daylight (Task 34): one large video at a time. The second clip waits while the first plays; pressing Play on it
+        # hands over (the first pauses); pressing Pause on it touches only its own video, and the first, still in view and
+        # never paused by the visitor, takes its turn again.
         expected = [('first in view', [(True, 'Pause redesign video'), (False, 'Play care plan video')]),
-                    ('second in view', [(True, 'Pause redesign video'), (True, 'Pause care plan video')]),
-                    ('press second', [(True, 'Pause redesign video'), (False, 'Play care plan video')]),
+                    ('second in view', [(True, 'Pause redesign video'), (False, 'Play care plan video')]),
+                    ('press second', [(False, 'Play redesign video'), (True, 'Pause care plan video')]),
+                    ('press second again', [(True, 'Pause redesign video'), (False, 'Play care plan video')]),
                     ('first out of view', [(False, 'Play redesign video'), (False, 'Play care plan video')]),
                     ('second back in view', [(False, 'Play redesign video'), (False, 'Play care plan video')])]
         self.assertEqual([(step, [(s['playing'], s['label']) for s in states]) for step, states in clips['multi']], expected)
@@ -1157,6 +1256,60 @@ class DemoScriptTests(unittest.TestCase):
                 self.assertEqual(steps[2][1][1], {'playing': True, 'label': 'Pause care plan video', 'plays': 1})
                 for step, states in steps:
                     self.assertEqual((states[0]['playing'], states[0]['plays']), (False, 0), step)
+
+    def test_work_tile_previews_load_only_when_wanted_and_play_one_at_a_time(self):
+        # Daylight (Task 34): fine pointers preview on hover and keyboard focus; nothing is created before that.
+        r = self.node_json(PREVIEW_SCRIPT, REEL)
+        desktop = r['desktop']
+        self.assertIsNone(desktop['error'])
+        self.assertEqual(desktop['steps'], [
+            ['loaded', ['none', 'none', 'none']],
+            ['hover first', ['playing', 'none', 'none']],
+            ['hover second', ['paused', 'playing', 'none']],  # one at a time
+            ['leave second', ['paused', 'paused', 'none']],
+            ['focus third', ['paused', 'paused', 'playing']],  # keyboard focus previews too
+            ['blur third', ['paused', 'paused', 'paused']],
+            ['hover first again', ['playing', 'paused', 'paused']],  # the same video, no second file
+            ['tab hidden', ['paused', 'paused', 'paused']],
+            ['hover while hidden', ['paused', 'paused', 'paused']],
+            ['pause motion', ['paused', 'paused', 'paused']],
+            ['hover while held', ['paused', 'paused', 'paused']],  # Pause motion holds the previews as well
+        ])
+        self.assertEqual(len(desktop['created']), 3)
+        for video, name in zip(desktop['created'], ('hb', 'gl', 'fc')):
+            with self.subTest(preview=name):
+                self.assertEqual(video['tag'], 'video')
+                self.assertEqual(video['src'], f'/assets/video/loop-{name}-desktop.mp4')  # same origin, from data-hover-src
+                self.assertTrue(video['muted'])
+                self.assertEqual(video['className'], 'hover-video')
+                for attr, value in (('muted', ''), ('loop', ''), ('playsinline', ''), ('preload', 'none'), ('aria-hidden', 'true'),
+                                    ('width', '1280'), ('height', '800')):
+                    self.assertEqual(video['attrs'].get(attr), value)
+                self.assertNotIn('autoplay', video['attrs'])
+                self.assertNotIn('controls', video['attrs'])
+        self.assertEqual(desktop['listened'], [['blur', 'focus', 'pointerenter', 'pointerleave']] * 3)
+        self.assertEqual(desktop['tileObservers'], [])
+
+    def test_work_tile_previews_play_when_centred_on_touch_and_never_by_themselves_when_asked_not_to(self):
+        r = self.node_json(PREVIEW_SCRIPT, REEL)
+        phone = r['phone']
+        self.assertEqual(phone['steps'], [['loaded', ['none', 'none', 'none']], ['first centred', ['playing', 'none', 'none']],
+                                          ['second centred', ['paused', 'playing', 'none']], ['second off centre', ['paused', 'paused', 'none']]])
+        self.assertEqual(phone['tileObservers'], [{'rootMargin': '-35% 0px -35% 0px'}] * 3)  # the middle 30% of the screen
+        self.assertEqual(phone['listened'], [[], [], []])  # no hover or focus previews without a fine pointer
+        # Reduced motion or Save-Data: no preview video is ever created, so no file is requested.
+        for name in ('reduced', 'saveData', 'phoneReduced'):
+            with self.subTest(case=name):
+                self.assertIsNone(r[name]['error'])
+                self.assertEqual(r[name]['created'], [])
+                self.assertTrue(all(states == ['none', 'none', 'none'] for _, states in r[name]['steps']))
+
+    def test_film_shows_its_button_progress_and_time(self):
+        # Daylight (Task 34): the About film. reel.js reveals the button bar, plays on press and scales the progress bar
+        # (transform only) and writes the elapsed time while it plays; both stay put when it pauses.
+        film = self.node_json(PREVIEW_SCRIPT, REEL)['desktop']
+        self.assertEqual(film['film'], {'ui': False, 'button': False, 'label': 'Pause film', 'transform': 'scaleX(0.25)', 'time': '0:05 / 0:20'})
+        self.assertEqual(film['filmPaused'], {'label': 'Play film', 'transform': 'scaleX(0.75)', 'time': '0:15 / 0:20'})
 
     def test_demo_sweep_runs_once_and_moves_only_the_divider(self):
         # Task 29: the first time the comparison is well in view, the divider sweeps 50 -> 82 -> 18 -> 50, once. Daylight
