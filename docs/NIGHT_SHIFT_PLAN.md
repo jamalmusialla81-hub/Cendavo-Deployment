@@ -295,3 +295,10 @@ Small, focused; same budgets and test rules. **30-minute builder clock. Never `c
 7. **Less templated:** tone down the global peach/blue/mint mesh to a neutral warm-white base with colour mainly from photography/footage seen through glass; keep it light.
 8. **Glass on components:** project cards (hover tilt + specular rim), the compare slider handle (glass knob instead of the default range thumb, input remains the accessible control), pricing rows and the FAQ use the same glass material.
 Same budgets and test rules; keep reduced-motion/Save-Data fallbacks. **30-minute builder clock: small batches. Never `cd` in Bash.**
+
+## Task 45 — finish Task 44 items 4 and 5, hero exit wordmark (OWNER-MANDATED; profile `site`)
+Supervisor review of the Task 44 build (`docs/design/glass/critique2/`): the calmer base, full-bleed reel and feathered About backplate landed. Still open:
+1. **Services hero panes** (`services-d-0.jpg`): the panes still show a brown barbershop photo inside "Redesign" and "New website" is cut by pane 2. Remove every photo from inside/behind the panes; clean white frosted glass only (the page scene must not render a photo backplate here); offsets so each title is fully readable (pane 1 highest/left, pane 3 front/right, ≥40% of each visible); simplified fanned CSS version on mobile.
+2. **Marquee** (`home-d-3.jpg`): the film-filled "New websites · Redesigns" type still reads as grey stone. Use white frosted-glass type (light fill, bright rim, subtle footage visible only faintly) on the light base, high contrast against it; pills sit centred on photo tiles, not straddling gaps.
+3. **Hero exit** (`home-d-1.jpg`): mid-exit the CENDAVO wordmark becomes a washed-out ghost smear over the "Twenty seconds" section — fade it out cleanly before it overlaps the next section's heading, or keep it crisp until it leaves.
+Small, focused; same budgets and tests. **30-minute builder clock. Never `cd` in Bash.**
