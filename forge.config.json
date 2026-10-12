@@ -3,21 +3,61 @@
   "default_profile": "app",
   "max_turns": {
     "cendavo-strategist": 30,
-    "cendavo-builder": 80,
+    "cendavo-builder": 140,
     "cendavo-security-reviewer": 30,
     "cendavo-auditor": 30,
     "cendavo-debugger": 20,
     "cendavo-maintainer": 60
   },
-  "limits": {"review_cycles": 3, "test_fixes": 3, "product_repairs": 3, "maintenance_attempts": 2},
+  "limits": {
+    "review_cycles": 3,
+    "test_fixes": 3,
+    "product_repairs": 3,
+    "maintenance_attempts": 2
+  },
   "max_diff_chars": 250000,
-  "package_registries": ["registry.npmjs.org", "pypi.org", "files.pythonhosted.org"],
+  "package_registries": [
+    "registry.npmjs.org",
+    "pypi.org",
+    "files.pythonhosted.org"
+  ],
   "extra_read_paths": [],
   "checks": [
-    ["build", ["python3", "scripts/build_site.py"]],
-    ["unit-tests", ["python3", "-m", "unittest", "discover", "-s", "tests", "-v"]],
-    ["site-js", ["node", "--check", "assets/site.js"]],
-    ["demo-js", ["node", "--check", "assets/demo.js"]]
+    [
+      "build",
+      [
+        "python3",
+        "scripts/build_site.py"
+      ]
+    ],
+    [
+      "unit-tests",
+      [
+        "python3",
+        "-m",
+        "unittest",
+        "discover",
+        "-s",
+        "tests",
+        "-v"
+      ]
+    ],
+    [
+      "site-js",
+      [
+        "node",
+        "--check",
+        "assets/site.js"
+      ]
+    ],
+    [
+      "demo-js",
+      [
+        "node",
+        "--check",
+        "assets/demo.js"
+      ]
+    ]
   ],
   "mcp_servers": {}
 }
