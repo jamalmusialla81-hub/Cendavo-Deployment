@@ -197,3 +197,11 @@ The enquiry backend is live (D1 `cendavo-enquiries`, binding `ENQUIRIES_DB`, ver
 3. **Docs** `docs/ENQUIRIES.md`: owner steps for Resend (sign up, create an API key with sending access, add Pages secrets `RESEND_API_KEY` (encrypted) and `ALERT_TO` (the Resend account's email) under Settings → Variables and secrets for Production, retry deployment), the throttle limits, and that alerts are skipped if unset.
 4. **Tests** (`tests/test_enquiry.py`, Node harness with fake D1 and a fake `fetch`): alert sent once on a new insert with the right recipient/reply-to/subject; not sent on repeat/honeypot/400/429/503; alert failure or timeout doesn't change the 201 response; missing env skips; throttle 429s for the global and per-email limits and stores nothing; no IP stored.
 Security reviewer: this is the first outbound network call in the function — check that only the fixed Resend URL is called, the key never reaches the client or logs, and header injection via name/email is impossible (JSON body; validate email as today). **Never `cd` in Bash.**
+
+## Task 31 — public contact email cendavo.au@gmail.com (owner-provided 2026-10-12; profile `app`)
+The owner created the business address **cendavo.au@gmail.com**. Show it as plain selectable text with a `mailto:` link:
+1. **Contact page** (`pages/contact.html`): next to the form (e.g. under "What happens next" or as "Prefer email? cendavo.au@gmail.com"), and in the privacy note: people can ask for their details to be deleted by emailing cendavo.au@gmail.com.
+2. **Footer** (all pages, `scripts/build_site.py`): add the email under "Sydney, Australia".
+3. **Error messages** so a visitor always has a fallback: server `functions/api/enquiry.js` `UNAVAILABLE` → "Enquiries are temporarily unavailable, so nothing was sent. Please try again later or email cendavo.au@gmail.com." and `NOT_CONFIRMED` similarly; and the matching client-side notices in `assets/enquiry.js` (the 503/network-failure messages). Keep the 429 retry message as is.
+4. Define the address once per language (a constant in `build_site.py`, one in `enquiry.js` client, one in the function) — no other hard-coded copies.
+5. Update tests (email present on Contact and in the footer of every page; error messages include it; mailto links well-formed). Do not change any enquiry behaviour. **Never `cd` in Bash.**
