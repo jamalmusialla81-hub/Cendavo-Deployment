@@ -333,3 +333,10 @@ JSON-LD `ProfessionalService` (name Cendavo, url, email cendavo.au@gmail.com, ar
 
 ### Task 50 — land Task 47
 Task 47's builder completed the work but the test-weakening guard stopped it because a new test class copied the file's existing `@unittest.skipUnless(shutil.which('node'), ...)` decorator (known guard false positive, FORGE_FINDINGS #4). The supervisor removed that decorator (node is required and present), ran the full suite on a clean export (482 tests OK) and saved the result as `docs/design/glass/task47-complete.patch`. Apply it with `git apply --binary docs/design/glass/task47-complete.patch`, run the build and focused test modules, fix only genuine problems. Do not add skip decorators. **Never `cd` in Bash.**
+
+### Task 51 — Pricing and About content from the owner's draft policies
+Use `docs/OWNER_DRAFT_POLICIES.md` (drafted at the owner's request; owner will confirm before launch). Keep the existing fixed-quote approach and design; no price figures, packages, stats, testimonials, team size, years or awards.
+1. **Pricing:** add clear, scannable sections: "What happens in the consultation", "What's in your quote" (default inclusions + what you provide), "Revisions and changes", "Payment and timeline", "Ongoing costs" (domain, hosting, optional care plan, cancel anytime), and an FAQ that reflects these. Enhance the existing quote-card illustration so items reveal progressively and the fixed-price agreement is emphasised (it stays clearly an illustration, not a real document). Primary CTA with supporting copy: "Tell us about your business and what you need. We'll talk it through before preparing a quote."
+2. **About:** rewrite in the studio voice from the draft (small Sydney studio, you deal directly with the designer, new so we show labelled concept work, how we work). Personal, confident, plain language; no corporate jargon; no invented biography or credentials.
+3. **Contact:** "We reply within one business day" may be stated (from the draft).
+Keep accessibility, motion rules, budgets, tests. Add tests that the pages contain no currency amounts and no testimonial/rating markup. **Never `cd` in Bash.**
