@@ -18,7 +18,8 @@
    copy and cards leave and the 3D scene tilts away. */
 .hero{position:relative}
 .hero-pin{position:relative;height:100svh;min-height:640px;overflow:hidden}
-.hero-gl{position:absolute;inset:0;background:#F6F5F1 url("/assets/glass/hero-glass-poster.jpg") 50% 50%/cover no-repeat}
+/* Task 44: the scene (and the still) feathers out at its foot into the page, never a hard edge over a flat band. */
+.hero-gl{position:absolute;inset:0;background:#F6F5F1 url("/assets/glass/hero-glass-poster.jpg") 50% 50%/cover no-repeat;-webkit-mask-image:linear-gradient(180deg,#000 74%,transparent);mask-image:linear-gradient(180deg,#000 74%,transparent)}
 .hero-gl::after{content:"";position:absolute;inset:0;background:linear-gradient(90deg,rgba(246,245,241,.92) 0%,rgba(246,245,241,.6) 34%,rgba(246,245,241,0) 58%)}
 .hero-canvas{position:absolute;inset:0;width:100%;height:100%}
 .hero-gl:not(.is-live) .hero-canvas{display:none}
@@ -62,26 +63,28 @@
 .motion-btn[aria-pressed="true"],.motion-btn[aria-pressed="true"]:hover{border-color:var(--ink);background:var(--ink);color:#fff}
 @media(forced-colors:active){.motion-btn[aria-pressed="true"]{forced-color-adjust:none;border-color:ButtonText;background:ButtonText;color:ButtonFace}}
 
-/* Showreel: the frame opens from a rounded glass lens to its full size as it scrolls in (home.js, clip-path), and the
-   chapters sit on dark glass over its corner. reel.js reveals the chapters, swaps the native controls for one Pause/Play
-   button and, on a phone, the vertical cut. The frame's shape is set per screen size, so the swap never shifts layout. */
+/* Showreel: the frame opens from a rounded glass lens to its full size as it scrolls in (home.js, clip-path). Task 44:
+   no box: no radius, no frame shadow, its edges feather into the page (a mask), full-bleed on wide screens; the chapters
+   are page typography below the film, never over it; one small glass chip (Pause/Play) sits in the top corner, clear of
+   the film's own subtitles at its foot. reel.js reveals the chapters, swaps the native controls for that button and, on a
+   phone, the vertical cut. The frame's shape is set per screen size, so the swap never shifts layout. */
 .reel{padding-block:var(--home-sec)}
 .reel-grid{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));column-gap:var(--col-gap);align-items:start}
 .reel-head{grid-column:1/-1;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));align-items:end;gap:16px 32px;margin-bottom:clamp(32px,4vw,56px)}
 .reel-head h2{margin:0;font-size:clamp(2.25rem,1.2rem + 3vw,4.25rem);font-weight:780;font-stretch:86%;letter-spacing:-.03em}
 .reel-head p{justify-self:end;max-width:46ch;margin:0;color:var(--ink-2);font-size:1rem}
 .reel-fig{grid-column:1/-1;position:relative;margin:0}
-.reel-frame{position:relative;width:min(100%,calc(62svh * 16 / 9));aspect-ratio:16/9;margin-inline:auto;overflow:hidden;border-radius:18px;background:var(--ink);box-shadow:0 0 0 1px rgba(14,14,13,.08),0 40px 80px -36px rgba(14,14,13,.5)}
+.reel-frame{position:relative;width:min(100%,calc(62svh * 16 / 9));aspect-ratio:16/9;margin-inline:auto;overflow:hidden;border-radius:0;background:var(--warm-2);-webkit-mask-image:linear-gradient(90deg,transparent,#000 5%,#000 95%,transparent),linear-gradient(180deg,transparent,#000 7%,#000 93%,transparent);-webkit-mask-composite:source-in;mask-image:linear-gradient(90deg,transparent,#000 5%,#000 95%,transparent),linear-gradient(180deg,transparent,#000 7%,#000 93%,transparent);mask-composite:intersect}
 .reel-video{display:block;width:100%;height:100%;object-fit:cover}
-.reel-toggle{position:absolute;right:16px;bottom:16px;min-height:44px;padding:0 18px;border:1px solid rgba(255,255,255,.2);border-radius:var(--radius-pill);background:var(--ink);color:var(--bone);font:600 1rem/1 var(--font-display);cursor:pointer}
-.reel-toggle:hover{background:var(--ink-2)}
-.reel-toggle:focus-visible{outline:2px solid var(--bone);outline-offset:3px;box-shadow:0 0 0 6px var(--ink)}
-.reel-panel{width:min(100%,calc(62svh * 16 / 9));margin:14px auto 0;padding:6px 18px;border-radius:22px}
+.reel-toggle{position:absolute;right:7%;top:10%;min-height:44px;padding:0 16px;border:1px solid rgba(255,255,255,.9);border-radius:var(--radius-pill);background:rgba(255,255,255,.84);-webkit-backdrop-filter:blur(14px) saturate(1.6);backdrop-filter:blur(14px) saturate(1.6);box-shadow:inset 0 1px 0 #fff,0 10px 24px -14px rgba(14,14,13,.45);color:var(--ink);font:600 .9375rem/1 var(--font-display);cursor:pointer}
+.reel-toggle:hover{background:#fff}
+.reel-toggle:focus-visible{outline:2px solid var(--ink);outline-offset:3px;box-shadow:0 0 0 6px #fff}
+.reel-panel{width:min(100%,calc(62svh * 16 / 9));margin:18px auto 0}
 .reel-panel:has(.chapters[hidden]){display:none}
-.chapters{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));column-gap:24px}
-.chapters button{display:grid;grid-template-columns:3.4em 1fr;align-items:center;width:100%;min-height:46px;padding:0 4px;border:0;border-bottom:1px solid rgba(255,255,255,.14);background:none;color:rgba(255,255,255,.72);text-align:left;font:560 1rem/1.2 var(--font-display)}
-.chapters button:hover,.chapters button[aria-current="true"]{color:#fff}
-.chapters button[aria-current="true"]{font-weight:740;box-shadow:inset 0 -2px var(--amber)}
+.chapters{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:0 16px}
+.chapters button{display:grid;gap:6px;align-content:start;width:100%;min-height:64px;padding:14px 0 16px;border:0;border-top:2px solid var(--line-2);background:none;color:var(--mute);text-align:left;font:600 .9375rem/1.2 var(--font-display)}
+.chapters button:hover,.chapters button[aria-current="true"]{color:var(--ink)}
+.chapters button[aria-current="true"]{border-top-color:var(--amber)}
 .ch-t{font:500 .8125rem/1 var(--font-text);font-variant-numeric:tabular-nums}
 .reel-cap{width:min(100%,calc(62svh * 16 / 9));margin:14px auto 0;color:var(--mute);font-size:.92rem}
 
@@ -263,9 +266,10 @@
 .motion .hero-pin{position:sticky;top:0}
 }
 @media(min-width:961px){
-.reel-frame,.reel-cap{width:min(100%,calc(84svh * 16 / 9))}
-.reel-panel{position:absolute;left:max(20px,calc(50% - 42svh * 16 / 9 + 20px));top:20px;width:min(320px,34%);margin:0}
-.chapters{grid-template-columns:1fr}
+/* Task 44: full-bleed. The film spans the screen's width (as tall as 92% of the screen allows) and stays centred on the
+   column; the body clips any sideways overflow (site.css). */
+.reel-frame{width:min(100vw,calc(92svh * 16 / 9));margin-inline:calc(50% - min(50vw,46svh * 16 / 9))}
+.reel-panel,.reel-cap{width:min(100%,calc(84svh * 16 / 9))}
 .js .band-phones{display:block}
 }
 @media(max-width:1199px){

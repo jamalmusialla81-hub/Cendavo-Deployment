@@ -5,13 +5,15 @@
    support, or when the visitor asks for reduced transparency, every panel is opaque. Motion stays in the guarded block. */
 
 /* Atmosphere: four soft colour fields, fixed behind everything (aria-hidden in the markup). glass.js drifts them slowly
-   on the motion pages; otherwise they stay where they are. Radial gradients, not blur filters, so they cost nothing. */
+   on the motion pages; otherwise they stay where they are. Radial gradients, not blur filters, so they cost nothing.
+   Task 44: calmer, a neutral warm-white base with only a faint tint (no field above 25% opacity); the colour comes
+   mainly from the photography and footage seen through the glass. */
 .atmos{position:fixed;inset:0;z-index:-1;overflow:hidden;pointer-events:none}
-.atmos i{position:absolute;width:62vmax;height:62vmax;border-radius:50%;opacity:.55}
-.atmos i:nth-child(1){left:48%;top:-22vmax;background:radial-gradient(closest-side,#EDBF72,rgba(237,191,114,0))}
-.atmos i:nth-child(2){left:-24vmax;top:18%;background:radial-gradient(closest-side,#A3C4DE,rgba(163,196,222,0))}
-.atmos i:nth-child(3){left:62%;top:48%;background:radial-gradient(closest-side,#B2CB9C,rgba(178,203,156,0));opacity:.45}
-.atmos i:nth-child(4){left:14%;top:70%;background:radial-gradient(closest-side,#E9BB9E,rgba(233,187,158,0));opacity:.4}
+.atmos i{position:absolute;width:62vmax;height:62vmax;border-radius:50%;opacity:.24}
+.atmos i:nth-child(1){left:48%;top:-22vmax;background:radial-gradient(closest-side,#EBCB94,rgba(235,203,148,0))}
+.atmos i:nth-child(2){left:-24vmax;top:18%;background:radial-gradient(closest-side,#BACCDA,rgba(186,204,218,0));opacity:.2}
+.atmos i:nth-child(3){left:62%;top:48%;background:radial-gradient(closest-side,#C6D3B8,rgba(198,211,184,0));opacity:.18}
+.atmos i:nth-child(4){left:14%;top:70%;background:radial-gradient(closest-side,#E8C9B4,rgba(232,201,180,0));opacity:.18}
 
 /* Glass panel. --lg-filter is set by glass.js (Chromium: blur + displacement map); the fallback is a plain blur. The
    ::before layer is the specular highlight, centred on the pointer (or a virtual sun above the page). */

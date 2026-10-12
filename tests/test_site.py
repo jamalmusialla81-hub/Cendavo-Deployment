@@ -1959,9 +1959,11 @@ class DesignCritiqueFixTests(unittest.TestCase):
         phone = rules_for(media_blocks(self.home_css, 'max-width:640px'), '.reel-frame')[0]
         self.assertIn('width:min(100%,calc(74svh * 9 / 16))', phone)
         self.assertIn('aspect-ratio:9/16', phone)
-        # Liquid Glass (Task 37): on wide screens the lens opens to a larger frame, still never taller than 84% of the screen.
+        # Liquid Glass (Task 37): on wide screens the lens opens to a larger frame. Task 44: full-bleed (up to the screen's
+        # width), still never taller than 92% of the screen, and centred on the column (the margins match the width).
         wide = rules_for(media_blocks(self.home_css, 'min-width:961px'), '.reel-frame')[0]
-        self.assertEqual(wide, 'width:min(100%,calc(84svh * 16 / 9))')
+        self.assertEqual(wide, 'width:min(100vw,calc(92svh * 16 / 9));margin-inline:calc(50% - min(50vw,46svh * 16 / 9))')
+        self.assertIn('overflow-x:clip', rules_for(base_rules((OUT / 'assets/site.css').read_text()), 'body')[0])  # no sideways scroll
 
     def test_mobile_hero_puts_the_headline_and_buttons_first(self):
         # Liquid Glass (Task 37): the copy (headline, line, both buttons) comes before the glass cards and the caption in the
@@ -2932,11 +2934,17 @@ class ShowreelMarkupTests(unittest.TestCase):
             self.assertIn(needle, video)
         toggle = rules_for(base, '.reel-toggle')[0]
         self.assertGreaterEqual(int(re.search(r'min-height:(\d+)px', toggle).group(1)), 44)
-        self.assertIn('background:var(--ink)', toggle)  # solid behind the label, whatever frame is playing
-        self.assertIn('color:var(--bone)', toggle)
+        # Task 44: a light glass chip, near-opaque behind the label, so it reads whatever frame is playing: even over a
+        # pure black frame, ink on the chip's white keeps far more than 4.5:1.
+        alpha = float(re.search(r'background:rgba\(255,255,255,(\.\d+)\)', toggle).group(1))
+        self.assertGreaterEqual(alpha, 0.8)
+        self.assertIn('color:var(--ink)', toggle)
+        worst = round(255 * alpha)
+        self.assertGreaterEqual(contrast('#0E0E0D', '#{0:02X}{0:02X}{0:02X}'.format(worst)), 7)
         focus = rules_for(base, '.reel-toggle:focus-visible')
         self.assertEqual(len(focus), 1)
-        self.assertIn('outline:2px solid var(--bone)', focus[0])
+        self.assertIn('outline:2px solid var(--ink)', focus[0])
+        self.assertIn('box-shadow:0 0 0 6px #fff', focus[0])  # a white ring outside the ink outline, on any frame
 
     def test_headers_still_allow_self_hosted_media_only(self):
         headers = (OUT / '_headers').read_text()
@@ -3971,3 +3979,114 @@ class GlassCritiqueFixesTests(unittest.TestCase):
             with self.subTest(selector=selector):
                 self.assertEqual(rules_for(css, selector), ['padding-block:var(--home-sec)'])
         self.assertIn('padding-block:clamp(110px,13vw,190px) clamp(56px,6vw,96px)', rules_for(css, '.band')[0])
+
+
+def hsl_saturation(hex_colour):
+    r, g, b = (int(hex_colour[i:i + 2], 16) / 255 for i in (1, 3, 5))
+    high, low = max(r, g, b), min(r, g, b)
+    light = (high + low) / 2
+    return 0.0 if high == low else (high - low) / (1 - abs(2 * light - 1))
+
+
+class GlassHeroAndReelTests(unittest.TestCase):
+    """Task 44, batch A (owner-mandated): the homepage hero's canvas feathers out at its foot, the glass name is milky white,
+    the photos behind the About and Contact C are feathered, the showreel has no box (no radius, edge blend, chapters as
+    page typography below it, one glass chip), the About film's control sits below the film, and the page atmosphere is
+    calmer. The hero's exit pose, layout and materials are checked numerically in tests/test_demo_js.py."""
+
+    @classmethod
+    def setUpClass(cls):
+        build()
+        cls.home = main_of((OUT / 'index.html').read_text())
+        cls.about = main_of((OUT / 'about/index.html').read_text())
+        cls.css = {name: (OUT / 'assets' / name).read_text() for name in ('home.css', 'about.css', 'glass.css')}
+        cls.scene = (OUT / 'assets/glass-scene.js').read_text()
+        cls.page = (OUT / 'assets/glass-page.js').read_text()
+
+    def test_hero_canvas_feathers_out_at_its_foot(self):
+        rule = rules_for(base_rules(self.css['home.css']), '.hero-gl')[0]
+        for prop in ('-webkit-mask-image', 'mask-image'):
+            with self.subTest(prop=prop):
+                stop = re.search(rf'(?:^|;){re.escape(prop)}:linear-gradient\(180deg,#000 (\d+)%,transparent\)', rule)
+                self.assertIsNotNone(stop)
+                self.assertLess(int(stop.group(1)), 90)  # a real fade, not a hairline
+        # The canvas fills the host, so the host's mask feathers it too; the still underneath is never hidden.
+        self.assertEqual(rules_for(base_rules(self.css['home.css']), '.hero-canvas'), ['position:absolute;inset:0;width:100%;height:100%'])
+
+    def test_glass_name_is_milky_and_screens_are_sharper(self):
+        self.assertNotIn('#d9e1e6', self.scene)  # the blue-grey "gunmetal" body is gone
+        self.assertIn('screen(SCREENS.gl)', self.scene)
+        self.assertIn('screen(SCREENS.hb)', self.scene)
+        for name in ('gl', 'hb'):
+            with self.subTest(screen=name):
+                bias = float(re.search(rf"{name}: \{{ name: '{name}-desktop'[^}}]*bias: ([\d.]+) \}}", self.scene).group(1))
+                self.assertLessEqual(bias, 0.8)
+        self.assertIn('L = heroLayout(camera.aspect);', self.scene)
+        self.assertIn('const pose = heroPose(e, t, sm.px, sm.py, k);', self.scene)
+        frame = self.scene.split('function frame(dt) {', 1)[1].split('\n  }', 1)[0]
+        self.assertNotIn('e * 0.5', frame)  # no tilt back on exit
+        self.assertNotIn('-e * 4.2', frame)  # no pulling away
+
+    def test_photos_behind_the_c_are_feathered_in_the_scene_and_the_fallback(self):
+        self.assertIn("const g = x.createRadialGradient(64, 64, 18, 64, 64, 64);", self.page)
+        self.assertIn("g.addColorStop(1, '#000');", self.page)  # alphaMap reads green: black is fully transparent
+        card = self.page.split('const photoCard = (src, w, h) => {', 1)[1].split('};', 1)[0]
+        for needle in ('alphaMap: feather', 'blending: THREE.CustomBlending', 'depthWrite: false', 'm.renderOrder = 1'):
+            self.assertIn(needle, card)
+        # Both the About photos and the Contact backplate are photo cards.
+        self.assertIn("const p = kind === 'photos' ? photoCard(src, 2.7, 1.8) : photoCard(src, 2.6, 1.75);", self.page)
+        rule = rules_for(base_rules(self.css['about.css']), '.ab-photos .photo')[0]
+        for prop in ('-webkit-mask-image', 'mask-image'):
+            with self.subTest(prop=prop):
+                self.assertRegex(rule, rf'(?:^|;){re.escape(prop)}:radial-gradient\([^;]*#000 \d+%,transparent 100%\)')
+
+    def test_showreel_has_no_box_and_its_chapters_sit_below_it(self):
+        css = self.css['home.css']
+        frame = rules_for(base_rules(css), '.reel-frame')[0]
+        self.assertIn('border-radius:0', frame)
+        self.assertNotIn('box-shadow', frame)
+        for prop in ('-webkit-mask-image', 'mask-image'):
+            self.assertRegex(frame, rf'(?:^|;){re.escape(prop)}:linear-gradient\(90deg,transparent,[^;]*transparent\),linear-gradient\(180deg,transparent,')
+        self.assertIn('mask-composite:intersect', frame)
+        self.assertIn("{ clipPath: 'inset(0% 0% 0% 0% round 0px)'", (OUT / 'assets/home.js').read_text())  # the lens ends square
+        section = re.search(r'<section class="reel band-warm".*?</section>', self.home, re.S).group(0)
+        media = re.search(r'<div class="reel-frame">(.*?)</div>', section, re.S).group(1)
+        self.assertEqual(media.count('<button'), 1)  # exactly one control over the film
+        self.assertIn('<button class="reel-toggle" type="button" data-reel-toggle hidden>Play showreel</button>', media)
+        self.assertNotIn('chapters', media)
+        # The chapter list follows the film in the page flow, as plain typography (no dark glass panel over the film).
+        self.assertLess(section.index('<div class="reel-frame">'), section.index('<div class="reel-panel"><ol class="chapters"'))
+        self.assertNotIn('lg-dark', section)
+        for selector in ('.reel-panel', '.chapters', '.chapters button'):
+            for body in rules_for(css, selector):  # every block, every screen size
+                with self.subTest(selector=selector):
+                    self.assertNotRegex(body, r'position:(?:absolute|fixed)')
+        # The glass chip sits in the top corner, clear of the film's own subtitles along its foot.
+        toggle = rules_for(base_rules(css), '.reel-toggle')[0]
+        self.assertIn('top:10%', toggle)
+        self.assertNotIn('bottom:', toggle)
+        # No ghost device frame: no laptop selector or element anywhere around the reel.
+        self.assertNotIn('laptop', section.replace('on a laptop and a phone', ''))
+        self.assertNotRegex(re.sub(r'/\*.*?\*/', '', css, flags=re.S), r'\.[\w-]*laptop')
+
+    def test_about_film_control_sits_below_the_film_never_over_its_text(self):
+        film = re.search(r'<figure class="film-fig" data-reel>(.*?)</figure>', self.about, re.S).group(1)
+        frame = re.search(r'<div class="film-frame">(.*?)</div>', film, re.S).group(1)
+        self.assertNotIn('film-ui', frame)
+        self.assertIn('</video></div>\n<div class="film-ui" data-reel-ui hidden>', film)
+        for body in rules_for(self.css['about.css'], '.film-ui'):
+            self.assertNotRegex(body, r'position:(?:absolute|fixed)|(?:^|;)(?:bottom|top|left|right):')
+        self.assertIn('margin:16px auto 0', rules_for(base_rules(self.css['about.css']), '.film-ui')[0])
+
+    def test_atmosphere_is_a_calm_warm_white(self):
+        css = base_rules(self.css['glass.css'])
+        base = float(re.search(r'opacity:([\d.]+)', rules_for(css, '.atmos i')[0]).group(1))
+        for n in range(1, 5):
+            rule = rules_for(css, f'.atmos i:nth-child({n})')[0]
+            with self.subTest(field=n):
+                own = re.search(r'opacity:([\d.]+)', rule)
+                opacity = float(own.group(1)) if own else base
+                colours = re.findall(r'#[0-9A-Fa-f]{6}', rule)
+                self.assertTrue(colours)
+                for colour in colours:
+                    self.assertTrue(hsl_saturation(colour) <= 0.30 or opacity <= 0.25, (colour, opacity))

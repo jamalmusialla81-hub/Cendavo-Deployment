@@ -1,4 +1,5 @@
 import json
+import math
 import re
 import shutil
 import subprocess
@@ -1444,7 +1445,7 @@ class DemoScriptTests(unittest.TestCase):
                 frame, panel = r[name]['entrance']
                 self.assertEqual(frame['names'], ['frame'])
                 self.assertEqual(frame['from']['clipPath'], 'inset(9% 16% 9% 16% round 48px)')
-                self.assertEqual(frame['to']['clipPath'], 'inset(0% 0% 0% 0% round 18px)')
+                self.assertEqual(frame['to']['clipPath'], 'inset(0% 0% 0% 0% round 0px)')  # Task 44: no box, square-edged
                 self.assertEqual((frame['to']['rotationX'], frame['to']['scale'], frame['to']['ease']), (0, 1, 'none'))
                 self.assertEqual(frame['trigger'], {'scrub': 0.6, 'once': False, 'pin': False})
                 self.assertTrue(set(frame['from']) <= {'clipPath', 'rotationX', 'scale', 'transformPerspective'})
@@ -1695,6 +1696,7 @@ SITE = Path(__file__).resolve().parents[1] / 'assets' / 'site.js'
 GLASS = Path(__file__).resolve().parents[1] / 'assets' / 'glass.js'
 GLASS_BOOT = Path(__file__).resolve().parents[1] / 'assets' / 'glass-boot.js'
 GLASS_PAGE = Path(__file__).resolve().parents[1] / 'assets' / 'glass-page.js'
+GLASS_SCENE = Path(__file__).resolve().parents[1] / 'assets' / 'glass-scene.js'
 
 # glass-boot.js: which environments import the scene, and when. import() is replaced by a recording stub (vm scripts have
 # no module loader); everything else runs as shipped.
@@ -1872,6 +1874,80 @@ class GlassShellScriptTests(unittest.TestCase):
     def node_json(self, script, path):
         out = subprocess.run(['node', '-e', script, str(path)], capture_output=True, text=True, check=True)
         return json.loads(out.stdout)
+
+    def test_hero_exit_pose_ends_facing_the_camera_and_larger(self):
+        # Task 44: glass-scene.js's heroPose, imported as the real module (pure, no GPU). Over the whole exit (e 0..1 in
+        # 0.05 steps), a range of times and pointer positions, the C never turns toward edge-on, the lockup never tilts back
+        # far, the name never reads backwards, and at the end the C faces the camera and is larger than at rest.
+        script = r'''
+const { pathToFileURL } = require('url');
+(async () => {
+  const m = await import(pathToFileURL(process.argv[1]).href);
+  const out = { cYaw: 0, tilt: 0, yaw: 0, endCYaw: 0, introCYaw: 0, YAW: m.YAW };
+  for (let i = 0; i <= 20; i++) {
+    const e = i / 20;
+    for (let t = 0; t <= 90; t += 0.25) for (let px = -1; px <= 1.0001; px += 0.5) for (let py = -1; py <= 1.0001; py += 0.5) {
+      const p = m.heroPose(e, t, px, py);
+      out.cYaw = Math.max(out.cYaw, Math.abs(p.yaw + p.markYaw));
+      out.tilt = Math.max(out.tilt, Math.abs(p.tilt));
+      out.yaw = Math.max(out.yaw, Math.abs(p.yaw));
+      if (i === 20) out.endCYaw = Math.max(out.endCYaw, Math.abs(p.yaw + p.markYaw));
+      for (const k of [0, 0.5]) {  // during the intro too
+        const q = m.heroPose(e, t, px, py, k);
+        out.introCYaw = Math.max(out.introCYaw, Math.abs(q.yaw + q.markYaw));
+        out.yaw = Math.max(out.yaw, Math.abs(q.yaw));
+      }
+    }
+  }
+  out.scaleRest = m.heroPose(0, 0, 0, 0).scale; out.scaleEnd = m.heroPose(1, 0, 0, 0).scale;
+  console.log(JSON.stringify(out));
+})();
+'''
+        r = self.node_json(script, GLASS_SCENE)
+        self.assertLessEqual(r['cYaw'], 0.45)
+        self.assertLessEqual(r['introCYaw'], 0.45)
+        self.assertLessEqual(r['endCYaw'], 0.12)
+        self.assertLessEqual(r['tilt'], 0.22)
+        self.assertLessEqual(r['YAW'], 0.56)
+        self.assertLessEqual(r['yaw'], r['YAW'] + 1e-9)
+        self.assertGreaterEqual(r['scaleEnd'], 1.15 * r['scaleRest'])
+
+    def test_hero_screens_are_sharp_and_the_dark_one_stays_clear_of_the_name(self):
+        # Task 44: the screens' mip bias is low (refracted content, not mush); the name is milky white frosted glass; and in
+        # every layout the dark hb screen sits at least one wordmark-width from the name and, as the camera sees it, never
+        # overlaps it.
+        script = r'''
+const { pathToFileURL } = require('url');
+(async () => {
+  const m = await import(pathToFileURL(process.argv[1]).href);
+  const aspects = [0.5, 0.7, 0.84, 0.86, 1.0, 1.2, 1.45, 1.6, 1.78, 2.13, 2.4];
+  console.log(JSON.stringify({ screens: m.SCREENS, word: m.WORD, glass: m.WORD_GLASS, markY: m.MARK_Y,
+    layouts: aspects.map(a => ({ aspect: a, ...m.heroLayout(a) })) }));
+})();
+'''
+        r = self.node_json(script, GLASS_SCENE)
+        for name in ('gl', 'hb'):
+            self.assertLessEqual(r['screens'][name]['bias'], 0.8)
+        glass = r['glass']
+        rgb = [int(glass['attenuationColor'][i:i + 2], 16) / 255 for i in (1, 3, 5)]
+        self.assertLessEqual(abs(rgb[0] - rgb[1]), 0.02)
+        self.assertLessEqual(abs(rgb[1] - rgb[2]), 0.02)
+        self.assertTrue(all(c >= 0.95 for c in rgb), rgb)
+        self.assertGreaterEqual(glass['roughness'], 0.2)
+        self.assertNotEqual(glass['attenuationColor'].lower(), '#d9e1e6')
+        word, hb = r['word'], r['screens']['hb']
+        camera = 14  # the camera's distance; a point at depth z appears scaled by 14 / (14 - z)
+        for lay in r['layouts']:
+            with self.subTest(aspect=lay['aspect']):
+                s = lay['logo']['s']
+                wx, wy = lay['logo']['x'], lay['logo']['y'] + word['y'] * s
+                x, y, z = lay['hb'][:3]
+                self.assertGreaterEqual(math.hypot(x - wx, y - wy), word['w'])  # one wordmark-width away (unscaled)
+                f = camera / (camera - z)
+                screen = (x * f - hb['w'] / 2 * f, x * f + hb['w'] / 2 * f, y * f - hb['h'] / 2 * f, y * f + hb['h'] / 2 * f)
+                name = (wx - word['w'] / 2 * s, wx + word['w'] / 2 * s, wy - word['h'] * s, wy + word['h'] * s)
+                apart = screen[1] < name[0] or screen[0] > name[1] or screen[3] < name[2] or screen[2] > name[3]
+                self.assertTrue(apart, (screen, name))
 
     def test_webgl_loads_only_on_capable_desktops_after_load_and_idle(self):
         r = self.node_json(GLASS_BOOT_SCRIPT, GLASS_BOOT)

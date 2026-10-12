@@ -7,7 +7,8 @@
      slab  - Work: a frosted glass slab at an angle, the Greenline concept loop playing behind it; the DOM phone stays in front
      panes - Services: three stacked glass panes (New website / Redesign / Care plan) fanning out, upper panes further back
      sheets - Pricing: two frosted sheets and a warm disc behind the HTML quote card, which stays in front as text
-     photos - About: a big glass C with the three studio photos floating behind it (the DOM collage steps back)
+     photos - About: a big glass C with the three studio photos floating behind it, feathered to soft ovals (Task 44; the
+              DOM collage steps back)
      mark   - Contact: a small glass C in its own fixed box (.ct-gl-spot) at the hero's top-right, above the form panel and
               never behind it (Task 41), a light photo (white kitchen) behind it, so the C refracts light, never a dark
               plane (Task 42); the form is untouched
@@ -63,6 +64,15 @@ function labelTexture(num, title, sub) {
   const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4; return t;
 }
 
+/* a radial falloff (white centre to black edge; alphaMap reads green): the photo's corners and edges melt into the page */
+function featherTexture() {
+  const c = document.createElement('canvas'); c.width = c.height = 128; const x = c.getContext('2d');
+  const g = x.createRadialGradient(64, 64, 18, 64, 64, 64);
+  g.addColorStop(0, '#fff'); g.addColorStop(0.5, '#fff'); g.addColorStop(1, '#000');
+  x.fillStyle = g; x.fillRect(0, 0, 128, 128);
+  return new THREE.CanvasTexture(c);
+}
+
 export function start(host, shared) {
   const G = shared || window.__glass || (window.__glass = { paused: false, pointer: { x: 0, y: 0 } });
   G.pointer = G.pointer || { x: 0, y: 0 };
@@ -96,16 +106,16 @@ export function start(host, shared) {
   scene.environment = pmrem.fromScene(studio, 0.03).texture;
   pmrem.dispose();
 
-  /* daylight colour field */
+  /* daylight colour field: a warm-white base with a faint tint (Task 44) */
   const fieldMat = new THREE.ShaderMaterial({ toneMapped: false, depthWrite: false,
     uniforms: { uTime: { value: 0 }, uPaper: { value: paper.clone() }, uA: { value: new THREE.Color('#EDBF72') }, uB: { value: new THREE.Color('#A3C4DE') }, uC: { value: new THREE.Color('#B2CB9C') } },
     vertexShader: 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }',
     fragmentShader: 'precision mediump float; varying vec2 vUv; uniform float uTime; uniform vec3 uPaper,uA,uB,uC;\n'
       + 'float blob(vec2 p, vec2 c, float r){ vec2 d = p - c; return exp(-dot(d,d)/(r*r)); }\n'
       + 'void main(){ vec2 p = vUv * vec2(1.6,1.0); float t = uTime*0.05; vec3 col = uPaper;\n'
-      + 'col = mix(col, uA, 0.8*blob(p, vec2(1.3+0.1*sin(t), 0.72), 0.3));\n'
-      + 'col = mix(col, uB, 0.7*blob(p, vec2(0.6+0.12*cos(t*0.8), 0.35), 0.3));\n'
-      + 'col = mix(col, uC, 0.6*blob(p, vec2(1.0+0.1*sin(t*1.2), 0.15), 0.25));\n'
+      + 'col = mix(col, uA, 0.42*blob(p, vec2(1.3+0.1*sin(t), 0.72), 0.3));\n'
+      + 'col = mix(col, uB, 0.34*blob(p, vec2(0.6+0.12*cos(t*0.8), 0.35), 0.3));\n'
+      + 'col = mix(col, uC, 0.28*blob(p, vec2(1.0+0.1*sin(t*1.2), 0.15), 0.25));\n'
       + 'gl_FragColor = vec4(col,1.0);\n#include <colorspace_fragment>\n}' });
   const field = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), fieldMat); field.position.z = -12; scene.add(field);
 
@@ -128,7 +138,15 @@ export function start(host, shared) {
 
   const obj = new THREE.Group(); scene.add(obj);   // the glass centrepiece
   const back = new THREE.Group(); scene.add(back); // what it refracts
-  const photoCard = (src, w, h) => new THREE.Mesh(roundedRect(w, h, 0.12), new THREE.MeshBasicMaterial({ map: img(src), toneMapped: false }));
+  /* Task 44: the photos behind the C (About, Contact) fade out in a soft oval (a radial alphaMap), never a hard rectangle.
+     They blend as "opaque" materials (custom blending, drawn after the colour field), because transmission refracts only
+     opaque objects. */
+  const feather = featherTexture();
+  const photoCard = (src, w, h) => {
+    const m = new THREE.Mesh(roundedRect(w, h, 0.12), new THREE.MeshBasicMaterial({ map: img(src), alphaMap: feather, toneMapped: false,
+      depthWrite: false, blending: THREE.CustomBlending, blendEquation: THREE.AddEquation, blendSrc: THREE.SrcAlphaFactor, blendDst: THREE.OneMinusSrcAlphaFactor }));
+    m.renderOrder = 1; return m;
+  };
   let unitH = 3.4;
   const parts = [];
   if (kind === 'slab') {

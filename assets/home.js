@@ -146,12 +146,13 @@
     gsap.fromTo(el, { clipPath: 'inset(0% 0% 100% 0%)', yPercent: 30 }, { clipPath: 'inset(0% 0% -12% 0%)', yPercent: 0, duration: 1, ease: OUT, clearProps: 'clipPath,transform', scrollTrigger: once(el) });
   });
 
-  // Showreel: a rounded glass lens that opens to the full frame and tilts flat as it scrolls in; the chapters follow once.
+  // Showreel: a rounded glass lens that opens to the full, square-edged frame (Task 44: no box) and tilts flat as it
+  // scrolls in; the chapters below it follow once.
   const reelLens = () => {
     const frame = $('.reel-frame');
     if (!frame) return;
     gsap.fromTo(frame, { clipPath: 'inset(9% 16% 9% 16% round 48px)', rotationX: 10, scale: 0.97, transformPerspective: 1600 },
-      { clipPath: 'inset(0% 0% 0% 0% round 18px)', rotationX: 0, scale: 1, ease: 'none', scrollTrigger: { trigger: frame, start: 'top 92%', end: 'top 25%', ...SCRUB } });
+      { clipPath: 'inset(0% 0% 0% 0% round 0px)', rotationX: 0, scale: 1, ease: 'none', scrollTrigger: { trigger: frame, start: 'top 92%', end: 'top 25%', ...SCRUB } });
     const panel = $('.reel-panel');
     if (panel && below(panel)) gsap.fromTo(panel, { y: 40, opacity: 0 }, { y: 0, opacity: 1, duration: 1, ease: OUT, clearProps: 'opacity,transform', scrollTrigger: once(panel) });
   };
