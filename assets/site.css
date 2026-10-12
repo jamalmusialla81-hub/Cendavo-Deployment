@@ -194,9 +194,11 @@ html.menu-lock .site-header .nav{max-height:calc(100svh - 24px);overflow-y:auto;
 /* Page transitions (Night Shift Task 29): cross-document View Transitions, only for people who have not asked for reduced
    motion; browsers without support navigate as usual. The header stays put, the page's one H1 morphs into the next page's,
    and the new page wipes up over the old one (450 ms). Each name is given to one element per page. The cursor ring
-   belongs to details.js, which no page loads since Daylight (Task 34); it never takes clicks and the native cursor stays. */
+   belongs to details.js, which no page loads since Daylight (Task 34); it never takes clicks and the native cursor stays.
+   Task 48: the name sits on the glass nav pill, never on .site-header: a named element is captured as its own layer, so
+   in Chromium a backdrop-filter inside it could only blur the (empty) header, never the page scrolling under it. */
 @view-transition{navigation:auto}
-.site-header{view-transition-name:site-header}
+.site-header .nav{view-transition-name:site-header}
 main h1{view-transition-name:page-title}
 ::view-transition-old(root){animation:vt-out 450ms cubic-bezier(.7,0,.2,1) both}
 ::view-transition-new(root){animation:vt-in 450ms cubic-bezier(.7,0,.2,1) both}

@@ -152,10 +152,12 @@
 
 /* Motion: only for people who have not asked for reduced motion; only transform and opacity move, hover within 200 ms.
    Openings are held only while motion-boot.js holds .ph-wait (its 2.5 s failsafe always lets go), and exactly where
-   motion.js takes them over: the headline lines, the fading copy and the un-masking frames of each page hero. */
+   motion.js takes them over: the headline lines, the rising copy and the un-masking frames of each page hero. Task 48: the
+   copy is never held at opacity 0 (it only sits 18px low), so it paints with the headline and the largest paint is not
+   delayed until the scripts run. */
 @media(prefers-reduced-motion:no-preference){
 .ph-wait :is(.wk-hero,.sv-hero,.pr-hero,.ab-hero) .ln>span{transform:translateY(108%)}
-.ph-wait :is(.wk-hero .pg-sub,.wk-clip,.sv-hero .pg-sub,.chap-nav,.pr-hero .pg-sub,.pr-hero .pg-actions){opacity:0;transform:translateY(18px)}
+.ph-wait :is(.wk-hero .pg-sub,.wk-clip,.sv-hero .pg-sub,.chap-nav,.pr-hero .pg-sub,.pr-hero .pg-actions){transform:translateY(18px)}
 .ph-wait :is(.sv-hero-media,.pr-hero .quote,.ab-photos .photo){clip-path:inset(0 0 0 100%)}
 .nf-sug a::after{transition:transform var(--dur-1) var(--ease-out)}
 .nf-sug a:hover::after{transform:translateX(4px) rotate(45deg)}

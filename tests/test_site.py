@@ -1859,6 +1859,21 @@ def rules_for(css, selector):
             if selector in [part.strip() for part in selectors.split(',')]]
 
 
+def module_graph(entry):
+    """Every file an ES module loads, itself included: its static `import ... from '...'` (and `export ... from '...'`)
+    specifiers, followed recursively. Task 48: what a page's WebGL scene makes the browser fetch."""
+    seen, todo = [], [Path(entry).resolve()]
+    while todo:
+        path = todo.pop()
+        if path in seen:
+            continue
+        seen.append(path)
+        text = path.read_text()
+        for spec in re.findall(r"^\s*(?:import|export)\b[^;]*?\bfrom\s*'([^']+)'", text, re.M) + re.findall(r"^\s*import\s*'([^']+)'", text, re.M):
+            todo.append((path.parent / spec).resolve())
+    return seen
+
+
 def gradient_stops(gradient):
     """[(alpha, position %)] for a linear-gradient's ink stops (`rgba(14,14,13,a) p%` or `var(--ink) p%`)."""
     stops = []
@@ -2366,20 +2381,26 @@ class LiquidGlassTests(unittest.TestCase):
 
     def test_scene_imports_only_vendored_three_by_relative_path(self):
         imports = re.findall(r"^import [^;]*? from '([^']+)';", self.scene, re.M)
-        self.assertEqual(imports, ['./vendor/three/three.module.min.js', './vendor/three/jsm/SVGLoader.js', './vendor/three/jsm/BufferGeometryUtils.js'])
+        # Task 48: the helpers both scenes share live in glass-shapes.js (vendored three only, by the same relative path).
+        self.assertEqual(imports, ['./vendor/three/three.module.min.js', './vendor/three/jsm/SVGLoader.js', './vendor/three/jsm/BufferGeometryUtils.js',
+                                   './glass-shapes.js'])
         for path in imports:
             self.assertTrue((OUT / 'assets' / path).resolve().is_file(), path)
+        shapes = (OUT / 'assets/glass-shapes.js').read_text()
+        self.assertEqual(re.findall(r"^import [^;]*? from '([^']+)';", shapes, re.M), ['./vendor/three/three.module.min.js'])
         # The vendored helpers import three by the same relative path, so the browser fetches one copy and needs no map.
         for helper in ('SVGLoader.js', 'BufferGeometryUtils.js'):
             self.assertRegex((OUT / 'assets/vendor/three/jsm' / helper).read_text(), r"\} from '\.\./three\.module\.min\.js';")
-        self.assertNotRegex(self.scene, r"from 'three|import\('three")
-        for banned in ('http', 'fetch(', 'XMLHttpRequest', 'innerHTML', 'eval(', 'localStorage', '?poster', 'preserveDrawingBuffer'):
-            self.assertNotIn(banned, self.scene)
+        for code in (self.scene, shapes):
+            self.assertNotRegex(code, r"from 'three|import\('three")
+            for banned in ('http', 'fetch(', 'XMLHttpRequest', 'innerHTML', 'eval(', 'localStorage', '?poster', 'preserveDrawingBuffer'):
+                self.assertNotIn(banned, code)
         self.assertEqual(self.scene, (ROOT / 'assets/glass-scene.js').read_text())  # modules ship as written
-        # Budgets: the scene file 40 KB at most, and everything the boot imports (three, its two helpers and the scene)
-        # 900 KB at most; none of it is on any page's first load (no page names it in a tag).
+        self.assertEqual(shapes, (ROOT / 'assets/glass-shapes.js').read_text())
+        # Budgets: the scene file 40 KB at most, and everything the boot imports (three, its two helpers, the shared shapes
+        # and the scene) 900 KB at most; none of it is on any page's first load (no page names it in a tag).
         self.assertLessEqual(len(self.scene.encode()), 40 * 1024)
-        total = sum((OUT / 'assets' / path).stat().st_size for path in imports) + len(self.scene.encode())
+        total = sum(path.stat().st_size for path in module_graph(OUT / 'assets/glass-scene.js'))
         self.assertLessEqual(total, 900 * 1024)
         for route, html in self.html.items():
             with self.subTest(route=route):
@@ -2424,7 +2445,8 @@ class LiquidGlassTests(unittest.TestCase):
         js = (OUT / 'assets/glass.js').read_text()
         self.assertIn("root.classList.add('lg-refract');", js)
         self.assertLess(js.index("brands.some(b => /Chromium/.test(b.brand))"), js.index("root.classList.add('lg-refract');"))
-        self.assertLess(js.index('if (!motionOK) return;'), js.index('new win.Lenis('))
+        # Task 48: under reduced motion GSAP's ticker is put to sleep and glass.js stops before Lenis.
+        self.assertLess(js.index('if (!motionOK) { if (ticker) ticker.sleep(); return; }'), js.index('new win.Lenis('))
         for banned in MOTION_SCRIPT_BANS:
             self.assertNotIn(banned, js)
 
@@ -2433,13 +2455,14 @@ class LiquidGlassTests(unittest.TestCase):
         # scripts with template literals). Every shipped script must still parse, and keep every line of code in order.
         import shutil
         import subprocess
-        from scripts.build_site import strip_js
+        from scripts.build_site import strip_js, STRIP_SKIP
         node = shutil.which('node')
+        self.assertEqual(STRIP_SKIP, {'glass-scene.js', 'glass-page.js', 'glass-shapes.js'})  # the ES modules (Task 48)
         for path in sorted((ROOT / 'assets').glob('*.js')):
             shipped = (OUT / 'assets' / path.name).read_text()
             source = path.read_text()
             with self.subTest(script=path.name):
-                if path.name in ('glass-scene.js', 'glass-page.js') or '`' in source:
+                if path.name in STRIP_SKIP or '`' in source:
                     self.assertEqual(shipped, source)
                 else:
                     self.assertEqual(shipped, strip_js(source))
@@ -2448,7 +2471,7 @@ class LiquidGlassTests(unittest.TestCase):
                     for line in shipped.splitlines():
                         self.assertTrue(any(line == candidate or candidate.endswith('*/ ' + line) for candidate in lines), line)
                 if node:
-                    module = ['--input-type=module'] if path.name in ('glass-scene.js', 'glass-page.js') else []
+                    module = ['--input-type=module'] if path.name in STRIP_SKIP else []
                     result = subprocess.run(['node', *module, '--check'], input=shipped, capture_output=True, text=True)
                     self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(strip_js('a();\n  // note\n  /* block\n   still */ b();\n/* one */\n  c(); // kept\n'), 'a();\nb();\nc(); // kept\n')
@@ -2795,11 +2818,12 @@ class MotionQualityTests(unittest.TestCase):
         self.assertNotIn("$$('h1', head)", opening)
 
     def test_css_hold_matches_the_opening_elements(self):
-        # Daylight (Task 34): each inner hero holds its headline lines, its fading copy and its un-masking frames, exactly
-        # the elements motion.js opens with fromTo (data-ph-fade, data-ph-media), and nothing else.
+        # Daylight (Task 34): each inner hero holds its headline lines, its rising copy and its un-masking frames, exactly
+        # the elements motion.js opens with fromTo (data-ph-fade, data-ph-media), and nothing else. Task 48: the copy is
+        # only held 18px low, never at opacity 0, so it paints with the headline (LCP).
         guarded = self.guarded(self.pages_css)
         held = {'.ph-wait :is(.wk-hero,.sv-hero,.pr-hero,.ab-hero) .ln>span': 'transform:translateY(108%)',
-                '.ph-wait :is(.wk-hero .pg-sub,.wk-clip,.sv-hero .pg-sub,.chap-nav,.pr-hero .pg-sub,.pr-hero .pg-actions)': 'opacity:0;transform:translateY(18px)',
+                '.ph-wait :is(.wk-hero .pg-sub,.wk-clip,.sv-hero .pg-sub,.chap-nav,.pr-hero .pg-sub,.pr-hero .pg-actions)': 'transform:translateY(18px)',
                 '.ph-wait :is(.sv-hero-media,.pr-hero .quote,.ab-photos .photo)': 'clip-path:inset(0 0 0 100%)'}
         for selector, body in held.items():
             with self.subTest(selector=selector):
@@ -2828,9 +2852,10 @@ class MotionQualityTests(unittest.TestCase):
                     self.assertIn('<div class="ab-photos" aria-hidden="true">', head.group(2))
         # The homepage hero is held the same way and opened with fromTo, never from. Liquid Glass (Task 37): the headline
         # lines, the copy and the glass cards are held, and nothing else (the WebGL host and its still are never hidden).
+        # Task 48: the copy and buttons only sit 18px low, never at opacity 0 (LCP).
         home = self.guarded(self.home_css)
         held = ['.ph-wait .hero-h .ln>span{transform:translateY(108%)}',
-                '.ph-wait :is(.hero-sub,.hero .actions){opacity:0;transform:translateY(18px)}', '.ph-wait .hero-cards{opacity:0}']
+                '.ph-wait :is(.hero-sub,.hero .actions){transform:translateY(18px)}', '.ph-wait .hero-cards{opacity:0}']
         for rule in held:
             with self.subTest(rule=rule):
                 self.assertIn(rule, home)
@@ -3021,8 +3046,9 @@ class ViewTransitionAndDetailTests(unittest.TestCase):
             for selectors, body in re.findall(r'([^{}]+)\{([^{}]*)\}', self.css[name]):
                 for value in re.findall(r'view-transition-name:([\w-]+)', body):
                     named[value] = selectors.strip()
-        # The header stays put; each page's one H1 morphs into the next page's.
-        self.assertEqual(named, {'site-header': '.site-header', 'page-title': 'main h1'})
+        # The header's glass pill stays put; each page's one H1 morphs into the next page's. Task 48: the name is on the pill,
+        # never on .site-header (a named ancestor stops the pill's backdrop-filter blurring the page under it).
+        self.assertEqual(named, {'site-header': '.site-header .nav', 'page-title': 'main h1'})
         for route, html in self.html.items():
             with self.subTest(route=route):
                 self.assertNotIn('view-transition', html)  # never inline (style-src 'self')
@@ -3250,8 +3276,10 @@ class DaylightTests(unittest.TestCase):
         boot = (ROOT / 'assets/glass-boot.js').read_text()
         self.assertIn("canvas.setAttribute('aria-hidden', 'true')", scene)
         self.assertIn("canvas.addEventListener('webglcontextlost', () => { host.classList.remove('is-live');", scene)
-        catch = re.search(r"\.catch\(\(\) => ([^;]*\))\);", boot)
-        self.assertEqual(catch.group(1), "host.classList.remove('is-live')")  # nothing removes the still
+        # Task 48: a failed import or start also releases the tested WebGL context (lose only calls loseContext).
+        catch = re.search(r"\.catch\(\(\) => (\{[^}]*\})\);", boot)
+        self.assertEqual(catch.group(1), "{ host.classList.remove('is-live'); lose(gl); }")  # nothing removes the still
+        self.assertIn("const lose = gl => gl.context.getExtension?.('WEBGL_lose_context')?.loseContext();", boot)
         for code in (scene, boot):
             self.assertNotIn('.remove()', code)
             self.assertNotIn('backgroundImage', code)
@@ -3724,7 +3752,7 @@ class DaylightInnerPageTests(unittest.TestCase):
 class GlassPageSceneTests(unittest.TestCase):
     """Liquid Glass inner pages, part 1 (Task 39): Work and Services each get one aria-hidden WebGL scene host behind the hero,
     fitted to a hero element, imported by glass-boot.js from a fixed list (tests/test_demo_js.py covers when). The media it
-    stands in for stays in the page; the module imports only vendored three and glass-scene.js by relative path."""
+    stands in for stays in the page; the module imports only vendored three and (Task 48) glass-shapes.js by relative path."""
 
     PAGES = {'work/index.html': ('slab', '.wk-clip', False), 'services/index.html': ('panes', '.sv-hero-media', True),
              'pricing/index.html': ('sheets', '.quote-desk', False), 'about/index.html': ('photos', '.ab-photos', True),
@@ -3815,7 +3843,8 @@ class GlassPageSceneTests(unittest.TestCase):
 
     def test_module_imports_only_by_relative_path_and_shares_pause_motion(self):
         imports = re.findall(r"^import [^;]*? from '([^']+)';", self.module, re.M)
-        self.assertEqual(imports, ['./vendor/three/three.module.min.js', './glass-scene.js'])
+        # Task 48: the shared helpers come from glass-shapes.js, never from the homepage scene.
+        self.assertEqual(imports, ['./vendor/three/three.module.min.js', './glass-shapes.js'])
         self.assertNotRegex(self.module, r"from 'three|from '/|import\(")
         for banned in ('http', 'fetch(', 'XMLHttpRequest', 'innerHTML', 'eval(', 'localStorage', 'preserveDrawingBuffer', 'preload = \'auto\''):
             self.assertNotIn(banned, self.module)
@@ -4451,3 +4480,102 @@ class EnquiryRobustnessAndAccessTests(unittest.TestCase):
         home = main_of((OUT / 'index.html').read_text())
         self.assertRegex(home, r'<div class="reel-head" data-rise-group><h2 id="reel-title" data-rise>[^<]+</h2><p id="reel-desc" data-rise>')
         self.assertRegex(home, r'<div class="work-head" data-rise-group><h2 id="work-title" data-rise>')
+
+
+class PerformanceTask48Tests(unittest.TestCase):
+    """Task 48 (performance): hero copy paints with the headline (never held at opacity 0), the /work/ Play button's space is
+    kept before scripts run, the inner pages' WebGL never fetches the homepage scene or three's SVG helpers, and the glass
+    nav pill's blur is never cut off by an ancestor. Behaviour (video timing, the WebGL test context, GSAP's ticker under
+    Pause motion and reduced motion) is in tests/test_demo_js.py."""
+
+    COPY = ('.pg-sub', '.hero-sub', '.hero .actions', '.pr-hero .pg-actions', '.wk-clip', '.chap-nav')
+    # What makes an element a backdrop root (or its own composited layer) and so stops a descendant's backdrop-filter
+    # from reaching the page behind it.
+    BACKDROP_ROOT = re.compile(r'(?<![-\w])(?:filter|mask|mask-image|mask-border|-webkit-mask|will-change|contain|clip-path|'
+                               r'mix-blend-mode|view-transition-name):|(?<![-\w])opacity:(?:0?\.\d+|0)(?![.\d])')
+
+    @classmethod
+    def setUpClass(cls):
+        build()
+        cls.css = {name: (OUT / 'assets' / name).read_text() for name in SHEETS}
+
+    @staticmethod
+    def rules(css):
+        """(selector, body) for every rule, inside @media blocks too; comments removed."""
+        css = re.sub(r'/\*.*?\*/', '', css, flags=re.S)
+        return [(sel.strip(), body) for sel, body in re.findall(r'([^{}@]+)\{([^{}]*)\}', css)]
+
+    def test_hero_copy_is_never_held_at_opacity_zero(self):
+        for name in ('pages.css', 'home.css'):
+            for selectors, body in self.rules(self.css[name]):
+                if '.ph-wait' not in selectors or not any(part in selectors for part in self.COPY):
+                    continue
+                with self.subTest(css=name, selectors=selectors):
+                    self.assertNotRegex(body, r'opacity:0(?![.\d])')
+                    self.assertIn('transform:translateY(18px)', body)  # it still rises 18px into place
+        for script in ('motion.js', 'home.js'):
+            js = (OUT / 'assets' / script).read_text()
+            with self.subTest(script=script):
+                self.assertIn("tl.fromTo(fades, { y: 18 }, { y: 0, duration: 0.7, stagger: 0.08, clearProps: 'transform' }", js)
+                self.assertNotIn('{ y: 18, opacity: 0 }', js)
+
+    def test_work_play_button_space_is_kept_before_scripts_run(self):
+        kit = self.css['kit.css']
+        rules = dict(self.rules(kit))
+        # An empty placeholder exactly the button's size (16px gap + 44px), only while scripts are on and the button hidden.
+        self.assertEqual(rules['.js .clip-side:has(>.vt[hidden])::after'], 'content:"";display:block;height:44px;margin-top:16px')
+        self.assertEqual(rules['.clip-side .vt'], 'display:flex;width:fit-content')  # block-level: no line box adds height
+        vt = rules['.vt']
+        self.assertIn('min-height:44px', vt)
+        self.assertIn('margin-top:16px', vt)
+        self.assertIn('*,*::before,*::after{box-sizing:border-box}', self.css['site.css'])
+        work = main_of((OUT / 'work/index.html').read_text())
+        self.assertRegex(work, r'<div class="clip-side">.*<button class="vt" type="button" data-reel-toggle hidden>Play three signs video</button></div>')
+        for route in MOTION_ROUTES:
+            with self.subTest(route=route):  # .js is set in <head>, before the first paint
+                html = (OUT / route).read_text()
+                self.assertLess(html.index('/assets/motion-boot.js'), html.index('</head>'))
+        self.assertIn("c.add('js');", (OUT / 'assets/motion-boot.js').read_text())
+
+    def test_inner_page_webgl_never_fetches_the_homepage_scene_or_svg_helpers(self):
+        page = OUT / 'assets/glass-page.js'
+        graph = [path.name for path in module_graph(page)]
+        self.assertEqual(sorted(graph), ['glass-page.js', 'glass-shapes.js', 'three.module.min.js'])
+        for name in ('glass-page.js', 'glass-shapes.js'):
+            code = re.sub(r'/\*.*?\*/|^\s*//.*$', '', (OUT / 'assets' / name).read_text(), flags=re.S | re.M)  # code, not comments
+            for banned in ('SVGLoader', 'BufferGeometryUtils', 'glass-scene', 'mergeGeometries', 'extrude('):
+                with self.subTest(module=name, banned=banned):
+                    self.assertNotIn(banned, code)
+        self.assertNotIn('import(', page.read_text())  # nothing loaded later either
+        boot = (OUT / 'assets/glass-boot.js').read_text()
+        for kind in ('slab', 'panes', 'sheets', 'photos', 'mark'):
+            self.assertIn(f"{kind}: '/assets/glass-page.js'", boot)
+        # The homepage scene still has its wordmark helpers.
+        self.assertIn('SVGLoader.js', [path.name for path in module_graph(OUT / 'assets/glass-scene.js')])
+
+    def test_nav_backdrop_blur_is_plain_and_no_ancestor_cuts_it_off(self):
+        glass_js = (OUT / 'assets/glass.js').read_text()
+        # The edge refraction (an SVG url() filter) never reaches the nav pill: glass.js only maps .lg panels.
+        self.assertIn("const REFRACT = '.lg';", glass_js)
+        self.assertIn('const apply = () => $$(REFRACT).forEach(el => {', glass_js)
+        self.assertEqual(glass_js.count('--lg-filter'), 1)
+        self.assertNotIn('url(', rules_for(base_rules(self.css['glass.css']), '.site-header .nav')[0])
+        # The nav's ancestors (.site-header, body, html) never become a backdrop root in any stylesheet, at any width.
+        ancestor = re.compile(r'^(?:html|body|:root)(?:[.:\[][^\s>+~]*)?$|^\.site-header(?:[.:\[][^\s>+~]*)?$')
+        checked = 0
+        for name, css in self.css.items():
+            for selectors, body in self.rules(css):
+                for selector in [part.strip() for part in re.sub(r'\([^()]*\)', '()', selectors).split(',')]:
+                    if '::' in selector or not ancestor.match(re.split(r'[\s>+~]+', selector)[-1]):
+                        continue
+                    checked += 1
+                    with self.subTest(css=name, selector=selector):
+                        self.assertNotRegex(body, self.BACKDROP_ROOT)
+                        if name != 'site.css':  # site.css's old header blur is overridden by glass.css (loaded after it)
+                            self.assertNotRegex(body, r'backdrop-filter:(?!none)')
+        self.assertGreaterEqual(checked, 5)
+        header = rules_for(base_rules(self.css['glass.css']), '.site-header')[0]
+        self.assertIn('-webkit-backdrop-filter:none;backdrop-filter:none', header)
+        # The page transition names the pill itself, never the header around it.
+        self.assertIn('.site-header .nav{view-transition-name:site-header}', self.css['site.css'])
+        self.assertNotIn('.site-header{view-transition-name', self.css['site.css'])

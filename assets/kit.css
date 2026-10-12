@@ -123,6 +123,11 @@
 .vt:hover{border-color:var(--ink)}
 .vt::before{content:"";width:0;height:0;border-left:9px solid currentColor;border-top:6px solid transparent;border-bottom:6px solid transparent}
 .vt.is-playing::before{width:9px;height:11px;border:0;border-inline:3px solid currentColor}
+/* Task 48: the Play button ships hidden and reel.js reveals it. With scripts on (.js, set in <head>) an empty placeholder
+   of exactly its size (16px gap, 44px button: a block-level button, so no line box adds to it) holds its place from the
+   first paint, so revealing it never pushes the content below (CLS). The placeholder is empty: nothing to announce. */
+.clip-side .vt{display:flex;width:fit-content}
+.js .clip-side:has(>.vt[hidden])::after{content:"";display:block;height:44px;margin-top:16px}
 @media(max-width:560px){
 .clip{grid-template-columns:42% minmax(0,1fr);gap:16px}
 .sp{width:100%}

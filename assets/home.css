@@ -347,10 +347,10 @@
 
 /* Motion: only for people who have not asked for reduced motion; only transform and opacity move.
    Hero start states, only while motion-boot.js holds .ph-wait: home.js takes them over with GSAP fromTo and removes the
-   class (its 2.5 s timer removes it whatever happens), so nothing paints, vanishes and replays. */
+   class (its 2.5 s timer removes it whatever happens), so nothing paints, vanishes and replays. Task 48: copy never opacity 0. */
 @media(prefers-reduced-motion:no-preference){
 .ph-wait .hero-h .ln>span{transform:translateY(108%)}
-.ph-wait :is(.hero-sub,.hero .actions){opacity:0;transform:translateY(18px)}
+.ph-wait :is(.hero-sub,.hero .actions){transform:translateY(18px)}
 .ph-wait .hero-cards{opacity:0}
 /* Concept cards: the photo pushes in a little on hover or keyboard focus, and the light sweep follows the pointer, both
    within 200 ms. */

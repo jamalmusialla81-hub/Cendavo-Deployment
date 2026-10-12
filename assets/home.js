@@ -68,7 +68,7 @@
       const target = Number(button.dataset.compareSet);
       stopSweep();
       tween?.kill();
-      if (window.gsap && !still()) {
+      if (window.gsap && !still() && !window.__glass?.paused) {
         // Glide the divider to the chosen side; the range value follows so it stays the source of truth.
         tween = window.gsap.to(state, { v: target, duration: 0.4, ease: IO, onUpdate: () => { range.value = Math.round(state.v); update(); } });
       } else {
@@ -151,7 +151,8 @@
       book?.classList.add('booked');
     };
     if (lines.length) tl.fromTo(lines, { yPercent: 108, y: 0 }, { yPercent: 0, y: 0, duration: 1, stagger: 0.08, clearProps: 'transform' }, 0);
-    if (fades.length) tl.fromTo(fades, { y: 18, opacity: 0 }, { y: 0, opacity: 1, duration: 0.7, stagger: 0.08, clearProps: OT }, 0.4);
+    // Task 48: the copy and buttons only rise (never opacity 0), so they paint with the headline (LCP).
+    if (fades.length) tl.fromTo(fades, { y: 18 }, { y: 0, duration: 0.7, stagger: 0.08, clearProps: 'transform' }, 0.4);
     const deck = $('.hero-cards');
     if (deck) tl.fromTo(deck, { opacity: 0 }, { opacity: 1, duration: 0.2, clearProps: 'opacity' }, 0.6);
     if (cards.length) {
@@ -244,13 +245,15 @@
   const tilt = () => $$('.teaser-card').forEach(card => {
     const rx = gsap.quickTo(card, 'rotationX', { duration: 0.6, ease: OUT }), ry = gsap.quickTo(card, 'rotationY', { duration: 0.6, ease: OUT });
     const shine = $('.teaser-img', card);
+    // Task 48: no new tween (it would wake GSAP's ticker) while Pause motion is pressed.
     card.addEventListener('pointermove', e => {
+      if (glass.paused) return;
       const r = card.getBoundingClientRect(), nx = (e.clientX - r.left) / r.width - 0.5, ny = (e.clientY - r.top) / r.height - 0.5;
       gsap.set(card, { transformPerspective: 1200 });
       rx(tiltOf(-ny * 8)); ry(tiltOf(nx * 10));
       shine?.style.setProperty('--sweep', Math.round(nx * 120) + '%');
     });
-    card.addEventListener('pointerleave', () => { rx(0); ry(0); shine?.style.setProperty('--sweep', '-120%'); });
+    card.addEventListener('pointerleave', () => { if (!glass.paused) { rx(0); ry(0); } shine?.style.setProperty('--sweep', '-120%'); });
   });
 
   // Only the visual --pos moves: the range value, its aria-valuetext and the buttons never change (nothing is announced).

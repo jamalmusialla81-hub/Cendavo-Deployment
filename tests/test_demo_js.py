@@ -98,7 +98,9 @@ function makeGsap(env) {
     killTweensOf() {},
     quickTo(target, prop) { return value => log.quick.push([prop, value]); },
   };
-  const ScrollTrigger = { batch() { log.batches++; }, create(v) { log.creates.push(v); } };
+  // Task 48: glass.js asks ScrollTrigger for its triggers and refresh events, and GSAP for its running animations.
+  gsap.globalTimeline = { getChildren() { return []; } };
+  const ScrollTrigger = { batch() { log.batches++; }, create(v) { log.creates.push(v); }, getAll() { return []; }, refresh() {}, addEventListener() {} };
   return { gsap, ScrollTrigger, log };
 }
 function makeWindow(env, extra) {
@@ -266,7 +268,8 @@ async function run(env) {
   const { video, toggle, src } = reels[0];
   const root = element('html'); root.classList = classList(['js']);
   const parts = { '[data-reel]': reels.map(r => r.reel) };
-  const doc = makeDoc(parts, root, env);
+  // Task 48: these cases describe a page that has finished loading (before that nothing starts by itself: runEarly).
+  const doc = makeDoc(parts, root, { complete: true, ...env });
   const observers = [];
   class FakeObserver { constructor(callback, options) { this.callback = callback; this.options = options; this.targets = []; observers.push(this); } observe(target) { this.targets.push(target); } }
   const { win } = makeWindow(env, {
@@ -357,6 +360,28 @@ async function runHero(env) {
     observed: observers.filter(o => o.targets.includes(v)).length }));
   return out;
 }
+// Task 48: the /work/ hero clip, on screen while the page is still loading. Nothing plays (so nothing downloads) until the
+// load event and idle; a press of its button plays it at once, and the controller never pauses that press for not being
+// loaded yet.
+async function runEarly(env) {
+  const { reel, video, toggle } = makeReel(env, 'three signs video', false);
+  const root = element('html'); root.classList = classList(['js']);
+  const doc = makeDoc({ '[data-reel]': [reel] }, root, env);
+  const observers = [], idle = [];
+  class FakeObserver { constructor(callback) { this.callback = callback; this.targets = []; observers.push(this); } observe(target) { this.targets.push(target); } }
+  const { win, listeners } = makeWindow(env, { IntersectionObserver: FakeObserver, requestIdleCallback: fn => idle.push(fn), navigator: { connection: {} } });
+  let error = null;
+  try { vm.runInNewContext(source, { window: win, document: doc, setImmediate }); } catch (e) { error = String(e); }
+  const view = async on => { observers.filter(o => o.targets.includes(video)).forEach(o => o.callback([{ isIntersecting: on, target: video }])); await settle(); };
+  const steps = [];
+  const step = name => steps.push([name, { playing: !video.paused, plays: video.plays, label: toggle.textContent }]);
+  await view(true); step('in view, loading');
+  if (env.press) { (toggle.listeners.click || []).forEach(fn => fn({ type: 'click' })); await settle(); step('press'); await view(true); step('observer again'); }
+  (listeners.load || []).forEach(l => l.fn({ type: 'load' })); await settle(); step('load');
+  idle.splice(0).forEach(fn => fn()); await settle(); step('idle');
+  await view(false); step('out of view');
+  return { error, steps, hidden: toggle.hidden };
+}
 (async () => {
   const desktop = { width: 1440, height: 900, fine: true, reduce: false };
   const phone = { width: 390, height: 844, fine: false, reduce: false };
@@ -370,6 +395,8 @@ async function runHero(env) {
   const heroes = { heroDesktop: desktop, heroComplete: { ...desktop, complete: true }, heroReduced: { ...desktop, reduce: true },
     heroSaveData: { ...phone, saveData: true }, heroPhone: { ...phone, narrow: true } };
   for (const [name, env] of Object.entries(heroes)) out[name] = await runHero(env);
+  out.early = await runEarly(desktop);
+  out.earlyPress = await runEarly({ ...desktop, press: true });
   console.log(JSON.stringify(out));
 })();
 """
@@ -1155,8 +1182,9 @@ class DemoScriptTests(unittest.TestCase):
         # (b) JS removes the native controls and shows a type="button" toggle whose label follows the real playback state.
         r = self.node_json(REEL_SCRIPT, REEL)
         for name, result in r.items():
-            if 'multi' in result or name.startswith('hero'):
-                continue  # clips: test_every_reel_on_a_page_plays_and_pauses_on_its_own; the homepage: the hero loop tests
+            if 'multi' in result or name.startswith(('hero', 'early')):
+                continue  # clips: test_every_reel_on_a_page_plays_and_pauses_on_its_own; the homepage: the hero loop tests;
+                # early: test_large_videos_wait_for_load_and_idle_but_a_press_plays_at_once
             with self.subTest(case=name):
                 self.assertIsNone(result['error'])
                 self.assertFalse(result['controls'])
@@ -1218,7 +1246,8 @@ class DemoScriptTests(unittest.TestCase):
     def test_hero_loops_start_only_after_load_and_idle_and_follow_the_tab(self):
         # Daylight (Task 33): the hero's laptop and phone loops share reel.js with the showreel. They are muted, observed and
         # start only once the page has loaded and gone idle (so they never compete with first paint), pause with the tab
-        # hidden and resume when it is back. The showreel needs no load wait. Order: laptop, phone, showreel.
+        # hidden and resume when it is back. Task 48: so does the showreel (it used to start before load). Order: laptop,
+        # phone, showreel.
         r = self.node_json(REEL_SCRIPT, REEL)
         hero = r['heroDesktop']
         self.assertIsNone(hero['error'])
@@ -1228,12 +1257,31 @@ class DemoScriptTests(unittest.TestCase):
         self.assertFalse(hero['motionHidden'])
         self.assertEqual(hero['pressed'], 'false')
         steps = [(name, playing) for name, playing, _ in hero['steps']]
-        self.assertEqual(steps[:5], [('in view', [False, False, True]), ('loaded', [False, False, True]), ('idle', [True, True, True]),
+        self.assertEqual(steps[:5], [('in view', [False, False, False]), ('loaded', [False, False, False]), ('idle', [True, True, True]),
                                      ('tab hidden', [False, False, False]), ('tab visible', [True, True, True])])
         # Already loaded when the script runs: no wait, no load listener.
         complete = r['heroComplete']
         self.assertEqual(complete['loadListeners'], 0)
         self.assertEqual(complete['steps'][0][1], [True, True, True])
+
+    def test_large_videos_wait_for_load_and_idle_but_a_press_plays_at_once(self):
+        # Task 48: the /work/ hero clip is on screen at load. Nothing calls play() (so its file is never fetched) until the
+        # load event and idle; then it plays in view. A press before load plays it at once, and the observer (or the load
+        # wait) never pauses that press while it stays in view.
+        r = self.node_json(REEL_SCRIPT, REEL)
+        early = r['early']
+        self.assertIsNone(early['error'])
+        self.assertFalse(early['hidden'])
+        self.assertEqual([(name, state['playing'], state['plays']) for name, state in early['steps']],
+                         [('in view, loading', False, 0), ('load', False, 0), ('idle', True, 1), ('out of view', False, 1)])
+        press = r['earlyPress']
+        self.assertIsNone(press['error'])
+        self.assertEqual([(name, state['playing'], state['plays']) for name, state in press['steps']],
+                         [('in view, loading', False, 0), ('press', True, 1), ('observer again', True, 1), ('load', True, 1),
+                          ('idle', True, 1), ('out of view', False, 1)])
+        self.assertEqual(press['steps'][1][1]['label'], 'Pause three signs video')
+        js = REEL.read_text(encoding='utf-8')
+        self.assertIn('const go = it.wanted && it.inView && !doc.hidden && (loaded || it.pressed);', js)
 
     def test_pause_motion_holds_every_video_until_pressed_again(self):
         r = self.node_json(REEL_SCRIPT, REEL)
@@ -1706,15 +1754,23 @@ const settle = () => new Promise(resolve => setImmediate(resolve));
 async function run(env) {
   const host = element('host');
   if (env.kind) host.setAttribute('data-gl-kind', env.kind);
-  const imports = [], idle = [], timers = [], contexts = [];
+  const imports = [], idle = [], timers = [], contexts = [], attrs = [], made = [];
+  let lost = 0;
+  // Task 48: the test canvas's context is the scene's own; WEBGL_lose_context releases it when nothing takes it.
   const doc = { readyState: env.complete ? 'complete' : 'interactive', querySelector: s => (s === '[data-gl]' && !env.noHost ? host : null),
-    createElement: tag => ({ tag, getContext: kind => { contexts.push(kind); return env.noWebGL ? null : {}; } }) };
+    createElement: tag => { const canvas = { tag, getContext: (kind, a) => { contexts.push(kind); attrs.push(a); if (env.noWebGL) return null;
+      const context = { getExtension: name => (name === 'WEBGL_lose_context' ? { loseContext() { lost++; } } : null) }; made.push({ canvas, context }); return context; } };
+      return canvas; } };
   const nav = { connection: { saveData: Boolean(env.saveData) } };
   if (env.memory !== undefined) nav.deviceMemory = env.memory;
   if (env.cores !== undefined) nav.hardwareConcurrency = env.cores;
   const { win, listeners } = makeWindow(env, { navigator: nav, requestIdleCallback: (fn, o) => idle.push([fn, o]), setTimeout: (fn, ms) => timers.push([fn, ms]) });
-  let started = null;
-  const __import = url => { imports.push(url); return env.fail ? Promise.reject(new Error('offline')) : Promise.resolve({ start: (h, g) => { started = { host: h.name, shared: g === win.__glass }; } }); };
+  let started = null, handed = null;
+  const __import = url => { imports.push(url); return env.fail ? Promise.reject(new Error('offline')) : Promise.resolve({ start: (h, g, gl) => {
+    if (env.startThrows) throw new Error('no GPU');
+    started = { host: h.name, shared: g === win.__glass };
+    handed = Boolean(gl && made.length === 1 && gl.canvas === made[0].canvas && gl.context === made[0].context);
+    return !env.declines; } }); };
   let error = null;
   try { vm.runInNewContext(source, { window: win, document: doc, __import }); } catch (e) { error = String(e); }
   const out = { error, beforeLoad: imports.length, loadListeners: (listeners.load || []).length };
@@ -1725,7 +1781,10 @@ async function run(env) {
   await settle();
   out.imports = imports;
   out.contexts = contexts;
+  out.attrs = attrs;
   out.started = started;
+  out.handed = handed;
+  out.lost = lost;
   out.liveRemoved = host.classList.set.size === 0;
   out.decide = win.__glass && win.__glass.wantsGL ? [
     win.__glass.wantsGL({ reduce: false, saveData: false, narrow: false, lowEnd: false, webgl: true }),
@@ -1751,7 +1810,8 @@ async function run(env) {
     sheetsReduced: { ...desktop, kind: 'sheets', reduce: true }, photosSaveData: { ...desktop, kind: 'photos', saveData: true },
     markNoWebGL: { ...desktop, kind: 'mark', noWebGL: true }, markReduced: { ...desktop, kind: 'mark', reduce: true },
     markSaveData: { ...desktop, kind: 'mark', saveData: true }, photosNarrow: { ...desktop, kind: 'photos', width: 760 },
-    sheetsNoWebGL: { ...desktop, kind: 'sheets', noWebGL: true }, photosNoWebGL: { ...desktop, kind: 'photos', noWebGL: true } };
+    sheetsNoWebGL: { ...desktop, kind: 'sheets', noWebGL: true }, photosNoWebGL: { ...desktop, kind: 'photos', noWebGL: true },
+    declines: { ...desktop, kind: 'slab', declines: true }, startThrows: { ...desktop, startThrows: true } };
   const out = {};
   for (const [name, env] of Object.entries(cases)) out[name] = await run(env);
   console.log(JSON.stringify(out));
@@ -1846,22 +1906,25 @@ function run(env) {
   const doc = { documentElement: root, hidden: false, listeners: {}, addEventListener(type, fn) { (this.listeners[type] = this.listeners[type] || []).push(fn); },
     querySelector: s => (parts[s] || [])[0] || null, querySelectorAll: s => parts[s] || [], fonts: { ready: { then() {} } } };
   const frames = [], cancelled = [];
-  let lenis = 0, ticks = 0;
-  class Lenis { constructor(o) { lenis++; this.options = o; } on() {} raf() {} }
+  let lenis = 0, ticks = 0, sleeps = 0, wakes = 0, removed = 0, destroyed = 0;
+  class Lenis { constructor(o) { lenis++; this.options = o; } on() {} raf() {} destroy() { destroyed++; } }
   const { win } = makeWindow(env, { Lenis, requestAnimationFrame: fn => { frames.push(fn); return frames.length; }, cancelAnimationFrame: id => cancelled.push(id),
     navigator: { connection: { saveData: Boolean(env.saveData) }, userAgentData: { brands: env.chromium ? [{ brand: 'Chromium' }] : [{ brand: 'Firefox' }] } } });
-  if (env.gsap) { const stub = makeGsap(env); stub.gsap.ticker = { add() { ticks++; } }; win.gsap = stub.gsap; win.ScrollTrigger = stub.ScrollTrigger; }
+  if (env.gsap) { const stub = makeGsap(env); stub.gsap.ticker = { add(fn) { ticks++; return fn; }, remove() { removed++; }, sleep() { sleeps++; }, wake() { wakes++; } };
+    win.gsap = stub.gsap; win.ScrollTrigger = stub.ScrollTrigger; }
   let error = null;
   try { vm.runInNewContext(source, { window: win, document: doc, getComputedStyle: () => ({ borderTopLeftRadius: '20px' }), Promise }); } catch (e) { error = String(e); }
-  const out = { error, lenis, ticks, refract: root.classList.contains('lg-refract'), driftFrames: frames.length };
+  const out = { error, lenis, ticks, sleeps, refract: root.classList.contains('lg-refract'), driftFrames: frames.length };
   if (frames.length) { frames.shift()(1000); }
   out.moved = fields[0].style.transform || null;
   const before = cancelled.length;
   win.__glass.paused = true; win.__glass.onPauseChange(true);
   out.cancelledOnPause = cancelled.length - before;
+  out.paused = { sleeps, wakes, removed, destroyed, lenis: Boolean(win.__glass.lenis) };
   const queued = frames.length;
   win.__glass.paused = false; win.__glass.onPauseChange(false);
   out.resumed = frames.length - queued;
+  out.released = { sleeps, wakes, lenisMade: lenis, ticks, lenis: Boolean(win.__glass.lenis) };
   return out;
 }
 const desktop = { width: 1440, height: 900, fine: true, reduce: false };
@@ -2041,6 +2104,37 @@ const { pathToFileURL } = require('url');
             self.assertNotIn(banned, js)
         self.assertIn("const MODULES = { home: '/assets/glass-scene.js', slab: '/assets/glass-page.js', panes: '/assets/glass-page.js', sheets: '/assets/glass-page.js',\n    photos: '/assets/glass-page.js', mark: '/assets/glass-page.js' };", js)
 
+    def test_webgl_test_context_is_the_scenes_own_or_is_released(self):
+        # Task 48: glass-boot.js tests for WebGL2 once, with the renderer's attributes, and hands that canvas and context to
+        # start(), which draws with them: no throwaway context. If the import fails, start throws or start does not take
+        # it, the context is released at once (WEBGL_lose_context) and the still stays (the host is never made live).
+        r = self.node_json(GLASS_BOOT_SCRIPT, GLASS_BOOT)
+        for name in ('desktop', 'complete', 'slab', 'panes', 'sheets', 'photos', 'mark'):
+            with self.subTest(case=name):
+                self.assertEqual(r[name]['contexts'], ['webgl2'])  # one test, WebGL2 only (three.js r170 needs it)
+                self.assertEqual(r[name]['attrs'], [{'alpha': False, 'powerPreference': 'high-performance'}])
+                self.assertTrue(r[name]['handed'])
+                self.assertEqual(r[name]['lost'], 0)
+        for name in ('fail', 'startThrows', 'declines'):
+            with self.subTest(case=name):
+                self.assertEqual(r[name]['contexts'], ['webgl2'])
+                self.assertEqual(r[name]['lost'], 1)
+                self.assertTrue(r[name]['liveRemoved'])
+        self.assertIsNone(r['startThrows']['started'])
+        self.assertEqual(r['declines']['started'], {'host': 'host', 'shared': True})
+        self.assertEqual(r['noWebGL']['lost'], 0)  # nothing was made, nothing to release
+        self.assertEqual(r['noWebGL']['imports'], [])
+        # Both scenes pass the handed context to three.js and report that they took it.
+        shapes = (GLASS_BOOT.parent / 'glass-shapes.js').read_text(encoding='utf-8')
+        self.assertIn('return gl && gl.canvas && gl.context ? { ...base, canvas: gl.canvas, context: gl.context } : base;', shapes)
+        self.assertIn("const base = { antialias: true, alpha: false, powerPreference: 'high-performance' };", shapes)
+        for module in (GLASS_PAGE, GLASS_SCENE):
+            with self.subTest(module=module.name):
+                code = module.read_text(encoding='utf-8')
+                self.assertIn('export function start(host, shared, gl) {', code)
+                self.assertIn('const renderer = new THREE.WebGLRenderer(rendererOptions(gl));', code)
+                self.assertIn('return true;\n}', code)
+
     def test_inner_page_scenes_come_from_a_fixed_list_and_respect_the_same_guards(self):
         # Task 39: Work (slab) and Services (panes) import the inner-page scene after load and idle; any other kind, including
         # a path or an Object.prototype key, imports nothing. Reduced motion, Save-Data, narrow, low-end and no WebGL never do.
@@ -2178,6 +2272,13 @@ const { pathToFileURL } = require('url');
         reduced = r['reduced']
         self.assertEqual((reduced['lenis'], reduced['ticks'], reduced['driftFrames'], reduced['refract']), (0, 0, 0, False))
         self.assertIsNone(reduced['moved'])
+        # Task 48: reduced motion puts GSAP's ticker to sleep and adds nothing to it. Pause motion ends Lenis (native
+        # scrolling) and sleeps the ticker; releasing it wakes the ticker and builds Lenis again on it.
+        self.assertEqual(motion['sleeps'], 0)
+        self.assertEqual(reduced['sleeps'], 1)
+        self.assertEqual(reduced['released']['ticks'], 0)
+        self.assertEqual(motion['paused'], {'sleeps': 1, 'wakes': 0, 'removed': 1, 'destroyed': 1, 'lenis': False})
+        self.assertEqual(motion['released'], {'sleeps': 1, 'wakes': 1, 'lenisMade': 2, 'ticks': 2, 'lenis': True})
         self.assertFalse(r['saveData']['refract'])  # Save-Data: no displacement maps are drawn
 
     def test_real_lenis_handles_wheel_events_with_the_options_glass_js_passes(self):
@@ -2717,6 +2818,205 @@ class EnquiryRobustnessScriptTests(unittest.TestCase):
                 # A heading outside any group keeps its own trigger and no delay.
                 self.assertEqual((by['lone']['trigger'], by['lone']['delay']), ('lone', 0))
         self.assertEqual(r['reduced'], [])  # reduced motion: nothing is hidden or animated
+
+
+# Task 48: Pause motion puts GSAP's ticker to sleep. A small live model of GSAP (it applies each tween's start state at once
+# and its end state on progress(1), clears props, wakes the ticker on every new animation as GSAP does, and kills a tween
+# with its ScrollTrigger as the vendored ScrollTrigger does) runs the real site.js, motion.js, scenes.js, home.js and
+# glass.js. After a press of Pause motion nothing they hid may stay hidden, and the ticker must be left asleep.
+LIVE_PAUSE_SCRIPT = HARNESS + r"""
+const path = require('path');
+const dir = path.dirname(process.argv[1]);
+const read = name => fs.readFileSync(path.join(dir, name), 'utf8');
+const SKIP = ['duration', 'stagger', 'ease', 'clearProps', 'scrollTrigger', 'delay', 'overwrite', 'immediateRender', 'onComplete',
+  'onUpdate', 'paused', 'defaults', 'transformPerspective', 'transformOrigin'];
+const TRANSFORM = ['x', 'y', 'xPercent', 'yPercent', 'scale', 'rotationX', 'rotationY', 'rotationZ', 'z'];
+function liveGsap(env, resolve) {
+  const triggers = [], top = [], log = { order: [], sleeps: 0, wakes: 0, awake: true, refreshes: 0, listeners: {} };
+  const wake = () => { if (!log.awake) { log.awake = true; log.wakes++; log.order.push('woken'); } };
+  const list = t => [].concat(resolve(t)).filter(Boolean);
+  const apply = (targets, vars) => list(targets).forEach((el, i) => {
+    const gs = el.style ? (el.gs = el.gs || {}) : el;  // a plain state object (the comparison) takes the values itself
+    Object.keys(vars).forEach(k => { if (!SKIP.includes(k)) gs[k] = typeof vars[k] === 'function' ? vars[k](i) : vars[k]; });
+    if (vars.clearProps) vars.clearProps.split(',').forEach(p => (p === 'transform' ? TRANSFORM.forEach(k => delete gs[k]) : delete gs[p]));
+  });
+  const ends = vars => { const out = {}; Object.keys(vars).forEach(k => { if (!SKIP.includes(k)) out[k] = k === 'opacity' || k === 'scale' ? 1 : 0; }); out.clearProps = vars.clearProps; return out; };
+  function trigger(vars, animation) {
+    const t = { vars, animation, trigger: vars.trigger, dur: vars.scrub,
+      kill() { const i = triggers.indexOf(t); if (i >= 0) triggers.splice(i, 1); if (animation) animation.kill(); },
+      scrubDuration(d) { t.dur = d; } };
+    if (animation) animation.scrollTrigger = t;
+    triggers.push(t);
+    return t;
+  }
+  function Anim(targets, from, to, child) {
+    wake();
+    Object.assign(this, { targets, end: to || {}, children: [], calls: [], done: false, killed: false });
+    this.running = !this.end.scrollTrigger && !this.end.paused && !child;
+    if (from && this.end.immediateRender !== false) apply(targets, from);
+    if (this.end.scrollTrigger) trigger(this.end.scrollTrigger, this);
+    if (!child) top.push(this);
+  }
+  Anim.prototype.progress = function (v) {
+    if (v !== 1 || this.done || this.killed) return this;
+    this.done = true; this.running = false;
+    this.children.forEach(c => c.progress(1));
+    this.calls.forEach(c => c());
+    if (this.targets !== undefined) apply(this.targets, this.end);
+    if (this.end.onUpdate) this.end.onUpdate();
+    if (this.end.onComplete) this.end.onComplete();
+    return this;
+  };
+  Anim.prototype.isActive = function () { return this.running && !this.done && !this.killed; };
+  Anim.prototype.kill = function () { this.killed = true; this.running = false; return this; };
+  Anim.prototype.play = function () { this.running = true; return this; };
+  ['fromTo', 'from', 'to'].forEach(kind => {
+    Anim.prototype[kind] = function (t, a, b) {
+      const [from, to] = kind === 'fromTo' ? [a, b] : kind === 'from' ? [a, ends(a)] : [null, a];
+      this.children.push(new Anim(t, from, to, true));
+      return this;
+    };
+  });
+  Anim.prototype.add = function (fn) { this.calls.push(fn); return this; };
+  const gsap = {
+    registerPlugin() {},
+    matchMedia() { return { add(q, fn) { if (media(q, env)) fn(); }, revert() {} }; },
+    timeline: vars => new Anim(undefined, null, vars || {}, false),
+    fromTo: (t, a, b) => new Anim(t, a, b, false),
+    from: (t, v) => new Anim(t, v, Object.assign(ends(v), { scrollTrigger: v.scrollTrigger }), false),
+    to: (t, v) => new Anim(t, null, v, false),
+    set(t, v) { wake(); apply(t, v); },
+    killTweensOf(t) { const set = new Set(list(t)); const walk = a => { if (list(a.targets || []).some(x => set.has(x))) a.kill(); a.children.forEach(walk); }; top.forEach(walk); },
+    quickTo: (t, prop) => value => { wake(); apply(t, { [prop]: value }); },
+    globalTimeline: { getChildren: () => top.filter(a => !a.done && !a.killed) },
+    ticker: { add(fn) { wake(); log.order.push('ticker.add'); return fn; }, remove() { log.order.push('ticker.remove'); },
+      sleep() { log.awake = false; log.sleeps++; log.order.push('sleep'); }, wake() { log.order.push('wake'); wake(); } },
+  };
+  const ScrollTrigger = { getAll: () => triggers.slice(), batch: (targets, vars) => targets.map(el => trigger(Object.assign({}, vars, { trigger: el }), null)),
+    create: v => trigger(v, null), update() {}, refresh() { log.refreshes++; (log.listeners.refresh || []).forEach(fn => fn()); },
+    addEventListener(type, fn) { (log.listeners[type] = log.listeners[type] || []).push(fn); } };
+  return { gsap, ScrollTrigger, log, triggers, top };
+}
+const low = el => { el.getBoundingClientRect = () => ({ left: 0, top: 3000, width: 400, height: 300 }); return el; };
+const closing = clip => Boolean(clip) && (clip.replace(/round [^)]*/, '').match(/-?[\d.]+/g) || []).some(n => Number(n) > 0);
+const hiddenOf = els => els.filter(el => el.gs && ((el.gs.opacity !== undefined && el.gs.opacity < 1) || (el.gs.y || 0) !== 0 ||
+  (el.gs.yPercent || 0) !== 0 || closing(el.gs.clipPath))).map(el => el.name);
+function run(page, env) {
+  const toggle = element('toggle'); toggle.hidden = true; toggle.attrs['aria-pressed'] = 'false';
+  const root = element('html'); root.classList = classList(['js', 'motion', 'ph-wait']);
+  let parts, tracked, scripts;
+  if (page === 'inner') {
+    const lines = many('line', 2), fades = many('fade', 2), media = many('frame', 1);
+    const rises = [low(element('rise0')), low(element('rise1'))], reveals = [low(element('reveal0'))], devices = [low(element('devices0'))];
+    const list = low(element('list')); list.children = many('item', 3);
+    const cue = element('cue'); cue.classList = classList(['on']);
+    const benchParts = { plinth: many('plinth', 1), lap: many('lap', 1), ph: many('ph', 1), ui: many('ui', 2) };
+    const bench = low(element('bench', { '.bench-plinth': benchParts.plinth, '.d-lap': benchParts.lap, '.d-ph': benchParts.ph, '.ui': benchParts.ui, '[data-cue]': [cue] }));
+    parts = { '[data-motion-toggle]': [toggle], '[data-ph]': [element('head', { 'h1 .ln > span': lines, '[data-ph-fade]': fades, '[data-ph-media]': media })],
+      '[data-rise]': rises, '[data-reveal]': reveals, '[data-devices]': devices, '[data-stagger]': [list], '[data-bench]': [bench],
+      '[data-parallax]': [element('para', { img: many('pimg', 1) })] };
+    tracked = [...lines, ...fades, ...media, ...rises, ...reveals, ...devices, ...list.children, cue, ...Object.values(benchParts).flat()];
+    scripts = ['site.js', 'motion.js', 'scenes.js', 'glass.js'];
+    parts.cue = [cue];
+  } else {
+    const lines = many('line', 2), fades = many('fade', 2), cards = many('gcard', 2), deck = element('deck');
+    const rises = [low(element('rise0')), low(element('rise1'))], teasers = [0, 1, 2].map(i => low(element('teaser' + i, { '.teaser-img': [element('shine' + i)] })));
+    const panel = low(element('reelPanel')), frame = low(element('glassFrame')), band = low(element('bandPanel'));
+    parts = { '[data-motion-toggle]': [toggle], '.hero-h .ln > span': lines, '[data-hero-fade]': fades, '.hero-cards': [deck], '.gcard': cards,
+      '.c-book': [element('book')], '.slot-pick': [element('slot')], '.hero': [element('hero')], '.hero-copy': [element('heroCopy')], '.hero-cap': [element('heroCap')],
+      '[data-rise]': rises, '.reel-frame': [low(element('reelFrame'))], '.reel-panel': [panel], '.teaser-card': teasers, '.compare-frame': [frame],
+      '.band-panel': [band], '.band': [element('band')], '.gp-1': [element('phone1')], '.gp-2': [element('phone2')] };
+    tracked = [...lines, ...fades, ...cards, deck, ...rises, ...teasers, panel, frame, band];
+    scripts = ['site.js', 'home.js', 'glass.js'];
+  }
+  const doc = { documentElement: root, hidden: false, listeners: {}, addEventListener(type, fn) { (this.listeners[type] = this.listeners[type] || []).push(fn); },
+    querySelector: s => (parts[s] || [])[0] || null, querySelectorAll: s => parts[s] || [] };
+  const resolve = t => (typeof t === 'string' ? doc.querySelectorAll(t) : t);
+  const live = liveGsap(env, resolve);
+  let lenisMade = 0;
+  class Lenis { constructor() { lenisMade++; } on() {} raf() {} destroy() { live.log.order.push('lenis.destroy'); } }
+  const { win } = makeWindow(env, { gsap: live.gsap, ScrollTrigger: live.ScrollTrigger, Lenis, requestAnimationFrame: () => 1, cancelAnimationFrame() {},
+    navigator: { connection: { saveData: Boolean(env.saveData) }, userAgentData: { brands: [{ brand: 'Firefox' }] } }, scrollY: 0, location: { pathname: '/' } });
+  const errors = [];
+  scripts.forEach(name => { try { vm.runInNewContext(read(name), { window: win, document: doc, getComputedStyle: () => ({ display: 'none' }), Event: class {} }); } catch (e) { errors.push(name + ': ' + e); } });
+  const out = { errors, before: hiddenOf(tracked), awake: live.log.awake, sleeps: live.log.sleeps, lenisMade, lenis: Boolean(win.__glass.lenis) };
+  if (env.midReveal) {
+    // a reveal whose line was just crossed: its trigger fired (and, being once, went) and its tween is under way
+    const t = live.triggers.find(x => x.vars.once && !x.animation);
+    if (t) { t.kill(); t.vars.onEnter([t.trigger]); }
+    out.midReveal = Boolean(t);
+  }
+  live.log.order.length = 0;
+  (toggle.listeners.click || []).forEach(fn => fn({ type: 'click' }));
+  out.pressed = { paused: win.__glass.paused, hidden: hiddenOf(tracked), awake: live.log.awake, order: live.log.order.slice(), lenis: Boolean(win.__glass.lenis),
+    once: live.triggers.filter(t => t.vars.once).length, scrubs: live.triggers.filter(t => t.vars.scrub).map(t => t.dur),
+    running: live.top.filter(a => a.isActive()).length, cue: parts.cue ? parts.cue[0].classList.contains('on') : null };
+  live.log.order.length = 0;
+  (toggle.listeners.click || []).forEach(fn => fn({ type: 'click' }));
+  out.released = { paused: win.__glass.paused, hidden: hiddenOf(tracked), awake: live.log.awake, order: live.log.order.slice(), refreshes: live.log.refreshes,
+    lenis: Boolean(win.__glass.lenis), lenisMade, scrubs: live.triggers.filter(t => t.vars.scrub).map(t => t.dur) };
+  // a resize while paused again: ScrollTrigger refreshes (its delayed call woke the ticker); it settles and sleeps again
+  (toggle.listeners.click || []).forEach(fn => fn({ type: 'click' }));
+  live.gsap.set([], {});
+  live.ScrollTrigger.refresh();
+  out.refreshedWhilePaused = { awake: live.log.awake };
+  return out;
+}
+const desktop = { width: 1440, height: 900, fine: true, reduce: false };
+console.log(JSON.stringify({ inner: run('inner', desktop), innerMid: run('inner', { ...desktop, midReveal: true }), home: run('home', desktop),
+  homePhone: run('home', { width: 390, height: 844, fine: false, reduce: false }), saveData: run('inner', { ...desktop, saveData: true }),
+  reduced: run('inner', { ...desktop, reduce: true }) }));
+"""
+
+
+class PauseMotionSleepsGsapTests(unittest.TestCase):
+    def test_pause_shows_everything_held_then_sleeps_the_ticker_and_release_wakes_it(self):
+        out = subprocess.run(['node', '-e', LIVE_PAUSE_SCRIPT, str(GLASS)], capture_output=True, text=True, check=True)
+        r = json.loads(out.stdout)
+        for name in ('inner', 'innerMid', 'home', 'homePhone'):
+            with self.subTest(case=name):
+                case = r[name]
+                self.assertEqual(case['errors'], [])
+                self.assertTrue(case['before'])  # the model really hides what the scripts hold (openings and reveals)
+                self.assertTrue(case['awake'])
+                self.assertTrue(case['lenis'])
+                pressed = case['pressed']
+                self.assertTrue(pressed['paused'])
+                self.assertEqual(pressed['hidden'], [])  # no opacity below 1, no vertical offset, no closing clip-path
+                self.assertEqual(pressed['once'], 0)  # every one-time trigger is gone
+                self.assertEqual(pressed['running'], 0)  # nothing is left part-way
+                self.assertTrue(all(d == 0 for d in pressed['scrubs']), pressed['scrubs'])  # scrubs follow the scroll directly
+                self.assertFalse(pressed['awake'])  # the ticker is left asleep
+                self.assertFalse(pressed['lenis'])  # native scrolling
+                order = pressed['order']
+                self.assertEqual(order[-1], 'sleep')
+                self.assertLess(order.index('lenis.destroy'), order.index('sleep'))
+                released = case['released']
+                self.assertFalse(released['paused'])
+                self.assertEqual(released['hidden'], [])  # what was shown stays shown
+                self.assertTrue(released['awake'])
+                self.assertEqual(released['order'][0], 'wake')
+                self.assertEqual(released['refreshes'], 1)
+                self.assertTrue(released['lenis'])
+                self.assertEqual(released['lenisMade'], 2)
+                self.assertTrue(all(d not in (0, None) for d in released['scrubs']), released['scrubs'])  # easing again
+                self.assertFalse(case['refreshedWhilePaused']['awake'])
+        self.assertTrue(r['innerMid']['midReveal'])
+        self.assertTrue(r['inner']['pressed']['cue'])  # scenes finish in their shipped state (the card's cue class is back)
+        self.assertTrue(r['inner']['released']['scrubs'])
+        # Save-Data: Pause motion starts pressed, so everything is shown and the ticker sleeps from the start, with no Lenis.
+        save = r['saveData']
+        self.assertEqual(save['errors'], [])
+        self.assertEqual(save['before'], [])
+        self.assertFalse(save['awake'])
+        self.assertFalse(save['lenis'])
+        # Reduced motion: nothing is held, the ticker sleeps at once and nothing is added to it.
+        reduced = r['reduced']
+        self.assertEqual(reduced['errors'], [])
+        self.assertEqual(reduced['before'], [])
+        self.assertFalse(reduced['awake'])
+        self.assertEqual(reduced['sleeps'], 1)
+        self.assertEqual(reduced['lenisMade'], 0)
 
 
 if __name__ == '__main__':

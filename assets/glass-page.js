@@ -14,9 +14,12 @@
               never behind it (Task 41), a light photo (white kitchen) behind it, so the C refracts light, never a dark
               plane (Task 42); the form is untouched
    The loop runs only while the hero is on screen, the tab is visible and Pause motion is off (registered on the shared
-   G.pauseFns fan-out, never by replacing G.onPauseChange); otherwise setAnimationLoop(null) stops it and videos pause. */
+   G.pauseFns fan-out, never by replacing G.onPauseChange); otherwise setAnimationLoop(null) stops it and videos pause.
+   Task 48: the shared helpers come from glass-shapes.js, so these pages never fetch the homepage scene (glass-scene.js) or
+   three's SVGLoader and BufferGeometryUtils; the C is extruded straight from its paths (markGeometry). The scene draws with
+   the WebGL2 context glass-boot.js tested (gl) and returns true once it has taken it (false: glass-boot.js releases it). */
 import * as THREE from './vendor/three/three.module.min.js';
-import { roundedRect, MARK, extrude, silhouette } from './glass-scene.js';
+import { roundedRect, MARK, markGeometry, silhouette, rendererOptions } from './glass-shapes.js';
 
 const easeOut = (t) => (t >= 1 ? 1 : 1 - Math.pow(2, -10 * t)); // expo out, no overshoot
 const damp = (a, b, lambda, dt) => a + (b - a) * (1 - Math.exp(-lambda * dt));
@@ -83,14 +86,14 @@ function featherTexture() {
   return new THREE.CanvasTexture(c);
 }
 
-export function start(host, shared) {
+export function start(host, shared, gl) {
   const G = shared || window.__glass || (window.__glass = { paused: false, pointer: { x: 0, y: 0 } });
   G.pointer = G.pointer || { x: 0, y: 0 };
   const kind = host.dataset.glKind;
-  if (!KINDS.includes(kind)) return;
+  if (!KINDS.includes(kind)) return false;
   const section = host.closest('section') || host.parentElement;
   const anchorEl = host.dataset.glAnchor ? section.querySelector(host.dataset.glAnchor) : null;
-  const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false, powerPreference: 'high-performance' });
+  const renderer = new THREE.WebGLRenderer(rendererOptions(gl));
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.75));
   renderer.toneMapping = THREE.NeutralToneMapping;
   renderer.outputColorSpace = THREE.SRGBColorSpace;
@@ -184,8 +187,7 @@ export function start(host, shared) {
     unitH = 4.2;
   } else {
     /* the C: big for About (the photos float behind it), small for Contact */
-    const g = extrude(`<svg viewBox="0 0 200 200">${MARK.map((d) => `<path d="${d}"/>`).join('')}</svg>`,
-      { depth: 40, bevelEnabled: true, bevelThickness: 14, bevelSize: 8, bevelSegments: 14, curveSegments: 48 });
+    const g = markGeometry({ depth: 40, bevelEnabled: true, bevelThickness: 14, bevelSize: 8, bevelSegments: 14, curveSegments: 48 });
     const s = 3.2 / 152; g.scale(s, s, s);
     obj.add(new THREE.Mesh(g, glass));
     const sh = silhouette(MARK, [24, 24, 135, 152], { pad: 0.22, blur: 12, color: 'rgba(52,40,24,0.4)' });
@@ -277,4 +279,5 @@ export function start(host, shared) {
     life.ready();
   };
   (renderer.compileAsync ? renderer.compileAsync(scene, camera) : Promise.resolve()).then(go, go);
+  return true;
 }

@@ -7,16 +7,15 @@
    never edge-on; the name is milky frosted glass over light content only (heroLayout keeps the dark screen away). The
    loop runs only while the hero is on screen, the tab is visible and Pause motion is off; otherwise
    setAnimationLoop(null) stops it and the screen videos pause. The canvas is aria-hidden: the host's role="img" label
-   describes the hero, and the CSS poster underneath stays in place if anything here fails. */
+   describes the hero, and the CSS poster underneath stays in place if anything here fails. Task 48: the helpers the inner
+   pages share (the C's paths, rounded screens, silhouettes, the renderer's options) live in glass-shapes.js; only this
+   homepage scene needs SVGLoader and BufferGeometryUtils (the CENDAVO wordmark has holes). It draws with the WebGL2
+   context glass-boot.js tested, and returns true once it has taken it. */
 import * as THREE from './vendor/three/three.module.min.js';
 import { SVGLoader } from './vendor/three/jsm/SVGLoader.js';
 import { mergeGeometries } from './vendor/three/jsm/BufferGeometryUtils.js';
+import { MARK, roundedRect, silhouette, rendererOptions } from './glass-shapes.js';
 
-export const MARK = [
-  'M55.67 43.26C86.24 19.38 130.22 24.01 155.16 53.72L135.24 70.43C119.31 51.45 91.21 48.5 71.68 63.75Z',
-  'M48.21 150.02C21.26 122.11 21.26 77.89 48.21 49.98L66.91 68.05C49.7 85.87 49.7 114.13 66.91 131.95Z',
-  'M155.16 146.28C130.22 175.99 86.24 180.62 55.67 156.74L71.68 136.25C91.21 151.5 119.31 148.55 135.24 129.57Z'
-];
 const WORD_PATH = 'M435.8 12Q309.9 12 224.1 -27.3Q138.4 -66.6 94.8 -145.7Q51.2 -224.8 51.2 -343.7Q51.2 -518.5 150.3 -608.8Q249.5 -699.1 435.9 -699.1Q539.8 -699.1 619.6 -666.3Q699.5 -633.6 744.9 -570.9Q790.2 -508.2 790.2 -418.1H614.7Q614.7 -463.1 592.2 -494.9Q569.8 -526.6 529.5 -543.5Q489.1 -560.4 434.6 -560.4Q368.5 -560.4 324 -536.3Q279.4 -512.2 257.2 -467.3Q234.9 -422.4 234.9 -360.2V-327.7Q234.9 -265.2 257.3 -220.1Q279.6 -175 323.8 -150.9Q367.9 -126.7 433.5 -126.7Q491.8 -126.7 533.5 -142.9Q575.2 -159.1 597.7 -190.5Q620.2 -222 620.2 -266.5H790.5Q790.5 -178 746.5 -115.6Q702.4 -53.3 622.8 -20.6Q543.2 12 435.8 12Z M981.7 0V-687.1H1614.3V-548.1H1160.9V-417.1H1559.1V-281.3H1160.9V-139H1621.5V0Z M1816.1 0V-687.1H1977.2L2286 -351.8Q2294.3 -343.8 2306.9 -329.1Q2319.5 -314.5 2332.5 -299.5Q2345.6 -284.4 2353.8 -273.7L2360.7 -274.1Q2360.2 -293.4 2359.7 -316.8Q2359.3 -340.2 2359.3 -357.2V-687.1H2527.8V0H2368.4L2056.6 -340.2Q2038.8 -358.8 2020 -380.7Q2001.3 -402.7 1989.8 -415.9L1983.5 -415.5Q1984 -401 1984.3 -378.6Q1984.5 -356.2 1984.5 -333V0Z M2750.1 0V-687.1H3080.4Q3198.4 -687.1 3282.1 -648.8Q3365.8 -610.5 3410.5 -534.3Q3455.2 -458.1 3455.2 -343.4Q3455.2 -229.5 3410.5 -153Q3365.8 -76.6 3282.1 -38.3Q3198.4 0 3080.4 0ZM2929 -139H3074.4Q3120.4 -139 3156.8 -151.5Q3193.2 -163.9 3218.8 -187.8Q3244.4 -211.8 3257.8 -247.1Q3271.2 -282.5 3271.2 -328.3V-358.9Q3271.2 -405 3257.8 -440.3Q3244.4 -475.5 3218.8 -499.5Q3193.2 -523.4 3156.8 -535.7Q3120.4 -548.1 3074.4 -548.1H2929Z M3578 0 3876.4 -687.1H4084L4382.6 0H4189.8L4140.3 -120.9H3811.2L3762 0ZM3865.4 -256.1H4086.1L4025.8 -406.8Q4021.8 -417.2 4015.3 -434.3Q4008.9 -451.4 4002.2 -470.8Q3995.4 -490.3 3989.3 -508.1Q3983.2 -525.8 3979.5 -536.5H3972.6Q3966.2 -517.5 3957.4 -493Q3948.6 -468.4 3940.2 -445.2Q3931.8 -422 3925.6 -406.6Z M4754.9 0 4467.4 -687.1H4663.3L4808.9 -308.1Q4815.7 -292.3 4824 -269.2Q4832.3 -246.2 4840.8 -223.1Q4849.3 -200 4855.3 -182.1H4862.2Q4867.9 -198.4 4875.9 -220.7Q4883.8 -243 4892.4 -266.1Q4901.1 -289.2 4908.3 -307.5L5054.5 -687.1H5241.7L4954.4 0Z M5766.8 12Q5642.9 12 5552.8 -28.6Q5462.8 -69.1 5414.5 -148.5Q5366.2 -227.8 5366.2 -343.5Q5366.2 -460.1 5414.5 -539.1Q5462.8 -618.2 5552.8 -658.6Q5642.9 -699.1 5766.8 -699.1Q5892.1 -699.1 5981.8 -658.6Q6071.5 -618.2 6119.8 -539.1Q6168 -460.1 6168 -343.5Q6168 -227.8 6119.8 -148.5Q6071.5 -69.1 5981.8 -28.6Q5892.1 12 5766.8 12ZM5767 -126.7Q5817.4 -126.7 5857.6 -140.2Q5897.7 -153.6 5926.1 -179.4Q5954.5 -205.2 5969.6 -242.7Q5984.6 -280.3 5984.6 -327.9V-359.6Q5984.6 -407.4 5969.6 -444.9Q5954.5 -482.4 5926.1 -508.1Q5897.7 -533.8 5857.6 -547.1Q5817.4 -560.4 5767 -560.4Q5716.6 -560.4 5676.5 -547.1Q5636.3 -533.8 5608 -508.1Q5579.7 -482.4 5565 -444.9Q5550.2 -407.4 5550.2 -359.6V-327.9Q5550.2 -280.3 5565 -242.7Q5579.7 -205.2 5608 -179.4Q5636.3 -153.6 5676.5 -140.2Q5716.6 -126.7 5767 -126.7Z';
 const WORD_VB = [0, -686, 6219, 686];
 
@@ -82,31 +81,6 @@ export function extrude(svg, opts) {
   return g;
 }
 
-export function roundedRect(w, h, r) {
-  const s = new THREE.Shape(), x = -w / 2, y = -h / 2;
-  s.moveTo(x + r, y); s.lineTo(x + w - r, y); s.quadraticCurveTo(x + w, y, x + w, y + r);
-  s.lineTo(x + w, y + h - r); s.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
-  s.lineTo(x + r, y + h); s.quadraticCurveTo(x, y + h, x, y + h - r);
-  s.lineTo(x, y + r); s.quadraticCurveTo(x, y, x + r, y);
-  const g = new THREE.ShapeGeometry(s, 10);
-  const uv = g.attributes.uv, pos = g.attributes.position;
-  for (let i = 0; i < uv.count; i++) uv.setXY(i, (pos.getX(i) - x) / w, (pos.getY(i) - y) / h);
-  return g;
-}
-
-/* a blurred silhouette of an SVG path, drawn on a canvas: used for the halo and the cast shadow */
-export function silhouette(paths, vb, { px = 1024, pad = 0.35, blur = 24, color = '#fff' } = {}) {
-  const [vx, vy, vw, vh] = vb, padU = Math.max(vw, vh) * pad;
-  const W = vw + padU * 2, H = vh + padU * 2, s = px / Math.max(W, H);
-  const c = document.createElement('canvas'); c.width = Math.ceil(W * s); c.height = Math.ceil(H * s);
-  const x = c.getContext('2d');
-  x.filter = `blur(${blur}px)`; x.fillStyle = color;
-  x.setTransform(s, 0, 0, s, (padU - vx) * s, (padU - vy) * s);
-  paths.forEach((d) => x.fill(new Path2D(d)));
-  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace;
-  return { tex: t, aspect: W / H, scaleW: W / vw };
-}
-
 export function shadowTexture() {
   const c = document.createElement('canvas'); c.width = c.height = 128;
   const x = c.getContext('2d');
@@ -120,11 +94,11 @@ const svgOf = (paths, vb) => `<svg viewBox="${vb.join(' ')}">${paths.map((d) => 
 const blendMat = (tex) => new THREE.MeshBasicMaterial({ map: tex, transparent: false, depthWrite: false, toneMapped: false,
   blending: THREE.CustomBlending, blendEquation: THREE.AddEquation, blendSrc: THREE.SrcAlphaFactor, blendDst: THREE.OneMinusSrcAlphaFactor });
 
-export function start(host, shared) {
+export function start(host, shared, gl) {
   const G = shared || window.__glass || (window.__glass = { paused: false, heroP: 0, pointer: { x: 0, y: 0 } });
   G.pointer = G.pointer || { x: 0, y: 0 };
   const DPR_CAP = window.matchMedia('(max-width: 760px)').matches ? 1.5 : 1.75;
-  const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false, powerPreference: 'high-performance' });
+  const renderer = new THREE.WebGLRenderer(rendererOptions(gl));
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, DPR_CAP));
   renderer.toneMapping = THREE.NeutralToneMapping;
   renderer.outputColorSpace = THREE.SRGBColorSpace;
@@ -346,4 +320,5 @@ export function start(host, shared) {
     setRunning(true);
   };
   (renderer.compileAsync ? renderer.compileAsync(scene, camera) : Promise.resolve()).then(go, go);
+  return true;
 }

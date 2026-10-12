@@ -83,8 +83,10 @@ GLASS_MOTION = '<script src="/assets/vendor/lenis/lenis.min.js" defer></script><
 GLASS_BOOT = '<script src="/assets/glass-boot.js" defer></script>'
 # Where glass.js builds its SVG displacement filters (Chromium only); empty and invisible otherwise.
 GLASS_DEFS = '<svg class="lg-defs" width="0" height="0" aria-hidden="true" focusable="false"><defs data-lg-defs></defs></svg>'
-# First-party classic scripts ship without whole-line comments and indentation (see strip_js). ES modules are copied as is.
-STRIP_SKIP = {'glass-scene.js', 'glass-page.js'}
+# First-party classic scripts ship without whole-line comments and indentation (see strip_js). ES modules are copied as is:
+# the two WebGL scenes and, since Task 48, glass-shapes.js, the helpers they share (so the inner pages never fetch
+# glass-scene.js or three's SVGLoader and BufferGeometryUtils).
+STRIP_SKIP = {'glass-scene.js', 'glass-page.js', 'glass-shapes.js'}
 GL_PAGES = ('index', 'work', 'services', 'pricing', 'about', 'contact')
 # Pause motion (Task 41, WCAG 2.2.2): every page with ongoing motion (the WebGL scene, the drifting atmosphere, the marquee,
 # video loops) gets one button. Task 46: it sits in the header's glass pill (after the logo, before the menu button), so it

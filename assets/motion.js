@@ -27,6 +27,8 @@
   const IN = bezier(0.2, 0.8, 0.2, 1);
   const IO = bezier(0.7, 0, 0.2, 1);
   const SHOWN = 'opacity,transform';
+  // Task 48: while Pause motion is pressed GSAP's ticker sleeps (glass.js), so nothing here starts a new tween then.
+  const paused = () => Boolean(window.__glass?.paused);
   // fromTo pair: rise y px into place.
   const up = (y, duration, stagger) => [{ opacity: 0, y }, { opacity: 1, y: 0, duration, stagger: stagger || 0, clearProps: SHOWN }];
 
@@ -81,7 +83,8 @@
         const fades = $$('[data-ph-fade]', head);
         if (lines.length) tl.fromTo(lines, { yPercent: 108, y: 0 }, { yPercent: 0, y: 0, duration: 1, stagger: 0.08, clearProps: 'transform' }, 0);
         if (media.length) tl.fromTo(media, { clipPath: 'inset(0 0 0 100%)' }, { clipPath: 'inset(0 0 0 0%)', duration: 1, stagger: 0.08, ease: IO, clearProps: 'clipPath' }, 0.05);
-        if (fades.length) tl.fromTo(fades, { y: 18, opacity: 0 }, { y: 0, opacity: 1, duration: 0.7, stagger: 0.08, clearProps: SHOWN }, 0.3);
+        // Task 48: the copy only rises (never opacity 0), so it paints with the headline (LCP).
+        if (fades.length) tl.fromTo(fades, { y: 18 }, { y: 0, duration: 0.7, stagger: 0.08, clearProps: 'transform' }, 0.3);
       });
       // Pricing: the quote sheet fills in line by line, then its fixed-price line is set, within 1.2 s.
       const sheet = doc.querySelector('[data-sheet]');
@@ -122,6 +125,12 @@
       gsap.set(heads, { opacity: at => (at === current ? 1 : DIM) });
       swap = (index, previous) => {
         gsap.killTweensOf(photos);
+        if (paused()) {
+          photos.forEach(photo => { photo.style.clipPath = ''; });
+          gsap.killTweensOf(heads);
+          heads.forEach((head, at) => { head.style.opacity = String(at === index ? 1 : DIM); });
+          return;
+        }
         if (photos[previous]) gsap.set(photos[previous], { clearProps: 'clipPath' });
         if (photos[index]) gsap.fromTo(photos[index], { clipPath: 'inset(100% 0 0 0)' }, { clipPath: 'inset(0% 0 0 0)', duration: 0.7, ease: IO, clearProps: 'clipPath' });
         gsap.to(heads, { opacity: at => (at === index ? 1 : DIM), duration: 0.4, ease: IN, overwrite: true });
@@ -132,7 +141,7 @@
     const faqs = $$('details');
     const onToggle = event => {
       const details = event.currentTarget;
-      if (!details.open) return;
+      if (!details.open || paused()) return;
       const answer = Array.from(details.children).filter(child => child.tagName !== 'SUMMARY');
       gsap.fromTo(answer, { opacity: 0, y: -8 }, { opacity: 1, y: 0, duration: 0.4, ease: IN, clearProps: SHOWN });
     };
@@ -161,11 +170,12 @@
       const toX = gsap.quickTo(button, 'x', { duration: 0.4, ease: IN });
       const toY = gsap.quickTo(button, 'y', { duration: 0.4, ease: IN });
       const move = event => {
+        if (paused()) return;
         const box = button.getBoundingClientRect();
         toX(clamp((event.clientX - box.left - box.width / 2) * 0.2));
         toY(clamp((event.clientY - box.top - box.height / 2) * 0.3));
       };
-      const leave = () => { toX(0); toY(0); };
+      const leave = () => { if (!paused()) { toX(0); toY(0); } };
       button.addEventListener('pointermove', move);
       button.addEventListener('pointerleave', leave);
       return () => {

@@ -2,6 +2,8 @@
 // Save-Data. [data-reel]: a large video with a Pause/Play button (one at a time; Task 34 adds the film's progress and time);
 // [data-loop]: a small loop, after load ("wide": not at <=640px), held by Pause motion; [data-hover-src]: a Work tile that
 // cross-fades to its loop on hover or focus (fine pointers) or when centred (touch). No file loads before its first play.
+// Task 48: nothing starts by itself before the page has loaded and gone idle (a large video in the first screen used to
+// start at once and compete with the first paint); a press of its button (or a chapter) plays it at once, loaded or not.
 (() => {
   const win = window, doc = document;
   const still = win.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
@@ -26,7 +28,7 @@
   };
   const sync = it => {
     const busy = !it.loop && items.some(other => other !== it && !other.loop && playing(other)); // one large video at a time
-    const go = it.wanted && it.inView && !doc.hidden && (loaded || !it.loop);
+    const go = it.wanted && it.inView && !doc.hidden && (loaded || it.pressed);
     if (go && !busy && it.video.paused) attempt(it);
     else if (!go && playing(it)) it.video.pause();
   };
@@ -58,7 +60,7 @@
       });
     };
     video.addEventListener('timeupdate', mark);
-    buttons.forEach(b => b.addEventListener('click', () => { video.currentTime = at(b); it.wanted = true; attempt(it); mark(); }));
+    buttons.forEach(b => b.addEventListener('click', () => { video.currentTime = at(b); it.wanted = it.pressed = true; attempt(it); mark(); }));
     list.hidden = false;
     mark();
   };
@@ -93,7 +95,7 @@
     });
     video.removeAttribute('controls');
     ['play', 'pause'].forEach(type => video.addEventListener(type, it.label));
-    toggle.addEventListener('click', () => { it.wanted = video.paused; if (it.wanted) attempt(it); else video.pause(); it.label(); });
+    toggle.addEventListener('click', () => { it.wanted = video.paused; it.pressed = true; if (it.wanted) attempt(it); else video.pause(); it.label(); });
     toggle.hidden = false;
     const ui = reel.querySelector('[data-reel-ui]');
     if (ui) ui.hidden = false;

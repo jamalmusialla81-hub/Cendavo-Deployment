@@ -1,5 +1,7 @@
 // Liquid Glass shell (Task 37): pointer light, Chromium edge refraction, Lenis and the atmosphere drift. Hides nothing;
-// reduced motion: no Lenis, drift or light; Save-Data: no refraction maps.
+// reduced motion: no Lenis, drift or light, and GSAP's ticker sleeps; Save-Data: no refraction maps. Task 48: Pause motion
+// first shows everything GSAP still holds (settle: the reveals and openings of motion.js, scenes.js and home.js), then ends
+// Lenis (native scrolling) and puts GSAP's ticker to sleep; releasing it wakes the ticker and brings Lenis back.
 (() => {
   const win = window, doc = document, root = doc.documentElement;
   const motionOK = Boolean(win.matchMedia?.('(prefers-reduced-motion: no-preference)').matches);
@@ -12,6 +14,8 @@
   const $$ = selector => Array.from(doc.querySelectorAll(selector));
   const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
   const GLASS = '.lg, .site-header .nav';
+  // Task 48: the edge refraction (a url() SVG backdrop filter) is for the .lg panels only; the nav pill keeps its plain blur.
+  const REFRACT = '.lg';
 
   // Pointer light: each visible panel's highlight sits where the pointer is (a virtual sun above the page otherwise).
   const visible = new Set();
@@ -82,7 +86,7 @@
       defs.appendChild(f);
       return (cache[key] = id);
     };
-    const apply = () => $$(GLASS).forEach(el => {
+    const apply = () => $$(REFRACT).forEach(el => {
       const w = Math.round(el.offsetWidth), h = Math.round(el.offsetHeight);
       if (!w || !h || w * h > 1400 * 900) return;
       const radius = getComputedStyle(el).borderTopLeftRadius;
@@ -94,19 +98,50 @@
     (doc.fonts?.ready || Promise.resolve()).then(apply);
     G.reapplyRefraction = apply;
   }
-  if (!motionOK) return;
-
-  // Lenis on GSAP's ticker (touch stays native). Lenis 1.1.0 calls options.prevent on every wheel: its default `false` threw.
   const gsap = win.gsap, ScrollTrigger = win.ScrollTrigger;
-  if (win.Lenis) {
-    const lenis = G.lenis = new win.Lenis({ lerp: 0.1, smoothWheel: true, prevent: () => false });
-    if (gsap && ScrollTrigger) {
-      lenis.on('scroll', ScrollTrigger.update);
-      gsap.ticker.add(t => lenis.raf(t * 1000));
-    } else {
-      const tick = t => { lenis.raf(t); win.requestAnimationFrame(tick); };
-      win.requestAnimationFrame(tick);
-    }
+  const ticker = gsap && ScrollTrigger ? gsap.ticker : null;
+  // Task 48: Pause motion puts GSAP's ticker to sleep, so first everything GSAP still holds is shown. Each reveal still
+  // waiting for its scroll line ends at once (a batch target gets the stylesheet's state back) and its one-time trigger
+  // goes; scrubbed scenes follow the scroll directly (ScrollTrigger reads it without the ticker) instead of easing toward
+  // it; and any opening or reveal under way jumps to its end.
+  const scrubs = on => ScrollTrigger.getAll().forEach(st => { if (st.vars.scrub) st.scrubDuration(on ? st.vars.scrub : 0); });
+  const settle = () => {
+    scrubs(false);
+    ScrollTrigger.getAll().forEach(st => {
+      if (!st.vars.once) return;
+      if (st.animation) st.animation.progress(1);
+      else gsap.set(st.trigger, { clearProps: 'opacity,transform,clipPath' });
+      st.kill();
+    });
+    gsap.globalTimeline.getChildren(false, true, true).forEach(a => { if (a.isActive()) a.progress(1); });
+  };
+  // Under reduced motion nothing animates, so the ticker never runs and nothing is added to it. Any new tween wakes it (a
+  // ScrollTrigger refresh after a resize makes one, and may rebuild reveals): after each refresh it settles and sleeps again.
+  if (ticker) ScrollTrigger.addEventListener('refresh', () => { if (!motionOK || G.paused) { settle(); ticker.sleep(); } });
+  if (!motionOK) { if (ticker) ticker.sleep(); return; }
+
+  // Lenis on GSAP's ticker (touch stays native). Lenis 1.1.0 calls options.prevent on every wheel: its default, false, threw.
+  const lenis = () => (G.lenis = new win.Lenis({ lerp: 0.1, smoothWheel: true, prevent: () => false }));
+  if (!ticker) {
+    if (win.Lenis) { const l = lenis(), tick = t => { l.raf(t); win.requestAnimationFrame(tick); }; win.requestAnimationFrame(tick); }
+  } else {
+    // Task 48: with GSAP, Lenis exists only while Pause motion is off (it runs on the ticker); pressed, scrolling is native.
+    let tick = null;
+    const smooth = on => {
+      if (!win.Lenis || on === Boolean(G.lenis)) return;
+      if (on) { const l = lenis(); l.on('scroll', ScrollTrigger.update); tick = ticker.add(t => l.raf(t * 1000)); }
+      else { ticker.remove(tick); G.lenis.destroy(); G.lenis = null; }
+    };
+    // Pause motion pressed: everything held is shown, Lenis goes, then the ticker sleeps. Released: the ticker wakes, scrubs
+    // ease again, ScrollTrigger re-measures and Lenis comes back. What was shown stays shown.
+    const hold = paused => {
+      if (paused) { settle(); smooth(false); ticker.sleep(); return; }
+      ticker.wake(); scrubs(true); ScrollTrigger.refresh(); smooth(true);
+    };
+    pauseFns.push(hold);
+    // Save-Data: Pause motion starts pressed.
+    if (G.paused) hold(true);
+    else smooth(true);
   }
 
   // The atmosphere drifts on slow, separate sine paths (40 to 70 s), transform only; held by Pause motion and a hidden tab.
