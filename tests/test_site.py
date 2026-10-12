@@ -1246,6 +1246,20 @@ def visible_text(html):
     return re.sub(r'\s+', ' ', re.sub(r'<[^>]+>', ' ', html))
 
 
+def normalise_copy(text):
+    """Lower case, with every hyphen or dash as "-" and curly apostrophes as "'", so copy and docs compare reliably."""
+    return re.sub(r'[\u2010-\u2015\u2212]', '-', text.replace('\u2019', "'").replace('\u2018', "'")).lower()
+
+
+# Task 51: the only operational commitments an inner page may state, each copied word for word from the owner's draft
+# (docs/OWNER_DRAFT_POLICIES.md, which the owner confirms before launch). Exact phrases per route, never a pattern.
+DRAFT_POLICY_PHRASES = {
+    'pricing/index.html': ('20–30 minute call or video chat', 'sent in writing after the consultation',
+                           '2–4 weeks from approved quote', "30 days' notice"),
+}
+OWNER_DRAFT = Path(__file__).resolve().parents[1] / 'docs/OWNER_DRAFT_POLICIES.md'
+
+
 HEADERS = ("/*\n  X-Content-Type-Options: nosniff\n  Referrer-Policy: strict-origin-when-cross-origin\n  X-Frame-Options: DENY\n"
            "  Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self'; font-src 'self'; img-src 'self' data:; "
            "connect-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'\n"
@@ -1438,8 +1452,15 @@ class InnerPageTests(unittest.TestCase):
         # The owner has not confirmed call length, timelines or staffing; say "a short free consultation" instead.
         # The one exception: About (Task 15) restates the homepage's published "fixed quote … in writing" commitment
         # (pages/index.html); every other inner page keeps the full list.
+        # Task 51 (owner-mandated): Pricing may state the exact phrases in DRAFT_POLICY_PHRASES, each quoted word for word
+        # from docs/OWNER_DRAFT_POLICIES.md (checked below). Only those phrases are removed before the checks; any other
+        # duration, "in writing" or banned wording on Pricing still fails. Dashes and apostrophes are normalised first so
+        # "30-minute" or "30–minute" cannot slip past the regex.
         for route in self.INNER:
-            text = visible_text(self.main[route]).lower()
+            text = normalise_copy(visible_text(self.main[route]))
+            for phrase in DRAFT_POLICY_PHRASES.get(route, ()):
+                self.assertIn(normalise_copy(phrase), text)  # every allowance is used, so none lingers unused
+                text = text.replace(normalise_copy(phrase), ' ')
             with self.subTest(route=route):
                 for banned in ('20-minute', 'twenty minutes', 'same person', 'a few weeks', 'in writing'):
                     if route == 'about/index.html' and banned == 'in writing':
@@ -4697,6 +4718,120 @@ class SeoAndHeaderTests(unittest.TestCase):
         self.assertNotIn('preload', headers)
         self.assertNotIn('interest-cohort', headers)  # retired FLoC feature, left out on purpose
         self.assertEqual(len(lines), 7)
+
+
+
+class OwnerDraftPolicyTests(unittest.TestCase):
+    """Task 51 (owner-mandated): Pricing, About and Contact explain the process from docs/OWNER_DRAFT_POLICIES.md, with no
+    prices, testimonials or ratings, and without adding motion, media or scripts. The draft is unconfirmed: the owner must
+    confirm every line before the site goes live."""
+    PAGES = ('pricing/index.html', 'about/index.html', 'contact/index.html')
+    POLICY_HEADINGS = ['What happens in the consultation', 'What’s in your quote', 'Revisions and changes',
+                       'Payment and timeline', 'Ongoing costs']
+
+    @classmethod
+    def setUpClass(cls):
+        build()
+        cls.html = {route: (OUT / route).read_text() for route in cls.PAGES}
+        cls.main = {route: main_of(html) for route, html in cls.html.items()}
+        cls.pricing = cls.main['pricing/index.html']
+
+    def section_for(self, heading):
+        for section in re.findall(r'<section [^>]*>.*?</section>', self.pricing, re.S):
+            match = re.search(r'<h2 id="([^"]+)"[^>]*>([^<]+)</h2>', section)
+            if match and match.group(2) == heading:
+                return section, match.group(1)
+        self.fail(f'no section headed {heading!r}')
+
+    def test_pricing_policy_sections_appear_in_order(self):
+        h2s = [visible_text(h).strip() for h in re.findall(r'<h2[^>]*>(.*?)</h2>', self.pricing, re.S)]
+        positions = [h2s.index(heading) for heading in self.POLICY_HEADINGS]
+        self.assertEqual(positions, sorted(positions))
+        ids = set()
+        for heading in self.POLICY_HEADINGS:
+            with self.subTest(heading=heading):
+                section, title = self.section_for(heading)
+                opening = section.split('>', 1)[0]
+                self.assertIn(f'aria-labelledby="{title}"', opening)
+                section_id = re.search(r' id="([^"]+)"', opening).group(1)
+                self.assertEqual(self.pricing.count(f' id="{section_id}"'), 1)
+                ids.add(section_id)
+        self.assertEqual(len(ids), 5)
+        ongoing = normalise_copy(visible_text(self.section_for('Ongoing costs')[0]))
+        for fact in ('domain', 'hosting', 'care plan', 'optional', 'cancel anytime', "30 days' notice"):
+            with self.subTest(fact=fact):
+                self.assertIn(fact, ongoing)
+        quote = visible_text(self.section_for('What’s in your quote')[0])
+        self.assertIn('What you provide', quote)
+
+    def test_new_policy_sections_add_no_media_scripts_or_motion(self):
+        # The three sections added in Task 51 are text only: no photo, video, script, external link or data-* hook.
+        for heading in ('What happens in the consultation', 'Revisions and changes', 'Payment and timeline'):
+            with self.subTest(heading=heading):
+                section = self.section_for(heading)[0]
+                for banned in ('<img', '<video', '<script', '<picture', 'http', 'data-'):
+                    self.assertNotIn(banned, section)
+        self.assertEqual(self.pricing.count('<img '), 7)  # the same photos as before Task 51
+        self.assertEqual(self.pricing.count('<video'), VIDEOS_PER_ROUTE['pricing/index.html'])
+
+    def test_pricing_faq_answers_the_policy_questions(self):
+        faq = re.search(r'<div class="faq">(.*?)</div>', self.pricing, re.S).group(1)
+        questions = [normalise_copy(q) for q in re.findall(r'<summary>([^<]+)</summary>', faq)]
+        self.assertGreaterEqual(len(questions), 5)
+        for topic in ('changes', 'pay', 'how long', 'ongoing costs', 'leave'):
+            with self.subTest(topic=topic):
+                self.assertTrue(any(topic in question for question in questions))
+        answers = normalise_copy(visible_text(faq))
+        for fact in ('registrar', 'static hosting', "30 days' notice"):
+            self.assertIn(fact, answers)
+
+    def test_pricing_call_to_action_sits_beside_the_contact_link(self):
+        line = 'Tell us about your business and what you need. We’ll talk it through before preparing a quote.'
+        self.assertEqual(self.pricing.count(line), 1)
+        self.assertRegex(self.pricing, rf'<p>{re.escape(line)}</p><a class="button large go" href="/contact/">')
+
+    def test_quote_card_is_unchanged_illustration(self):
+        self.assertIn('<b>Fixed price</b><span>Agreed before work starts</span>', self.pricing)
+        self.assertEqual(self.pricing.count('class="q-'), 4)
+
+    def test_draft_phrases_are_quoted_from_the_owner_draft(self):
+        draft = normalise_copy(OWNER_DRAFT.read_text())
+        self.assertIn('confirm before launch', draft)
+        self.assertEqual(set(DRAFT_POLICY_PHRASES), {'pricing/index.html'})
+        for route, phrases in DRAFT_POLICY_PHRASES.items():
+            for phrase in phrases:
+                with self.subTest(route=route, phrase=phrase):
+                    self.assertIn(normalise_copy(phrase), draft)
+
+    def test_about_speaks_in_the_studio_voice(self):
+        text = visible_text(self.main['about/index.html'])
+        for word in ('Sydney', 'directly', 'concept', 'plain language', 'honest advice'):
+            with self.subTest(word=word):
+                self.assertIn(word, text)
+        self.assertNotRegex(text, r'\d+\s*%')
+
+    def test_contact_states_the_reply_time_in_words(self):
+        text = normalise_copy(visible_text(self.main['contact/index.html']))
+        self.assertIn('within one business day', text)
+        self.assertNotRegex(text, r'\d+\s*(business )?day')
+
+    def test_no_currency_amounts(self):
+        for route in self.PAGES:
+            desc = re.search(r'<meta name="description" content="([^"]*)">', self.html[route]).group(1)
+            text = visible_text(self.main[route]) + ' ' + desc
+            with self.subTest(route=route):
+                self.assertNotRegex(text, r'(A\$|AU\$|US\$|\$|AUD|USD)\s*\d')
+                self.assertNotRegex(text, re.compile(r'\d+\s*(dollars?|aud)\b', re.I))
+                self.assertNotIn('A$', text)
+                self.assertNotRegex(text, re.compile(r'\d[\d,.]*\s*(per month|/\s*month|a month)', re.I))
+
+    def test_no_testimonial_or_rating_markup(self):
+        for route in self.PAGES:
+            html = self.html[route].lower()
+            with self.subTest(route=route):
+                for banned in ('<blockquote', 'testimonial', 'aggregaterating', 'ratingvalue', '"review"',
+                               'itemprop="review', '★', 'out of 5', 'stars'):
+                    self.assertNotIn(banned, html)
 
 
 if __name__ == '__main__':

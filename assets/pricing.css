@@ -41,6 +41,7 @@
 .inc-list li::before{content:"";grid-row:span 2;width:11px;height:6px;margin:6px 0 0 3px;border-left:2px solid var(--ok);border-bottom:2px solid var(--ok);transform:rotate(-45deg)}
 .inc-list b{font:720 1.125rem/1.2 var(--font-display);font-stretch:94%}
 .inc-list span{color:var(--ink-2);font-size:1rem}
+.inc-sub{grid-column:1/-1;margin:clamp(8px,1.5vw,20px) 0 0;font:720 clamp(1.25rem,1.1rem + .5vw,1.6rem)/1.2 var(--font-display);font-stretch:94%;letter-spacing:-.01em}
 .aff-head{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:24px;align-items:end}
 .aff-head .h2{grid-column:1/7}
 .aff-head p{grid-column:8/13;margin:0;color:var(--ink-2)}
