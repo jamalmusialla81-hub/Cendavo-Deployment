@@ -274,3 +274,24 @@ Supervisor review of the Task 41 build at 390 px and 1440 px:
 2. Homepage mobile hero: the "On screen · Concept projects for fictional businesses" tag collides with the nav pill — move it below the 3D stage (or into the hero copy) on ≤ 640 px.
 3. Contact: the glass C shows a dark/black fill behind the refracted headlight photo — the backdrop must be light (use a light photo crop or the colour field, no black plane), and the C a little larger so it reads as the same white glass as the homepage.
 Small, focused change; same budgets/tests. **Never `cd` in Bash.**
+
+## Task 43 — glass critique fixes, part 1: bugs and empty states (OWNER-MANDATED; profile `site`)
+Independent critique of the built site (screenshots in `docs/design/glass/critique/`). Fix:
+1. **Lenis is broken on every motion page:** each wheel event throws `this.options.prevent is not a function` (vendored Lenis 1.1.0 calls its default `prevent: false`), so scrolling falls back to native steps and every scroll-linked effect jumps. In `assets/glass.js` pass `prevent: () => false` (or an equivalent valid function) to `new Lenis(...)`. Add a test (Node harness with a stub DOM, or a source assertion plus a behaviour harness) that wheel handling does not throw. Do not edit the vendored file.
+2. **Reveal timing / empty states:** reveals trigger at ~85% of the viewport; a container's contents never reveal later than the container; no empty white cards in view (Services "Old addresses, redirected" and "Every month", the blank glass card over the forest photo on Pricing, the lone "Concept project" label before the Harbourside title on Work); give the Work car photo a gap above the captions; shorten parallax offsets on secondary text so no line floats orphaned (Pricing "Whatever the size…", About "If customers find you on their phone…"); tighten the large section gaps on the homepage; remove the ~190 px dead black under the closing dark-glass card.
+3. **Demo page:** the "Requests" heading is clipped by its card — use `clamp()` / allow wrapping.
+4. **Pause motion control:** under reduced motion it shows a play icon but says "Pause motion" — label, icon and `aria-pressed` must agree in every state. On phones it must not cover body text, FAQ toggles or marquee pills (inset it and reserve space; test intersection at 390×844 over several scroll positions per page).
+5. **Footer glass wordmark:** fix the hard clip at its bottom edge and the empty band under it; raise tonal contrast (soft shadow/light sweep) so it reads on desktop and mobile.
+6. **Work "Request queue" pills** are truncated ("Website …") — make the labels fit.
+Small, focused; same budgets and test rules. **30-minute builder clock. Never `cd` in Bash.**
+
+## Task 44 — glass critique fixes, part 2: hero, glass quality, signature moments (OWNER-MANDATED; profile `site`)
+1. **Homepage hero exit:** the glass C must never rotate edge-on into a grey sliver and the wordmark must never smear; choreograph the sticky exit so the C ends facing the camera, larger, as the reel section rises over it. Feather the WebGL canvas bottom (gradient mask) instead of a hard edge; reduce the depth blur on the background screens so they read as refracted content, not mush.
+2. **Wordmark material:** make the 3D CENDAVO milky white frosted glass (no blue-grey gunmetal), and keep it off the dark screen (reposition screens so letters sit over light content).
+3. **C backplates:** on About and Contact the photo behind the glass C has hard rectangular edges — feather/mask it to a soft shape.
+4. **Services hero stack:** fan the three panes with clear offsets (~40% of each visible), clean white frosted glass with no photo inside, titles fully readable; spread on scroll; a simplified fanned version on mobile instead of a plain photo.
+5. **Marquee:** the film-filled type reads as grey stone — use a brighter footage fill or white glass text; put the pills on the photo tiles, not straddling gaps.
+6. **Showreel "no box":** present the reel full-bleed (no radius) with a soft edge blend into the page; move the chapter list into page typography beside/below it; one small glass control chip clear of the film's own subtitles. Remove the ghost laptop frame peeking out behind the chapter panel. About film: move its scrubber/control so it never overlaps the film's text.
+7. **Less templated:** tone down the global peach/blue/mint mesh to a neutral warm-white base with colour mainly from photography/footage seen through glass; keep it light.
+8. **Glass on components:** project cards (hover tilt + specular rim), the compare slider handle (glass knob instead of the default range thumb, input remains the accessible control), pricing rows and the FAQ use the same glass material.
+Same budgets and test rules; keep reduced-motion/Save-Data fallbacks. **30-minute builder clock: small batches. Never `cd` in Bash.**
