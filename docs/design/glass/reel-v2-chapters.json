@@ -1,0 +1,47 @@
+{
+  "fps": 30,
+  "duration": 24.667,
+  "loop": true,
+  "chapters": [
+    {
+      "label": "Cendavo",
+      "seconds": 0.0
+    },
+    {
+      "label": "Your work is excellent",
+      "seconds": 1.0
+    },
+    {
+      "label": "Your website should say so",
+      "seconds": 3.27
+    },
+    {
+      "label": "Harbourside Mobile Detailing (concept)",
+      "seconds": 5.2
+    },
+    {
+      "label": "Greenline Landscapes (concept)",
+      "seconds": 7.87
+    },
+    {
+      "label": "Fade & Co (concept)",
+      "seconds": 10.13
+    },
+    {
+      "label": "Book from a phone",
+      "seconds": 12.13
+    },
+    {
+      "label": "Before / After",
+      "seconds": 14.47
+    },
+    {
+      "label": "New websites · Redesigns · Care plans",
+      "seconds": 18.4
+    },
+    {
+      "label": "Cendavo",
+      "seconds": 22.13
+    }
+  ]
+}

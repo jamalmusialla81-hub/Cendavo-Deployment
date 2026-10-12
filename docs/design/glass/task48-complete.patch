@@ -1,0 +1,1295 @@
+diff --git a/assets/glass-boot.js b/assets/glass-boot.js
+index 5c2d84e..c10c9eb 100644
+--- a/assets/glass-boot.js
++++ b/assets/glass-boot.js
+@@ -5,6 +5,9 @@
+ // idle, so it never competes with the headline or the first paint. A failed import or start leaves the still in place.
+ // Which module loads comes from a fixed list: no data-gl-kind is the homepage scene; slab (Work), panes (Services), sheets
+ // (Pricing), photos (About) and mark (Contact) the inner-page scene; any other kind imports nothing. No path is ever read from the page.
++// Task 48: the WebGL test is the scene's own context: a WebGL2 context (three.js r170 needs WebGL2) made with the renderer's
++// attributes and handed to start(), which draws with it. If the import or start fails, or start does not take it, it is
++// released at once (WEBGL_lose_context), so no throwaway context is ever left behind.
+ (() => {
+   const win = window, doc = document;
+   const MODULES = { home: '/assets/glass-scene.js', slab: '/assets/glass-page.js', panes: '/assets/glass-page.js', sheets: '/assets/glass-page.js',
+@@ -23,16 +26,22 @@
+     reduce: !mq('(prefers-reduced-motion: no-preference)'),
+     saveData: Boolean(nav.connection?.saveData),
+     narrow: mq('(max-width: 760px)'),
+-    lowEnd: (typeof nav.deviceMemory === 'number' && nav.deviceMemory < 4) || (typeof nav.hardwareConcurrency === 'number' && nav.hardwareConcurrency <= 4),
++    // a browser that does not report memory or cores is not low-end (undefined < 4 is false)
++    lowEnd: nav.deviceMemory < 4 || nav.hardwareConcurrency <= 4,
+     webgl: true,
+   };
+   if (!wantsGL(env)) return;
+-  const hasWebGL = () => {
+-    try { const c = doc.createElement('canvas'); return Boolean(c.getContext('webgl2') || c.getContext('webgl')); } catch (error) { return false; }
++  // alpha and powerPreference as the renderer asks for them; antialias is on by default
++  const probe = () => {
++    try {
++      const canvas = doc.createElement('canvas'), context = canvas.getContext('webgl2', { alpha: false, powerPreference: 'high-performance' });
++      return context && { canvas, context };
++    } catch (error) { return null; }
+   };
++  const lose = gl => gl.context.getExtension?.('WEBGL_lose_context')?.loseContext();
+   const start = () => {
+-    if (!wantsGL({ ...env, webgl: hasWebGL() })) return;
+-    import(SCENE).then(m => m.start(host, G)).catch(() => host.classList.remove('is-live'));
++    const gl = probe();
++    if (wantsGL({ ...env, webgl: Boolean(gl) })) import(SCENE).then(m => m.start(host, G, gl) || lose(gl)).catch(() => { host.classList.remove('is-live'); lose(gl); });
+   };
+   const later = () => (win.requestIdleCallback ? win.requestIdleCallback(start, { timeout: 1500 }) : win.setTimeout(start, 300));
+   if (doc.readyState === 'complete') later(); else win.addEventListener('load', later, { once: true });
+diff --git a/assets/glass-page.js b/assets/glass-page.js
+index 0ce99fa..821142c 100644
+--- a/assets/glass-page.js
++++ b/assets/glass-page.js
+@@ -14,9 +14,12 @@
+               never behind it (Task 41), a light photo (white kitchen) behind it, so the C refracts light, never a dark
+               plane (Task 42); the form is untouched
+    The loop runs only while the hero is on screen, the tab is visible and Pause motion is off (registered on the shared
+-   G.pauseFns fan-out, never by replacing G.onPauseChange); otherwise setAnimationLoop(null) stops it and videos pause. */
++   G.pauseFns fan-out, never by replacing G.onPauseChange); otherwise setAnimationLoop(null) stops it and videos pause.
++   Task 48: the shared helpers come from glass-shapes.js, so these pages never fetch the homepage scene (glass-scene.js) or
++   three's SVGLoader and BufferGeometryUtils; the C is extruded straight from its paths (markGeometry). The scene draws with
++   the WebGL2 context glass-boot.js tested (gl) and returns true once it has taken it (false: glass-boot.js releases it). */
+ import * as THREE from './vendor/three/three.module.min.js';
+-import { roundedRect, MARK, extrude, silhouette } from './glass-scene.js';
++import { roundedRect, MARK, markGeometry, silhouette, rendererOptions } from './glass-shapes.js';
+ 
+ const easeOut = (t) => (t >= 1 ? 1 : 1 - Math.pow(2, -10 * t)); // expo out, no overshoot
+ const damp = (a, b, lambda, dt) => a + (b - a) * (1 - Math.exp(-lambda * dt));
+@@ -83,14 +86,14 @@ function featherTexture() {
+   return new THREE.CanvasTexture(c);
+ }
+ 
+-export function start(host, shared) {
++export function start(host, shared, gl) {
+   const G = shared || window.__glass || (window.__glass = { paused: false, pointer: { x: 0, y: 0 } });
+   G.pointer = G.pointer || { x: 0, y: 0 };
+   const kind = host.dataset.glKind;
+-  if (!KINDS.includes(kind)) return;
++  if (!KINDS.includes(kind)) return false;
+   const section = host.closest('section') || host.parentElement;
+   const anchorEl = host.dataset.glAnchor ? section.querySelector(host.dataset.glAnchor) : null;
+-  const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false, powerPreference: 'high-performance' });
++  const renderer = new THREE.WebGLRenderer(rendererOptions(gl));
+   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.75));
+   renderer.toneMapping = THREE.NeutralToneMapping;
+   renderer.outputColorSpace = THREE.SRGBColorSpace;
+@@ -184,8 +187,7 @@ export function start(host, shared) {
+     unitH = 4.2;
+   } else {
+     /* the C: big for About (the photos float behind it), small for Contact */
+-    const g = extrude(`<svg viewBox="0 0 200 200">${MARK.map((d) => `<path d="${d}"/>`).join('')}</svg>`,
+-      { depth: 40, bevelEnabled: true, bevelThickness: 14, bevelSize: 8, bevelSegments: 14, curveSegments: 48 });
++    const g = markGeometry({ depth: 40, bevelEnabled: true, bevelThickness: 14, bevelSize: 8, bevelSegments: 14, curveSegments: 48 });
+     const s = 3.2 / 152; g.scale(s, s, s);
+     obj.add(new THREE.Mesh(g, glass));
+     const sh = silhouette(MARK, [24, 24, 135, 152], { pad: 0.22, blur: 12, color: 'rgba(52,40,24,0.4)' });
+@@ -277,4 +279,5 @@ export function start(host, shared) {
+     life.ready();
+   };
+   (renderer.compileAsync ? renderer.compileAsync(scene, camera) : Promise.resolve()).then(go, go);
++  return true;
+ }
+diff --git a/assets/glass-scene.js b/assets/glass-scene.js
+index 59cedb3..6f536a6 100644
+--- a/assets/glass-scene.js
++++ b/assets/glass-scene.js
+@@ -7,16 +7,15 @@
+    never edge-on; the name is milky frosted glass over light content only (heroLayout keeps the dark screen away). The
+    loop runs only while the hero is on screen, the tab is visible and Pause motion is off; otherwise
+    setAnimationLoop(null) stops it and the screen videos pause. The canvas is aria-hidden: the host's role="img" label
+-   describes the hero, and the CSS poster underneath stays in place if anything here fails. */
++   describes the hero, and the CSS poster underneath stays in place if anything here fails. Task 48: the helpers the inner
++   pages share (the C's paths, rounded screens, silhouettes, the renderer's options) live in glass-shapes.js; only this
++   homepage scene needs SVGLoader and BufferGeometryUtils (the CENDAVO wordmark has holes). It draws with the WebGL2
++   context glass-boot.js tested, and returns true once it has taken it. */
+ import * as THREE from './vendor/three/three.module.min.js';
+ import { SVGLoader } from './vendor/three/jsm/SVGLoader.js';
+ import { mergeGeometries } from './vendor/three/jsm/BufferGeometryUtils.js';
++import { MARK, roundedRect, silhouette, rendererOptions } from './glass-shapes.js';
+ 
+-export const MARK = [
+-  'M55.67 43.26C86.24 19.38 130.22 24.01 155.16 53.72L135.24 70.43C119.31 51.45 91.21 48.5 71.68 63.75Z',
+-  'M48.21 150.02C21.26 122.11 21.26 77.89 48.21 49.98L66.91 68.05C49.7 85.87 49.7 114.13 66.91 131.95Z',
+-  'M155.16 146.28C130.22 175.99 86.24 180.62 55.67 156.74L71.68 136.25C91.21 151.5 119.31 148.55 135.24 129.57Z'
+-];
+ const WORD_PATH = 'M435.8 12Q309.9 12 224.1 -27.3Q138.4 -66.6 94.8 -145.7Q51.2 -224.8 51.2 -343.7Q51.2 -518.5 150.3 -608.8Q249.5 -699.1 435.9 -699.1Q539.8 -699.1 619.6 -666.3Q699.5 -633.6 744.9 -570.9Q790.2 -508.2 790.2 -418.1H614.7Q614.7 -463.1 592.2 -494.9Q569.8 -526.6 529.5 -543.5Q489.1 -560.4 434.6 -560.4Q368.5 -560.4 324 -536.3Q279.4 -512.2 257.2 -467.3Q234.9 -422.4 234.9 -360.2V-327.7Q234.9 -265.2 257.3 -220.1Q279.6 -175 323.8 -150.9Q367.9 -126.7 433.5 -126.7Q491.8 -126.7 533.5 -142.9Q575.2 -159.1 597.7 -190.5Q620.2 -222 620.2 -266.5H790.5Q790.5 -178 746.5 -115.6Q702.4 -53.3 622.8 -20.6Q543.2 12 435.8 12Z M981.7 0V-687.1H1614.3V-548.1H1160.9V-417.1H1559.1V-281.3H1160.9V-139H1621.5V0Z M1816.1 0V-687.1H1977.2L2286 -351.8Q2294.3 -343.8 2306.9 -329.1Q2319.5 -314.5 2332.5 -299.5Q2345.6 -284.4 2353.8 -273.7L2360.7 -274.1Q2360.2 -293.4 2359.7 -316.8Q2359.3 -340.2 2359.3 -357.2V-687.1H2527.8V0H2368.4L2056.6 -340.2Q2038.8 -358.8 2020 -380.7Q2001.3 -402.7 1989.8 -415.9L1983.5 -415.5Q1984 -401 1984.3 -378.6Q1984.5 -356.2 1984.5 -333V0Z M2750.1 0V-687.1H3080.4Q3198.4 -687.1 3282.1 -648.8Q3365.8 -610.5 3410.5 -534.3Q3455.2 -458.1 3455.2 -343.4Q3455.2 -229.5 3410.5 -153Q3365.8 -76.6 3282.1 -38.3Q3198.4 0 3080.4 0ZM2929 -139H3074.4Q3120.4 -139 3156.8 -151.5Q3193.2 -163.9 3218.8 -187.8Q3244.4 -211.8 3257.8 -247.1Q3271.2 -282.5 3271.2 -328.3V-358.9Q3271.2 -405 3257.8 -440.3Q3244.4 -475.5 3218.8 -499.5Q3193.2 -523.4 3156.8 -535.7Q3120.4 -548.1 3074.4 -548.1H2929Z M3578 0 3876.4 -687.1H4084L4382.6 0H4189.8L4140.3 -120.9H3811.2L3762 0ZM3865.4 -256.1H4086.1L4025.8 -406.8Q4021.8 -417.2 4015.3 -434.3Q4008.9 -451.4 4002.2 -470.8Q3995.4 -490.3 3989.3 -508.1Q3983.2 -525.8 3979.5 -536.5H3972.6Q3966.2 -517.5 3957.4 -493Q3948.6 -468.4 3940.2 -445.2Q3931.8 -422 3925.6 -406.6Z M4754.9 0 4467.4 -687.1H4663.3L4808.9 -308.1Q4815.7 -292.3 4824 -269.2Q4832.3 -246.2 4840.8 -223.1Q4849.3 -200 4855.3 -182.1H4862.2Q4867.9 -198.4 4875.9 -220.7Q4883.8 -243 4892.4 -266.1Q4901.1 -289.2 4908.3 -307.5L5054.5 -687.1H5241.7L4954.4 0Z M5766.8 12Q5642.9 12 5552.8 -28.6Q5462.8 -69.1 5414.5 -148.5Q5366.2 -227.8 5366.2 -343.5Q5366.2 -460.1 5414.5 -539.1Q5462.8 -618.2 5552.8 -658.6Q5642.9 -699.1 5766.8 -699.1Q5892.1 -699.1 5981.8 -658.6Q6071.5 -618.2 6119.8 -539.1Q6168 -460.1 6168 -343.5Q6168 -227.8 6119.8 -148.5Q6071.5 -69.1 5981.8 -28.6Q5892.1 12 5766.8 12ZM5767 -126.7Q5817.4 -126.7 5857.6 -140.2Q5897.7 -153.6 5926.1 -179.4Q5954.5 -205.2 5969.6 -242.7Q5984.6 -280.3 5984.6 -327.9V-359.6Q5984.6 -407.4 5969.6 -444.9Q5954.5 -482.4 5926.1 -508.1Q5897.7 -533.8 5857.6 -547.1Q5817.4 -560.4 5767 -560.4Q5716.6 -560.4 5676.5 -547.1Q5636.3 -533.8 5608 -508.1Q5579.7 -482.4 5565 -444.9Q5550.2 -407.4 5550.2 -359.6V-327.9Q5550.2 -280.3 5565 -242.7Q5579.7 -205.2 5608 -179.4Q5636.3 -153.6 5676.5 -140.2Q5716.6 -126.7 5767 -126.7Z';
+ const WORD_VB = [0, -686, 6219, 686];
+ 
+@@ -82,31 +81,6 @@ export function extrude(svg, opts) {
+   return g;
+ }
+ 
+-export function roundedRect(w, h, r) {
+-  const s = new THREE.Shape(), x = -w / 2, y = -h / 2;
+-  s.moveTo(x + r, y); s.lineTo(x + w - r, y); s.quadraticCurveTo(x + w, y, x + w, y + r);
+-  s.lineTo(x + w, y + h - r); s.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+-  s.lineTo(x + r, y + h); s.quadraticCurveTo(x, y + h, x, y + h - r);
+-  s.lineTo(x, y + r); s.quadraticCurveTo(x, y, x + r, y);
+-  const g = new THREE.ShapeGeometry(s, 10);
+-  const uv = g.attributes.uv, pos = g.attributes.position;
+-  for (let i = 0; i < uv.count; i++) uv.setXY(i, (pos.getX(i) - x) / w, (pos.getY(i) - y) / h);
+-  return g;
+-}
+-
+-/* a blurred silhouette of an SVG path, drawn on a canvas: used for the halo and the cast shadow */
+-export function silhouette(paths, vb, { px = 1024, pad = 0.35, blur = 24, color = '#fff' } = {}) {
+-  const [vx, vy, vw, vh] = vb, padU = Math.max(vw, vh) * pad;
+-  const W = vw + padU * 2, H = vh + padU * 2, s = px / Math.max(W, H);
+-  const c = document.createElement('canvas'); c.width = Math.ceil(W * s); c.height = Math.ceil(H * s);
+-  const x = c.getContext('2d');
+-  x.filter = `blur(${blur}px)`; x.fillStyle = color;
+-  x.setTransform(s, 0, 0, s, (padU - vx) * s, (padU - vy) * s);
+-  paths.forEach((d) => x.fill(new Path2D(d)));
+-  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace;
+-  return { tex: t, aspect: W / H, scaleW: W / vw };
+-}
+-
+ export function shadowTexture() {
+   const c = document.createElement('canvas'); c.width = c.height = 128;
+   const x = c.getContext('2d');
+@@ -120,11 +94,11 @@ const svgOf = (paths, vb) => `<svg viewBox="${vb.join(' ')}">${paths.map((d) =>
+ const blendMat = (tex) => new THREE.MeshBasicMaterial({ map: tex, transparent: false, depthWrite: false, toneMapped: false,
+   blending: THREE.CustomBlending, blendEquation: THREE.AddEquation, blendSrc: THREE.SrcAlphaFactor, blendDst: THREE.OneMinusSrcAlphaFactor });
+ 
+-export function start(host, shared) {
++export function start(host, shared, gl) {
+   const G = shared || window.__glass || (window.__glass = { paused: false, heroP: 0, pointer: { x: 0, y: 0 } });
+   G.pointer = G.pointer || { x: 0, y: 0 };
+   const DPR_CAP = window.matchMedia('(max-width: 760px)').matches ? 1.5 : 1.75;
+-  const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false, powerPreference: 'high-performance' });
++  const renderer = new THREE.WebGLRenderer(rendererOptions(gl));
+   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, DPR_CAP));
+   renderer.toneMapping = THREE.NeutralToneMapping;
+   renderer.outputColorSpace = THREE.SRGBColorSpace;
+@@ -346,4 +320,5 @@ export function start(host, shared) {
+     setRunning(true);
+   };
+   (renderer.compileAsync ? renderer.compileAsync(scene, camera) : Promise.resolve()).then(go, go);
++  return true;
+ }
+diff --git a/assets/glass-shapes.js b/assets/glass-shapes.js
+new file mode 100644
+index 0000000..0bb895d
+--- /dev/null
++++ b/assets/glass-shapes.js
+@@ -0,0 +1,72 @@
++/* Cendavo Liquid Glass shared shapes (Task 48): the small helpers both WebGL scenes use, split out of glass-scene.js so the
++   inner pages (glass-page.js) never fetch the homepage scene or three's SVGLoader and BufferGeometryUtils. An ES module,
++   imported by relative path (no import map); three.js r170 is vendored. Nothing here reads the page. */
++import * as THREE from './vendor/three/three.module.min.js';
++
++/* the C mark's three arcs, in the 200 x 200 box of the inline SVG logo */
++export const MARK = [
++  'M55.67 43.26C86.24 19.38 130.22 24.01 155.16 53.72L135.24 70.43C119.31 51.45 91.21 48.5 71.68 63.75Z',
++  'M48.21 150.02C21.26 122.11 21.26 77.89 48.21 49.98L66.91 68.05C49.7 85.87 49.7 114.13 66.91 131.95Z',
++  'M155.16 146.28C130.22 175.99 86.24 180.62 55.67 156.74L71.68 136.25C91.21 151.5 119.31 148.55 135.24 129.57Z'
++];
++
++/* The C as three.js shapes. Its arcs use only absolute M, C, L and Z (tested), so no SVG parser is needed; anything else
++   ends the path. */
++export function markShapes(paths = MARK) {
++  return paths.map((d) => {
++    const t = d.match(/[MCLZ]|-?\d*\.?\d+/g) || [], s = new THREE.Shape();
++    let i = 0, cmd = '';
++    const n = () => parseFloat(t[i++]);
++    while (i < t.length) {
++      if (/^[MCLZ]$/.test(t[i])) cmd = t[i++];
++      if (cmd === 'M') { s.moveTo(n(), n()); cmd = 'L'; }
++      else if (cmd === 'L') s.lineTo(n(), n());
++      else if (cmd === 'C') s.bezierCurveTo(n(), n(), n(), n(), n(), n());
++      else break; // Z: the shape closes itself
++    }
++    return s;
++  });
++}
++
++/* The extruded glass C, laid out as glass-scene.js's extrude() lays out an SVG: y flipped (SVG is y-down), centred, normals
++   recomputed. One ExtrudeGeometry takes all three shapes, so nothing needs merging. */
++export function markGeometry(opts) {
++  const g = new THREE.ExtrudeGeometry(markShapes(), opts);
++  g.rotateX(Math.PI);
++  g.computeBoundingBox();
++  const c = new THREE.Vector3(); g.boundingBox.getCenter(c); g.translate(-c.x, -c.y, -c.z);
++  g.computeVertexNormals();
++  return g;
++}
++
++export function roundedRect(w, h, r) {
++  const s = new THREE.Shape(), x = -w / 2, y = -h / 2;
++  s.moveTo(x + r, y); s.lineTo(x + w - r, y); s.quadraticCurveTo(x + w, y, x + w, y + r);
++  s.lineTo(x + w, y + h - r); s.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
++  s.lineTo(x + r, y + h); s.quadraticCurveTo(x, y + h, x, y + h - r);
++  s.lineTo(x, y + r); s.quadraticCurveTo(x, y, x + r, y);
++  const g = new THREE.ShapeGeometry(s, 10);
++  const uv = g.attributes.uv, pos = g.attributes.position;
++  for (let i = 0; i < uv.count; i++) uv.setXY(i, (pos.getX(i) - x) / w, (pos.getY(i) - y) / h);
++  return g;
++}
++
++/* a blurred silhouette of an SVG path, drawn on a canvas: used for the halo and the cast shadow */
++export function silhouette(paths, vb, { px = 1024, pad = 0.35, blur = 24, color = '#fff' } = {}) {
++  const [vx, vy, vw, vh] = vb, padU = Math.max(vw, vh) * pad;
++  const W = vw + padU * 2, H = vh + padU * 2, s = px / Math.max(W, H);
++  const c = document.createElement('canvas'); c.width = Math.ceil(W * s); c.height = Math.ceil(H * s);
++  const x = c.getContext('2d');
++  x.filter = 'blur(' + blur + 'px)'; x.fillStyle = color;
++  x.setTransform(s, 0, 0, s, (padU - vx) * s, (padU - vy) * s);
++  paths.forEach((d) => x.fill(new Path2D(d)));
++  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace;
++  return { tex: t, aspect: W / H, scaleW: W / vw };
++}
++
++/* Task 48: glass-boot.js tests for WebGL2 with the renderer's own context attributes and hands that canvas and context
++   over (gl), so the scene draws with them and no throwaway context is left behind. Without one, three makes its own. */
++export function rendererOptions(gl) {
++  const base = { antialias: true, alpha: false, powerPreference: 'high-performance' };
++  return gl && gl.canvas && gl.context ? { ...base, canvas: gl.canvas, context: gl.context } : base;
++}
+diff --git a/assets/glass.js b/assets/glass.js
+index d76cf59..1f4f2cf 100644
+--- a/assets/glass.js
++++ b/assets/glass.js
+@@ -1,5 +1,7 @@
+ // Liquid Glass shell (Task 37): pointer light, Chromium edge refraction, Lenis and the atmosphere drift. Hides nothing;
+-// reduced motion: no Lenis, drift or light; Save-Data: no refraction maps.
++// reduced motion: no Lenis, drift or light, and GSAP's ticker sleeps; Save-Data: no refraction maps. Task 48: Pause motion
++// first shows everything GSAP still holds (settle: the reveals and openings of motion.js, scenes.js and home.js), then ends
++// Lenis (native scrolling) and puts GSAP's ticker to sleep; releasing it wakes the ticker and brings Lenis back.
+ (() => {
+   const win = window, doc = document, root = doc.documentElement;
+   const motionOK = Boolean(win.matchMedia?.('(prefers-reduced-motion: no-preference)').matches);
+@@ -12,6 +14,8 @@
+   const $$ = selector => Array.from(doc.querySelectorAll(selector));
+   const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+   const GLASS = '.lg, .site-header .nav';
++  // Task 48: the edge refraction (a url() SVG backdrop filter) is for the .lg panels only; the nav pill keeps its plain blur.
++  const REFRACT = '.lg';
+ 
+   // Pointer light: each visible panel's highlight sits where the pointer is (a virtual sun above the page otherwise).
+   const visible = new Set();
+@@ -82,7 +86,7 @@
+       defs.appendChild(f);
+       return (cache[key] = id);
+     };
+-    const apply = () => $$(GLASS).forEach(el => {
++    const apply = () => $$(REFRACT).forEach(el => {
+       const w = Math.round(el.offsetWidth), h = Math.round(el.offsetHeight);
+       if (!w || !h || w * h > 1400 * 900) return;
+       const radius = getComputedStyle(el).borderTopLeftRadius;
+@@ -94,19 +98,50 @@
+     (doc.fonts?.ready || Promise.resolve()).then(apply);
+     G.reapplyRefraction = apply;
+   }
+-  if (!motionOK) return;
+-
+-  // Lenis on GSAP's ticker (touch stays native). Lenis 1.1.0 calls options.prevent on every wheel: its default `false` threw.
+   const gsap = win.gsap, ScrollTrigger = win.ScrollTrigger;
+-  if (win.Lenis) {
+-    const lenis = G.lenis = new win.Lenis({ lerp: 0.1, smoothWheel: true, prevent: () => false });
+-    if (gsap && ScrollTrigger) {
+-      lenis.on('scroll', ScrollTrigger.update);
+-      gsap.ticker.add(t => lenis.raf(t * 1000));
+-    } else {
+-      const tick = t => { lenis.raf(t); win.requestAnimationFrame(tick); };
+-      win.requestAnimationFrame(tick);
+-    }
++  const ticker = gsap && ScrollTrigger ? gsap.ticker : null;
++  // Task 48: Pause motion puts GSAP's ticker to sleep, so first everything GSAP still holds is shown. Each reveal still
++  // waiting for its scroll line ends at once (a batch target gets the stylesheet's state back) and its one-time trigger
++  // goes; scrubbed scenes follow the scroll directly (ScrollTrigger reads it without the ticker) instead of easing toward
++  // it; and any opening or reveal under way jumps to its end.
++  const scrubs = on => ScrollTrigger.getAll().forEach(st => { if (st.vars.scrub) st.scrubDuration(on ? st.vars.scrub : 0); });
++  const settle = () => {
++    scrubs(false);
++    ScrollTrigger.getAll().forEach(st => {
++      if (!st.vars.once) return;
++      if (st.animation) st.animation.progress(1);
++      else gsap.set(st.trigger, { clearProps: 'opacity,transform,clipPath' });
++      st.kill();
++    });
++    gsap.globalTimeline.getChildren(false, true, true).forEach(a => { if (a.isActive()) a.progress(1); });
++  };
++  // Under reduced motion nothing animates, so the ticker never runs and nothing is added to it. Any new tween wakes it (a
++  // ScrollTrigger refresh after a resize makes one, and may rebuild reveals): after each refresh it settles and sleeps again.
++  if (ticker) ScrollTrigger.addEventListener('refresh', () => { if (!motionOK || G.paused) { settle(); ticker.sleep(); } });
++  if (!motionOK) { if (ticker) ticker.sleep(); return; }
++
++  // Lenis on GSAP's ticker (touch stays native). Lenis 1.1.0 calls options.prevent on every wheel: its default, false, threw.
++  const lenis = () => (G.lenis = new win.Lenis({ lerp: 0.1, smoothWheel: true, prevent: () => false }));
++  if (!ticker) {
++    if (win.Lenis) { const l = lenis(), tick = t => { l.raf(t); win.requestAnimationFrame(tick); }; win.requestAnimationFrame(tick); }
++  } else {
++    // Task 48: with GSAP, Lenis exists only while Pause motion is off (it runs on the ticker); pressed, scrolling is native.
++    let tick = null;
++    const smooth = on => {
++      if (!win.Lenis || on === Boolean(G.lenis)) return;
++      if (on) { const l = lenis(); l.on('scroll', ScrollTrigger.update); tick = ticker.add(t => l.raf(t * 1000)); }
++      else { ticker.remove(tick); G.lenis.destroy(); G.lenis = null; }
++    };
++    // Pause motion pressed: everything held is shown, Lenis goes, then the ticker sleeps. Released: the ticker wakes, scrubs
++    // ease again, ScrollTrigger re-measures and Lenis comes back. What was shown stays shown.
++    const hold = paused => {
++      if (paused) { settle(); smooth(false); ticker.sleep(); return; }
++      ticker.wake(); scrubs(true); ScrollTrigger.refresh(); smooth(true);
++    };
++    pauseFns.push(hold);
++    // Save-Data: Pause motion starts pressed.
++    if (G.paused) hold(true);
++    else smooth(true);
+   }
+ 
+   // The atmosphere drifts on slow, separate sine paths (40 to 70 s), transform only; held by Pause motion and a hidden tab.
+diff --git a/assets/home.css b/assets/home.css
+index 29d3983..b0b17bd 100644
+--- a/assets/home.css
++++ b/assets/home.css
+@@ -347,10 +347,10 @@
+ 
+ /* Motion: only for people who have not asked for reduced motion; only transform and opacity move.
+    Hero start states, only while motion-boot.js holds .ph-wait: home.js takes them over with GSAP fromTo and removes the
+-   class (its 2.5 s timer removes it whatever happens), so nothing paints, vanishes and replays. */
++   class (its 2.5 s timer removes it whatever happens), so nothing paints, vanishes and replays. Task 48: copy never opacity 0. */
+ @media(prefers-reduced-motion:no-preference){
+ .ph-wait .hero-h .ln>span{transform:translateY(108%)}
+-.ph-wait :is(.hero-sub,.hero .actions){opacity:0;transform:translateY(18px)}
++.ph-wait :is(.hero-sub,.hero .actions){transform:translateY(18px)}
+ .ph-wait .hero-cards{opacity:0}
+ /* Concept cards: the photo pushes in a little on hover or keyboard focus, and the light sweep follows the pointer, both
+    within 200 ms. */
+diff --git a/assets/home.js b/assets/home.js
+index 1168c52..98dd736 100644
+--- a/assets/home.js
++++ b/assets/home.js
+@@ -68,7 +68,7 @@
+       const target = Number(button.dataset.compareSet);
+       stopSweep();
+       tween?.kill();
+-      if (window.gsap && !still()) {
++      if (window.gsap && !still() && !window.__glass?.paused) {
+         // Glide the divider to the chosen side; the range value follows so it stays the source of truth.
+         tween = window.gsap.to(state, { v: target, duration: 0.4, ease: IO, onUpdate: () => { range.value = Math.round(state.v); update(); } });
+       } else {
+@@ -151,7 +151,8 @@
+       book?.classList.add('booked');
+     };
+     if (lines.length) tl.fromTo(lines, { yPercent: 108, y: 0 }, { yPercent: 0, y: 0, duration: 1, stagger: 0.08, clearProps: 'transform' }, 0);
+-    if (fades.length) tl.fromTo(fades, { y: 18, opacity: 0 }, { y: 0, opacity: 1, duration: 0.7, stagger: 0.08, clearProps: OT }, 0.4);
++    // Task 48: the copy and buttons only rise (never opacity 0), so they paint with the headline (LCP).
++    if (fades.length) tl.fromTo(fades, { y: 18 }, { y: 0, duration: 0.7, stagger: 0.08, clearProps: 'transform' }, 0.4);
+     const deck = $('.hero-cards');
+     if (deck) tl.fromTo(deck, { opacity: 0 }, { opacity: 1, duration: 0.2, clearProps: 'opacity' }, 0.6);
+     if (cards.length) {
+@@ -244,13 +245,15 @@
+   const tilt = () => $$('.teaser-card').forEach(card => {
+     const rx = gsap.quickTo(card, 'rotationX', { duration: 0.6, ease: OUT }), ry = gsap.quickTo(card, 'rotationY', { duration: 0.6, ease: OUT });
+     const shine = $('.teaser-img', card);
++    // Task 48: no new tween (it would wake GSAP's ticker) while Pause motion is pressed.
+     card.addEventListener('pointermove', e => {
++      if (glass.paused) return;
+       const r = card.getBoundingClientRect(), nx = (e.clientX - r.left) / r.width - 0.5, ny = (e.clientY - r.top) / r.height - 0.5;
+       gsap.set(card, { transformPerspective: 1200 });
+       rx(tiltOf(-ny * 8)); ry(tiltOf(nx * 10));
+       shine?.style.setProperty('--sweep', Math.round(nx * 120) + '%');
+     });
+-    card.addEventListener('pointerleave', () => { rx(0); ry(0); shine?.style.setProperty('--sweep', '-120%'); });
++    card.addEventListener('pointerleave', () => { if (!glass.paused) { rx(0); ry(0); } shine?.style.setProperty('--sweep', '-120%'); });
+   });
+ 
+   // Only the visual --pos moves: the range value, its aria-valuetext and the buttons never change (nothing is announced).
+diff --git a/assets/kit.css b/assets/kit.css
+index 523b29a..476129e 100644
+--- a/assets/kit.css
++++ b/assets/kit.css
+@@ -123,6 +123,11 @@
+ .vt:hover{border-color:var(--ink)}
+ .vt::before{content:"";width:0;height:0;border-left:9px solid currentColor;border-top:6px solid transparent;border-bottom:6px solid transparent}
+ .vt.is-playing::before{width:9px;height:11px;border:0;border-inline:3px solid currentColor}
++/* Task 48: the Play button ships hidden and reel.js reveals it. With scripts on (.js, set in <head>) an empty placeholder
++   of exactly its size (16px gap, 44px button: a block-level button, so no line box adds to it) holds its place from the
++   first paint, so revealing it never pushes the content below (CLS). The placeholder is empty: nothing to announce. */
++.clip-side .vt{display:flex;width:fit-content}
++.js .clip-side:has(>.vt[hidden])::after{content:"";display:block;height:44px;margin-top:16px}
+ @media(max-width:560px){
+ .clip{grid-template-columns:42% minmax(0,1fr);gap:16px}
+ .sp{width:100%}
+diff --git a/assets/motion.js b/assets/motion.js
+index f7f6295..dcf1517 100644
+--- a/assets/motion.js
++++ b/assets/motion.js
+@@ -27,6 +27,8 @@
+   const IN = bezier(0.2, 0.8, 0.2, 1);
+   const IO = bezier(0.7, 0, 0.2, 1);
+   const SHOWN = 'opacity,transform';
++  // Task 48: while Pause motion is pressed GSAP's ticker sleeps (glass.js), so nothing here starts a new tween then.
++  const paused = () => Boolean(window.__glass?.paused);
+   // fromTo pair: rise y px into place.
+   const up = (y, duration, stagger) => [{ opacity: 0, y }, { opacity: 1, y: 0, duration, stagger: stagger || 0, clearProps: SHOWN }];
+ 
+@@ -81,7 +83,8 @@
+         const fades = $$('[data-ph-fade]', head);
+         if (lines.length) tl.fromTo(lines, { yPercent: 108, y: 0 }, { yPercent: 0, y: 0, duration: 1, stagger: 0.08, clearProps: 'transform' }, 0);
+         if (media.length) tl.fromTo(media, { clipPath: 'inset(0 0 0 100%)' }, { clipPath: 'inset(0 0 0 0%)', duration: 1, stagger: 0.08, ease: IO, clearProps: 'clipPath' }, 0.05);
+-        if (fades.length) tl.fromTo(fades, { y: 18, opacity: 0 }, { y: 0, opacity: 1, duration: 0.7, stagger: 0.08, clearProps: SHOWN }, 0.3);
++        // Task 48: the copy only rises (never opacity 0), so it paints with the headline (LCP).
++        if (fades.length) tl.fromTo(fades, { y: 18 }, { y: 0, duration: 0.7, stagger: 0.08, clearProps: 'transform' }, 0.3);
+       });
+       // Pricing: the quote sheet fills in line by line, then its fixed-price line is set, within 1.2 s.
+       const sheet = doc.querySelector('[data-sheet]');
+@@ -122,6 +125,12 @@
+       gsap.set(heads, { opacity: at => (at === current ? 1 : DIM) });
+       swap = (index, previous) => {
+         gsap.killTweensOf(photos);
++        if (paused()) {
++          photos.forEach(photo => { photo.style.clipPath = ''; });
++          gsap.killTweensOf(heads);
++          heads.forEach((head, at) => { head.style.opacity = String(at === index ? 1 : DIM); });
++          return;
++        }
+         if (photos[previous]) gsap.set(photos[previous], { clearProps: 'clipPath' });
+         if (photos[index]) gsap.fromTo(photos[index], { clipPath: 'inset(100% 0 0 0)' }, { clipPath: 'inset(0% 0 0 0)', duration: 0.7, ease: IO, clearProps: 'clipPath' });
+         gsap.to(heads, { opacity: at => (at === index ? 1 : DIM), duration: 0.4, ease: IN, overwrite: true });
+@@ -132,7 +141,7 @@
+     const faqs = $$('details');
+     const onToggle = event => {
+       const details = event.currentTarget;
+-      if (!details.open) return;
++      if (!details.open || paused()) return;
+       const answer = Array.from(details.children).filter(child => child.tagName !== 'SUMMARY');
+       gsap.fromTo(answer, { opacity: 0, y: -8 }, { opacity: 1, y: 0, duration: 0.4, ease: IN, clearProps: SHOWN });
+     };
+@@ -161,11 +170,12 @@
+       const toX = gsap.quickTo(button, 'x', { duration: 0.4, ease: IN });
+       const toY = gsap.quickTo(button, 'y', { duration: 0.4, ease: IN });
+       const move = event => {
++        if (paused()) return;
+         const box = button.getBoundingClientRect();
+         toX(clamp((event.clientX - box.left - box.width / 2) * 0.2));
+         toY(clamp((event.clientY - box.top - box.height / 2) * 0.3));
+       };
+-      const leave = () => { toX(0); toY(0); };
++      const leave = () => { if (!paused()) { toX(0); toY(0); } };
+       button.addEventListener('pointermove', move);
+       button.addEventListener('pointerleave', leave);
+       return () => {
+diff --git a/assets/pages.css b/assets/pages.css
+index 2b1c3e8..e4f6c27 100644
+--- a/assets/pages.css
++++ b/assets/pages.css
+@@ -152,10 +152,12 @@
+ 
+ /* Motion: only for people who have not asked for reduced motion; only transform and opacity move, hover within 200 ms.
+    Openings are held only while motion-boot.js holds .ph-wait (its 2.5 s failsafe always lets go), and exactly where
+-   motion.js takes them over: the headline lines, the fading copy and the un-masking frames of each page hero. */
++   motion.js takes them over: the headline lines, the rising copy and the un-masking frames of each page hero. Task 48: the
++   copy is never held at opacity 0 (it only sits 18px low), so it paints with the headline and the largest paint is not
++   delayed until the scripts run. */
+ @media(prefers-reduced-motion:no-preference){
+ .ph-wait :is(.wk-hero,.sv-hero,.pr-hero,.ab-hero) .ln>span{transform:translateY(108%)}
+-.ph-wait :is(.wk-hero .pg-sub,.wk-clip,.sv-hero .pg-sub,.chap-nav,.pr-hero .pg-sub,.pr-hero .pg-actions){opacity:0;transform:translateY(18px)}
++.ph-wait :is(.wk-hero .pg-sub,.wk-clip,.sv-hero .pg-sub,.chap-nav,.pr-hero .pg-sub,.pr-hero .pg-actions){transform:translateY(18px)}
+ .ph-wait :is(.sv-hero-media,.pr-hero .quote,.ab-photos .photo){clip-path:inset(0 0 0 100%)}
+ .nf-sug a::after{transition:transform var(--dur-1) var(--ease-out)}
+ .nf-sug a:hover::after{transform:translateX(4px) rotate(45deg)}
+diff --git a/assets/reel.js b/assets/reel.js
+index 11b142b..5e0d500 100644
+--- a/assets/reel.js
++++ b/assets/reel.js
+@@ -2,6 +2,8 @@
+ // Save-Data. [data-reel]: a large video with a Pause/Play button (one at a time; Task 34 adds the film's progress and time);
+ // [data-loop]: a small loop, after load ("wide": not at <=640px), held by Pause motion; [data-hover-src]: a Work tile that
+ // cross-fades to its loop on hover or focus (fine pointers) or when centred (touch). No file loads before its first play.
++// Task 48: nothing starts by itself before the page has loaded and gone idle (a large video in the first screen used to
++// start at once and compete with the first paint); a press of its button (or a chapter) plays it at once, loaded or not.
+ (() => {
+   const win = window, doc = document;
+   const still = win.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+@@ -26,7 +28,7 @@
+   };
+   const sync = it => {
+     const busy = !it.loop && items.some(other => other !== it && !other.loop && playing(other)); // one large video at a time
+-    const go = it.wanted && it.inView && !doc.hidden && (loaded || !it.loop);
++    const go = it.wanted && it.inView && !doc.hidden && (loaded || it.pressed);
+     if (go && !busy && it.video.paused) attempt(it);
+     else if (!go && playing(it)) it.video.pause();
+   };
+@@ -58,7 +60,7 @@
+       });
+     };
+     video.addEventListener('timeupdate', mark);
+-    buttons.forEach(b => b.addEventListener('click', () => { video.currentTime = at(b); it.wanted = true; attempt(it); mark(); }));
++    buttons.forEach(b => b.addEventListener('click', () => { video.currentTime = at(b); it.wanted = it.pressed = true; attempt(it); mark(); }));
+     list.hidden = false;
+     mark();
+   };
+@@ -93,7 +95,7 @@
+     });
+     video.removeAttribute('controls');
+     ['play', 'pause'].forEach(type => video.addEventListener(type, it.label));
+-    toggle.addEventListener('click', () => { it.wanted = video.paused; if (it.wanted) attempt(it); else video.pause(); it.label(); });
++    toggle.addEventListener('click', () => { it.wanted = video.paused; it.pressed = true; if (it.wanted) attempt(it); else video.pause(); it.label(); });
+     toggle.hidden = false;
+     const ui = reel.querySelector('[data-reel-ui]');
+     if (ui) ui.hidden = false;
+diff --git a/assets/site.css b/assets/site.css
+index 67690e9..ef364c2 100644
+--- a/assets/site.css
++++ b/assets/site.css
+@@ -194,9 +194,11 @@ html.menu-lock .site-header .nav{max-height:calc(100svh - 24px);overflow-y:auto;
+ /* Page transitions (Night Shift Task 29): cross-document View Transitions, only for people who have not asked for reduced
+    motion; browsers without support navigate as usual. The header stays put, the page's one H1 morphs into the next page's,
+    and the new page wipes up over the old one (450 ms). Each name is given to one element per page. The cursor ring
+-   belongs to details.js, which no page loads since Daylight (Task 34); it never takes clicks and the native cursor stays. */
++   belongs to details.js, which no page loads since Daylight (Task 34); it never takes clicks and the native cursor stays.
++   Task 48: the name sits on the glass nav pill, never on .site-header: a named element is captured as its own layer, so
++   in Chromium a backdrop-filter inside it could only blur the (empty) header, never the page scrolling under it. */
+ @view-transition{navigation:auto}
+-.site-header{view-transition-name:site-header}
++.site-header .nav{view-transition-name:site-header}
+ main h1{view-transition-name:page-title}
+ ::view-transition-old(root){animation:vt-out 450ms cubic-bezier(.7,0,.2,1) both}
+ ::view-transition-new(root){animation:vt-in 450ms cubic-bezier(.7,0,.2,1) both}
+diff --git a/scripts/build_site.py b/scripts/build_site.py
+index 0e32f38..cfae030 100644
+--- a/scripts/build_site.py
++++ b/scripts/build_site.py
+@@ -83,8 +83,10 @@ GLASS_MOTION = '<script src="/assets/vendor/lenis/lenis.min.js" defer></script><
+ GLASS_BOOT = '<script src="/assets/glass-boot.js" defer></script>'
+ # Where glass.js builds its SVG displacement filters (Chromium only); empty and invisible otherwise.
+ GLASS_DEFS = '<svg class="lg-defs" width="0" height="0" aria-hidden="true" focusable="false"><defs data-lg-defs></defs></svg>'
+-# First-party classic scripts ship without whole-line comments and indentation (see strip_js). ES modules are copied as is.
+-STRIP_SKIP = {'glass-scene.js', 'glass-page.js'}
++# First-party classic scripts ship without whole-line comments and indentation (see strip_js). ES modules are copied as is:
++# the two WebGL scenes and, since Task 48, glass-shapes.js, the helpers they share (so the inner pages never fetch
++# glass-scene.js or three's SVGLoader and BufferGeometryUtils).
++STRIP_SKIP = {'glass-scene.js', 'glass-page.js', 'glass-shapes.js'}
+ GL_PAGES = ('index', 'work', 'services', 'pricing', 'about', 'contact')
+ # Pause motion (Task 41, WCAG 2.2.2): every page with ongoing motion (the WebGL scene, the drifting atmosphere, the marquee,
+ # video loops) gets one button. Task 46: it sits in the header's glass pill (after the logo, before the menu button), so it
+diff --git a/tests/test_demo_js.py b/tests/test_demo_js.py
+index 5548fb8..696c429 100644
+--- a/tests/test_demo_js.py
++++ b/tests/test_demo_js.py
+@@ -98,7 +98,9 @@ function makeGsap(env) {
+     killTweensOf() {},
+     quickTo(target, prop) { return value => log.quick.push([prop, value]); },
+   };
+-  const ScrollTrigger = { batch() { log.batches++; }, create(v) { log.creates.push(v); } };
++  // Task 48: glass.js asks ScrollTrigger for its triggers and refresh events, and GSAP for its running animations.
++  gsap.globalTimeline = { getChildren() { return []; } };
++  const ScrollTrigger = { batch() { log.batches++; }, create(v) { log.creates.push(v); }, getAll() { return []; }, refresh() {}, addEventListener() {} };
+   return { gsap, ScrollTrigger, log };
+ }
+ function makeWindow(env, extra) {
+@@ -266,7 +268,8 @@ async function run(env) {
+   const { video, toggle, src } = reels[0];
+   const root = element('html'); root.classList = classList(['js']);
+   const parts = { '[data-reel]': reels.map(r => r.reel) };
+-  const doc = makeDoc(parts, root, env);
++  // Task 48: these cases describe a page that has finished loading (before that nothing starts by itself: runEarly).
++  const doc = makeDoc(parts, root, { complete: true, ...env });
+   const observers = [];
+   class FakeObserver { constructor(callback, options) { this.callback = callback; this.options = options; this.targets = []; observers.push(this); } observe(target) { this.targets.push(target); } }
+   const { win } = makeWindow(env, {
+@@ -357,6 +360,28 @@ async function runHero(env) {
+     observed: observers.filter(o => o.targets.includes(v)).length }));
+   return out;
+ }
++// Task 48: the /work/ hero clip, on screen while the page is still loading. Nothing plays (so nothing downloads) until the
++// load event and idle; a press of its button plays it at once, and the controller never pauses that press for not being
++// loaded yet.
++async function runEarly(env) {
++  const { reel, video, toggle } = makeReel(env, 'three signs video', false);
++  const root = element('html'); root.classList = classList(['js']);
++  const doc = makeDoc({ '[data-reel]': [reel] }, root, env);
++  const observers = [], idle = [];
++  class FakeObserver { constructor(callback) { this.callback = callback; this.targets = []; observers.push(this); } observe(target) { this.targets.push(target); } }
++  const { win, listeners } = makeWindow(env, { IntersectionObserver: FakeObserver, requestIdleCallback: fn => idle.push(fn), navigator: { connection: {} } });
++  let error = null;
++  try { vm.runInNewContext(source, { window: win, document: doc, setImmediate }); } catch (e) { error = String(e); }
++  const view = async on => { observers.filter(o => o.targets.includes(video)).forEach(o => o.callback([{ isIntersecting: on, target: video }])); await settle(); };
++  const steps = [];
++  const step = name => steps.push([name, { playing: !video.paused, plays: video.plays, label: toggle.textContent }]);
++  await view(true); step('in view, loading');
++  if (env.press) { (toggle.listeners.click || []).forEach(fn => fn({ type: 'click' })); await settle(); step('press'); await view(true); step('observer again'); }
++  (listeners.load || []).forEach(l => l.fn({ type: 'load' })); await settle(); step('load');
++  idle.splice(0).forEach(fn => fn()); await settle(); step('idle');
++  await view(false); step('out of view');
++  return { error, steps, hidden: toggle.hidden };
++}
+ (async () => {
+   const desktop = { width: 1440, height: 900, fine: true, reduce: false };
+   const phone = { width: 390, height: 844, fine: false, reduce: false };
+@@ -370,6 +395,8 @@ async function runHero(env) {
+   const heroes = { heroDesktop: desktop, heroComplete: { ...desktop, complete: true }, heroReduced: { ...desktop, reduce: true },
+     heroSaveData: { ...phone, saveData: true }, heroPhone: { ...phone, narrow: true } };
+   for (const [name, env] of Object.entries(heroes)) out[name] = await runHero(env);
++  out.early = await runEarly(desktop);
++  out.earlyPress = await runEarly({ ...desktop, press: true });
+   console.log(JSON.stringify(out));
+ })();
+ """
+@@ -1155,8 +1182,9 @@ class DemoScriptTests(unittest.TestCase):
+         # (b) JS removes the native controls and shows a type="button" toggle whose label follows the real playback state.
+         r = self.node_json(REEL_SCRIPT, REEL)
+         for name, result in r.items():
+-            if 'multi' in result or name.startswith('hero'):
+-                continue  # clips: test_every_reel_on_a_page_plays_and_pauses_on_its_own; the homepage: the hero loop tests
++            if 'multi' in result or name.startswith(('hero', 'early')):
++                continue  # clips: test_every_reel_on_a_page_plays_and_pauses_on_its_own; the homepage: the hero loop tests;
++                # early: test_large_videos_wait_for_load_and_idle_but_a_press_plays_at_once
+             with self.subTest(case=name):
+                 self.assertIsNone(result['error'])
+                 self.assertFalse(result['controls'])
+@@ -1218,7 +1246,8 @@ class DemoScriptTests(unittest.TestCase):
+     def test_hero_loops_start_only_after_load_and_idle_and_follow_the_tab(self):
+         # Daylight (Task 33): the hero's laptop and phone loops share reel.js with the showreel. They are muted, observed and
+         # start only once the page has loaded and gone idle (so they never compete with first paint), pause with the tab
+-        # hidden and resume when it is back. The showreel needs no load wait. Order: laptop, phone, showreel.
++        # hidden and resume when it is back. Task 48: so does the showreel (it used to start before load). Order: laptop,
++        # phone, showreel.
+         r = self.node_json(REEL_SCRIPT, REEL)
+         hero = r['heroDesktop']
+         self.assertIsNone(hero['error'])
+@@ -1228,13 +1257,32 @@ class DemoScriptTests(unittest.TestCase):
+         self.assertFalse(hero['motionHidden'])
+         self.assertEqual(hero['pressed'], 'false')
+         steps = [(name, playing) for name, playing, _ in hero['steps']]
+-        self.assertEqual(steps[:5], [('in view', [False, False, True]), ('loaded', [False, False, True]), ('idle', [True, True, True]),
++        self.assertEqual(steps[:5], [('in view', [False, False, False]), ('loaded', [False, False, False]), ('idle', [True, True, True]),
+                                      ('tab hidden', [False, False, False]), ('tab visible', [True, True, True])])
+         # Already loaded when the script runs: no wait, no load listener.
+         complete = r['heroComplete']
+         self.assertEqual(complete['loadListeners'], 0)
+         self.assertEqual(complete['steps'][0][1], [True, True, True])
+ 
++    def test_large_videos_wait_for_load_and_idle_but_a_press_plays_at_once(self):
++        # Task 48: the /work/ hero clip is on screen at load. Nothing calls play() (so its file is never fetched) until the
++        # load event and idle; then it plays in view. A press before load plays it at once, and the observer (or the load
++        # wait) never pauses that press while it stays in view.
++        r = self.node_json(REEL_SCRIPT, REEL)
++        early = r['early']
++        self.assertIsNone(early['error'])
++        self.assertFalse(early['hidden'])
++        self.assertEqual([(name, state['playing'], state['plays']) for name, state in early['steps']],
++                         [('in view, loading', False, 0), ('load', False, 0), ('idle', True, 1), ('out of view', False, 1)])
++        press = r['earlyPress']
++        self.assertIsNone(press['error'])
++        self.assertEqual([(name, state['playing'], state['plays']) for name, state in press['steps']],
++                         [('in view, loading', False, 0), ('press', True, 1), ('observer again', True, 1), ('load', True, 1),
++                          ('idle', True, 1), ('out of view', False, 1)])
++        self.assertEqual(press['steps'][1][1]['label'], 'Pause three signs video')
++        js = REEL.read_text(encoding='utf-8')
++        self.assertIn('const go = it.wanted && it.inView && !doc.hidden && (loaded || it.pressed);', js)
++
+     def test_pause_motion_holds_every_video_until_pressed_again(self):
+         r = self.node_json(REEL_SCRIPT, REEL)
+         steps = {name: (playing, pressed) for name, playing, pressed in r['heroDesktop']['steps']}
+@@ -1706,15 +1754,23 @@ const settle = () => new Promise(resolve => setImmediate(resolve));
+ async function run(env) {
+   const host = element('host');
+   if (env.kind) host.setAttribute('data-gl-kind', env.kind);
+-  const imports = [], idle = [], timers = [], contexts = [];
++  const imports = [], idle = [], timers = [], contexts = [], attrs = [], made = [];
++  let lost = 0;
++  // Task 48: the test canvas's context is the scene's own; WEBGL_lose_context releases it when nothing takes it.
+   const doc = { readyState: env.complete ? 'complete' : 'interactive', querySelector: s => (s === '[data-gl]' && !env.noHost ? host : null),
+-    createElement: tag => ({ tag, getContext: kind => { contexts.push(kind); return env.noWebGL ? null : {}; } }) };
++    createElement: tag => { const canvas = { tag, getContext: (kind, a) => { contexts.push(kind); attrs.push(a); if (env.noWebGL) return null;
++      const context = { getExtension: name => (name === 'WEBGL_lose_context' ? { loseContext() { lost++; } } : null) }; made.push({ canvas, context }); return context; } };
++      return canvas; } };
+   const nav = { connection: { saveData: Boolean(env.saveData) } };
+   if (env.memory !== undefined) nav.deviceMemory = env.memory;
+   if (env.cores !== undefined) nav.hardwareConcurrency = env.cores;
+   const { win, listeners } = makeWindow(env, { navigator: nav, requestIdleCallback: (fn, o) => idle.push([fn, o]), setTimeout: (fn, ms) => timers.push([fn, ms]) });
+-  let started = null;
+-  const __import = url => { imports.push(url); return env.fail ? Promise.reject(new Error('offline')) : Promise.resolve({ start: (h, g) => { started = { host: h.name, shared: g === win.__glass }; } }); };
++  let started = null, handed = null;
++  const __import = url => { imports.push(url); return env.fail ? Promise.reject(new Error('offline')) : Promise.resolve({ start: (h, g, gl) => {
++    if (env.startThrows) throw new Error('no GPU');
++    started = { host: h.name, shared: g === win.__glass };
++    handed = Boolean(gl && made.length === 1 && gl.canvas === made[0].canvas && gl.context === made[0].context);
++    return !env.declines; } }); };
+   let error = null;
+   try { vm.runInNewContext(source, { window: win, document: doc, __import }); } catch (e) { error = String(e); }
+   const out = { error, beforeLoad: imports.length, loadListeners: (listeners.load || []).length };
+@@ -1725,7 +1781,10 @@ async function run(env) {
+   await settle();
+   out.imports = imports;
+   out.contexts = contexts;
++  out.attrs = attrs;
+   out.started = started;
++  out.handed = handed;
++  out.lost = lost;
+   out.liveRemoved = host.classList.set.size === 0;
+   out.decide = win.__glass && win.__glass.wantsGL ? [
+     win.__glass.wantsGL({ reduce: false, saveData: false, narrow: false, lowEnd: false, webgl: true }),
+@@ -1751,7 +1810,8 @@ async function run(env) {
+     sheetsReduced: { ...desktop, kind: 'sheets', reduce: true }, photosSaveData: { ...desktop, kind: 'photos', saveData: true },
+     markNoWebGL: { ...desktop, kind: 'mark', noWebGL: true }, markReduced: { ...desktop, kind: 'mark', reduce: true },
+     markSaveData: { ...desktop, kind: 'mark', saveData: true }, photosNarrow: { ...desktop, kind: 'photos', width: 760 },
+-    sheetsNoWebGL: { ...desktop, kind: 'sheets', noWebGL: true }, photosNoWebGL: { ...desktop, kind: 'photos', noWebGL: true } };
++    sheetsNoWebGL: { ...desktop, kind: 'sheets', noWebGL: true }, photosNoWebGL: { ...desktop, kind: 'photos', noWebGL: true },
++    declines: { ...desktop, kind: 'slab', declines: true }, startThrows: { ...desktop, startThrows: true } };
+   const out = {};
+   for (const [name, env] of Object.entries(cases)) out[name] = await run(env);
+   console.log(JSON.stringify(out));
+@@ -1846,22 +1906,25 @@ function run(env) {
+   const doc = { documentElement: root, hidden: false, listeners: {}, addEventListener(type, fn) { (this.listeners[type] = this.listeners[type] || []).push(fn); },
+     querySelector: s => (parts[s] || [])[0] || null, querySelectorAll: s => parts[s] || [], fonts: { ready: { then() {} } } };
+   const frames = [], cancelled = [];
+-  let lenis = 0, ticks = 0;
+-  class Lenis { constructor(o) { lenis++; this.options = o; } on() {} raf() {} }
++  let lenis = 0, ticks = 0, sleeps = 0, wakes = 0, removed = 0, destroyed = 0;
++  class Lenis { constructor(o) { lenis++; this.options = o; } on() {} raf() {} destroy() { destroyed++; } }
+   const { win } = makeWindow(env, { Lenis, requestAnimationFrame: fn => { frames.push(fn); return frames.length; }, cancelAnimationFrame: id => cancelled.push(id),
+     navigator: { connection: { saveData: Boolean(env.saveData) }, userAgentData: { brands: env.chromium ? [{ brand: 'Chromium' }] : [{ brand: 'Firefox' }] } } });
+-  if (env.gsap) { const stub = makeGsap(env); stub.gsap.ticker = { add() { ticks++; } }; win.gsap = stub.gsap; win.ScrollTrigger = stub.ScrollTrigger; }
++  if (env.gsap) { const stub = makeGsap(env); stub.gsap.ticker = { add(fn) { ticks++; return fn; }, remove() { removed++; }, sleep() { sleeps++; }, wake() { wakes++; } };
++    win.gsap = stub.gsap; win.ScrollTrigger = stub.ScrollTrigger; }
+   let error = null;
+   try { vm.runInNewContext(source, { window: win, document: doc, getComputedStyle: () => ({ borderTopLeftRadius: '20px' }), Promise }); } catch (e) { error = String(e); }
+-  const out = { error, lenis, ticks, refract: root.classList.contains('lg-refract'), driftFrames: frames.length };
++  const out = { error, lenis, ticks, sleeps, refract: root.classList.contains('lg-refract'), driftFrames: frames.length };
+   if (frames.length) { frames.shift()(1000); }
+   out.moved = fields[0].style.transform || null;
+   const before = cancelled.length;
+   win.__glass.paused = true; win.__glass.onPauseChange(true);
+   out.cancelledOnPause = cancelled.length - before;
++  out.paused = { sleeps, wakes, removed, destroyed, lenis: Boolean(win.__glass.lenis) };
+   const queued = frames.length;
+   win.__glass.paused = false; win.__glass.onPauseChange(false);
+   out.resumed = frames.length - queued;
++  out.released = { sleeps, wakes, lenisMade: lenis, ticks, lenis: Boolean(win.__glass.lenis) };
+   return out;
+ }
+ const desktop = { width: 1440, height: 900, fine: true, reduce: false };
+@@ -2041,6 +2104,37 @@ const { pathToFileURL } = require('url');
+             self.assertNotIn(banned, js)
+         self.assertIn("const MODULES = { home: '/assets/glass-scene.js', slab: '/assets/glass-page.js', panes: '/assets/glass-page.js', sheets: '/assets/glass-page.js',\n    photos: '/assets/glass-page.js', mark: '/assets/glass-page.js' };", js)
+ 
++    def test_webgl_test_context_is_the_scenes_own_or_is_released(self):
++        # Task 48: glass-boot.js tests for WebGL2 once, with the renderer's attributes, and hands that canvas and context to
++        # start(), which draws with them: no throwaway context. If the import fails, start throws or start does not take
++        # it, the context is released at once (WEBGL_lose_context) and the still stays (the host is never made live).
++        r = self.node_json(GLASS_BOOT_SCRIPT, GLASS_BOOT)
++        for name in ('desktop', 'complete', 'slab', 'panes', 'sheets', 'photos', 'mark'):
++            with self.subTest(case=name):
++                self.assertEqual(r[name]['contexts'], ['webgl2'])  # one test, WebGL2 only (three.js r170 needs it)
++                self.assertEqual(r[name]['attrs'], [{'alpha': False, 'powerPreference': 'high-performance'}])
++                self.assertTrue(r[name]['handed'])
++                self.assertEqual(r[name]['lost'], 0)
++        for name in ('fail', 'startThrows', 'declines'):
++            with self.subTest(case=name):
++                self.assertEqual(r[name]['contexts'], ['webgl2'])
++                self.assertEqual(r[name]['lost'], 1)
++                self.assertTrue(r[name]['liveRemoved'])
++        self.assertIsNone(r['startThrows']['started'])
++        self.assertEqual(r['declines']['started'], {'host': 'host', 'shared': True})
++        self.assertEqual(r['noWebGL']['lost'], 0)  # nothing was made, nothing to release
++        self.assertEqual(r['noWebGL']['imports'], [])
++        # Both scenes pass the handed context to three.js and report that they took it.
++        shapes = (GLASS_BOOT.parent / 'glass-shapes.js').read_text(encoding='utf-8')
++        self.assertIn('return gl && gl.canvas && gl.context ? { ...base, canvas: gl.canvas, context: gl.context } : base;', shapes)
++        self.assertIn("const base = { antialias: true, alpha: false, powerPreference: 'high-performance' };", shapes)
++        for module in (GLASS_PAGE, GLASS_SCENE):
++            with self.subTest(module=module.name):
++                code = module.read_text(encoding='utf-8')
++                self.assertIn('export function start(host, shared, gl) {', code)
++                self.assertIn('const renderer = new THREE.WebGLRenderer(rendererOptions(gl));', code)
++                self.assertIn('return true;\n}', code)
++
+     def test_inner_page_scenes_come_from_a_fixed_list_and_respect_the_same_guards(self):
+         # Task 39: Work (slab) and Services (panes) import the inner-page scene after load and idle; any other kind, including
+         # a path or an Object.prototype key, imports nothing. Reduced motion, Save-Data, narrow, low-end and no WebGL never do.
+@@ -2178,6 +2272,13 @@ const { pathToFileURL } = require('url');
+         reduced = r['reduced']
+         self.assertEqual((reduced['lenis'], reduced['ticks'], reduced['driftFrames'], reduced['refract']), (0, 0, 0, False))
+         self.assertIsNone(reduced['moved'])
++        # Task 48: reduced motion puts GSAP's ticker to sleep and adds nothing to it. Pause motion ends Lenis (native
++        # scrolling) and sleeps the ticker; releasing it wakes the ticker and builds Lenis again on it.
++        self.assertEqual(motion['sleeps'], 0)
++        self.assertEqual(reduced['sleeps'], 1)
++        self.assertEqual(reduced['released']['ticks'], 0)
++        self.assertEqual(motion['paused'], {'sleeps': 1, 'wakes': 0, 'removed': 1, 'destroyed': 1, 'lenis': False})
++        self.assertEqual(motion['released'], {'sleeps': 1, 'wakes': 1, 'lenisMade': 2, 'ticks': 2, 'lenis': True})
+         self.assertFalse(r['saveData']['refract'])  # Save-Data: no displacement maps are drawn
+ 
+     def test_real_lenis_handles_wheel_events_with_the_options_glass_js_passes(self):
+@@ -2721,3 +2822,202 @@ class EnquiryRobustnessScriptTests(unittest.TestCase):
+ 
+ if __name__ == '__main__':
+     unittest.main()
++
++
++# Task 48: Pause motion puts GSAP's ticker to sleep. A small live model of GSAP (it applies each tween's start state at once
++# and its end state on progress(1), clears props, wakes the ticker on every new animation as GSAP does, and kills a tween
++# with its ScrollTrigger as the vendored ScrollTrigger does) runs the real site.js, motion.js, scenes.js, home.js and
++# glass.js. After a press of Pause motion nothing they hid may stay hidden, and the ticker must be left asleep.
++LIVE_PAUSE_SCRIPT = HARNESS + r"""
++const path = require('path');
++const dir = path.dirname(process.argv[1]);
++const read = name => fs.readFileSync(path.join(dir, name), 'utf8');
++const SKIP = ['duration', 'stagger', 'ease', 'clearProps', 'scrollTrigger', 'delay', 'overwrite', 'immediateRender', 'onComplete',
++  'onUpdate', 'paused', 'defaults', 'transformPerspective', 'transformOrigin'];
++const TRANSFORM = ['x', 'y', 'xPercent', 'yPercent', 'scale', 'rotationX', 'rotationY', 'rotationZ', 'z'];
++function liveGsap(env, resolve) {
++  const triggers = [], top = [], log = { order: [], sleeps: 0, wakes: 0, awake: true, refreshes: 0, listeners: {} };
++  const wake = () => { if (!log.awake) { log.awake = true; log.wakes++; log.order.push('woken'); } };
++  const list = t => [].concat(resolve(t)).filter(Boolean);
++  const apply = (targets, vars) => list(targets).forEach((el, i) => {
++    const gs = el.style ? (el.gs = el.gs || {}) : el;  // a plain state object (the comparison) takes the values itself
++    Object.keys(vars).forEach(k => { if (!SKIP.includes(k)) gs[k] = typeof vars[k] === 'function' ? vars[k](i) : vars[k]; });
++    if (vars.clearProps) vars.clearProps.split(',').forEach(p => (p === 'transform' ? TRANSFORM.forEach(k => delete gs[k]) : delete gs[p]));
++  });
++  const ends = vars => { const out = {}; Object.keys(vars).forEach(k => { if (!SKIP.includes(k)) out[k] = k === 'opacity' || k === 'scale' ? 1 : 0; }); out.clearProps = vars.clearProps; return out; };
++  function trigger(vars, animation) {
++    const t = { vars, animation, trigger: vars.trigger, dur: vars.scrub,
++      kill() { const i = triggers.indexOf(t); if (i >= 0) triggers.splice(i, 1); if (animation) animation.kill(); },
++      scrubDuration(d) { t.dur = d; } };
++    if (animation) animation.scrollTrigger = t;
++    triggers.push(t);
++    return t;
++  }
++  function Anim(targets, from, to, child) {
++    wake();
++    Object.assign(this, { targets, end: to || {}, children: [], calls: [], done: false, killed: false });
++    this.running = !this.end.scrollTrigger && !this.end.paused && !child;
++    if (from && this.end.immediateRender !== false) apply(targets, from);
++    if (this.end.scrollTrigger) trigger(this.end.scrollTrigger, this);
++    if (!child) top.push(this);
++  }
++  Anim.prototype.progress = function (v) {
++    if (v !== 1 || this.done || this.killed) return this;
++    this.done = true; this.running = false;
++    this.children.forEach(c => c.progress(1));
++    this.calls.forEach(c => c());
++    if (this.targets !== undefined) apply(this.targets, this.end);
++    if (this.end.onUpdate) this.end.onUpdate();
++    if (this.end.onComplete) this.end.onComplete();
++    return this;
++  };
++  Anim.prototype.isActive = function () { return this.running && !this.done && !this.killed; };
++  Anim.prototype.kill = function () { this.killed = true; this.running = false; return this; };
++  Anim.prototype.play = function () { this.running = true; return this; };
++  ['fromTo', 'from', 'to'].forEach(kind => {
++    Anim.prototype[kind] = function (t, a, b) {
++      const [from, to] = kind === 'fromTo' ? [a, b] : kind === 'from' ? [a, ends(a)] : [null, a];
++      this.children.push(new Anim(t, from, to, true));
++      return this;
++    };
++  });
++  Anim.prototype.add = function (fn) { this.calls.push(fn); return this; };
++  const gsap = {
++    registerPlugin() {},
++    matchMedia() { return { add(q, fn) { if (media(q, env)) fn(); }, revert() {} }; },
++    timeline: vars => new Anim(undefined, null, vars || {}, false),
++    fromTo: (t, a, b) => new Anim(t, a, b, false),
++    from: (t, v) => new Anim(t, v, Object.assign(ends(v), { scrollTrigger: v.scrollTrigger }), false),
++    to: (t, v) => new Anim(t, null, v, false),
++    set(t, v) { wake(); apply(t, v); },
++    killTweensOf(t) { const set = new Set(list(t)); const walk = a => { if (list(a.targets || []).some(x => set.has(x))) a.kill(); a.children.forEach(walk); }; top.forEach(walk); },
++    quickTo: (t, prop) => value => { wake(); apply(t, { [prop]: value }); },
++    globalTimeline: { getChildren: () => top.filter(a => !a.done && !a.killed) },
++    ticker: { add(fn) { wake(); log.order.push('ticker.add'); return fn; }, remove() { log.order.push('ticker.remove'); },
++      sleep() { log.awake = false; log.sleeps++; log.order.push('sleep'); }, wake() { log.order.push('wake'); wake(); } },
++  };
++  const ScrollTrigger = { getAll: () => triggers.slice(), batch: (targets, vars) => targets.map(el => trigger(Object.assign({}, vars, { trigger: el }), null)),
++    create: v => trigger(v, null), update() {}, refresh() { log.refreshes++; (log.listeners.refresh || []).forEach(fn => fn()); },
++    addEventListener(type, fn) { (log.listeners[type] = log.listeners[type] || []).push(fn); } };
++  return { gsap, ScrollTrigger, log, triggers, top };
++}
++const low = el => { el.getBoundingClientRect = () => ({ left: 0, top: 3000, width: 400, height: 300 }); return el; };
++const closing = clip => Boolean(clip) && (clip.replace(/round [^)]*/, '').match(/-?[\d.]+/g) || []).some(n => Number(n) > 0);
++const hiddenOf = els => els.filter(el => el.gs && ((el.gs.opacity !== undefined && el.gs.opacity < 1) || (el.gs.y || 0) !== 0 ||
++  (el.gs.yPercent || 0) !== 0 || closing(el.gs.clipPath))).map(el => el.name);
++function run(page, env) {
++  const toggle = element('toggle'); toggle.hidden = true; toggle.attrs['aria-pressed'] = 'false';
++  const root = element('html'); root.classList = classList(['js', 'motion', 'ph-wait']);
++  let parts, tracked, scripts;
++  if (page === 'inner') {
++    const lines = many('line', 2), fades = many('fade', 2), media = many('frame', 1);
++    const rises = [low(element('rise0')), low(element('rise1'))], reveals = [low(element('reveal0'))], devices = [low(element('devices0'))];
++    const list = low(element('list')); list.children = many('item', 3);
++    const cue = element('cue'); cue.classList = classList(['on']);
++    const benchParts = { plinth: many('plinth', 1), lap: many('lap', 1), ph: many('ph', 1), ui: many('ui', 2) };
++    const bench = low(element('bench', { '.bench-plinth': benchParts.plinth, '.d-lap': benchParts.lap, '.d-ph': benchParts.ph, '.ui': benchParts.ui, '[data-cue]': [cue] }));
++    parts = { '[data-motion-toggle]': [toggle], '[data-ph]': [element('head', { 'h1 .ln > span': lines, '[data-ph-fade]': fades, '[data-ph-media]': media })],
++      '[data-rise]': rises, '[data-reveal]': reveals, '[data-devices]': devices, '[data-stagger]': [list], '[data-bench]': [bench],
++      '[data-parallax]': [element('para', { img: many('pimg', 1) })] };
++    tracked = [...lines, ...fades, ...media, ...rises, ...reveals, ...devices, ...list.children, cue, ...Object.values(benchParts).flat()];
++    scripts = ['site.js', 'motion.js', 'scenes.js', 'glass.js'];
++    parts.cue = [cue];
++  } else {
++    const lines = many('line', 2), fades = many('fade', 2), cards = many('gcard', 2), deck = element('deck');
++    const rises = [low(element('rise0')), low(element('rise1'))], teasers = [0, 1, 2].map(i => low(element('teaser' + i, { '.teaser-img': [element('shine' + i)] })));
++    const panel = low(element('reelPanel')), frame = low(element('glassFrame')), band = low(element('bandPanel'));
++    parts = { '[data-motion-toggle]': [toggle], '.hero-h .ln > span': lines, '[data-hero-fade]': fades, '.hero-cards': [deck], '.gcard': cards,
++      '.c-book': [element('book')], '.slot-pick': [element('slot')], '.hero': [element('hero')], '.hero-copy': [element('heroCopy')], '.hero-cap': [element('heroCap')],
++      '[data-rise]': rises, '.reel-frame': [low(element('reelFrame'))], '.reel-panel': [panel], '.teaser-card': teasers, '.compare-frame': [frame],
++      '.band-panel': [band], '.band': [element('band')], '.gp-1': [element('phone1')], '.gp-2': [element('phone2')] };
++    tracked = [...lines, ...fades, ...cards, deck, ...rises, ...teasers, panel, frame, band];
++    scripts = ['site.js', 'home.js', 'glass.js'];
++  }
++  const doc = { documentElement: root, hidden: false, listeners: {}, addEventListener(type, fn) { (this.listeners[type] = this.listeners[type] || []).push(fn); },
++    querySelector: s => (parts[s] || [])[0] || null, querySelectorAll: s => parts[s] || [] };
++  const resolve = t => (typeof t === 'string' ? doc.querySelectorAll(t) : t);
++  const live = liveGsap(env, resolve);
++  let lenisMade = 0;
++  class Lenis { constructor() { lenisMade++; } on() {} raf() {} destroy() { live.log.order.push('lenis.destroy'); } }
++  const { win } = makeWindow(env, { gsap: live.gsap, ScrollTrigger: live.ScrollTrigger, Lenis, requestAnimationFrame: () => 1, cancelAnimationFrame() {},
++    navigator: { connection: { saveData: Boolean(env.saveData) }, userAgentData: { brands: [{ brand: 'Firefox' }] } }, scrollY: 0, location: { pathname: '/' } });
++  const errors = [];
++  scripts.forEach(name => { try { vm.runInNewContext(read(name), { window: win, document: doc, getComputedStyle: () => ({ display: 'none' }), Event: class {} }); } catch (e) { errors.push(name + ': ' + e); } });
++  const out = { errors, before: hiddenOf(tracked), awake: live.log.awake, sleeps: live.log.sleeps, lenisMade, lenis: Boolean(win.__glass.lenis) };
++  if (env.midReveal) {
++    // a reveal whose line was just crossed: its trigger fired (and, being once, went) and its tween is under way
++    const t = live.triggers.find(x => x.vars.once && !x.animation);
++    if (t) { t.kill(); t.vars.onEnter([t.trigger]); }
++    out.midReveal = Boolean(t);
++  }
++  live.log.order.length = 0;
++  (toggle.listeners.click || []).forEach(fn => fn({ type: 'click' }));
++  out.pressed = { paused: win.__glass.paused, hidden: hiddenOf(tracked), awake: live.log.awake, order: live.log.order.slice(), lenis: Boolean(win.__glass.lenis),
++    once: live.triggers.filter(t => t.vars.once).length, scrubs: live.triggers.filter(t => t.vars.scrub).map(t => t.dur),
++    running: live.top.filter(a => a.isActive()).length, cue: parts.cue ? parts.cue[0].classList.contains('on') : null };
++  live.log.order.length = 0;
++  (toggle.listeners.click || []).forEach(fn => fn({ type: 'click' }));
++  out.released = { paused: win.__glass.paused, hidden: hiddenOf(tracked), awake: live.log.awake, order: live.log.order.slice(), refreshes: live.log.refreshes,
++    lenis: Boolean(win.__glass.lenis), lenisMade, scrubs: live.triggers.filter(t => t.vars.scrub).map(t => t.dur) };
++  // a resize while paused again: ScrollTrigger refreshes (its delayed call woke the ticker); it settles and sleeps again
++  (toggle.listeners.click || []).forEach(fn => fn({ type: 'click' }));
++  live.gsap.set([], {});
++  live.ScrollTrigger.refresh();
++  out.refreshedWhilePaused = { awake: live.log.awake };
++  return out;
++}
++const desktop = { width: 1440, height: 900, fine: true, reduce: false };
++console.log(JSON.stringify({ inner: run('inner', desktop), innerMid: run('inner', { ...desktop, midReveal: true }), home: run('home', desktop),
++  homePhone: run('home', { width: 390, height: 844, fine: false, reduce: false }), saveData: run('inner', { ...desktop, saveData: true }),
++  reduced: run('inner', { ...desktop, reduce: true }) }));
++"""
++
++
++class PauseMotionSleepsGsapTests(unittest.TestCase):
++    def test_pause_shows_everything_held_then_sleeps_the_ticker_and_release_wakes_it(self):
++        out = subprocess.run(['node', '-e', LIVE_PAUSE_SCRIPT, str(GLASS)], capture_output=True, text=True, check=True)
++        r = json.loads(out.stdout)
++        for name in ('inner', 'innerMid', 'home', 'homePhone'):
++            with self.subTest(case=name):
++                case = r[name]
++                self.assertEqual(case['errors'], [])
++                self.assertTrue(case['before'])  # the model really hides what the scripts hold (openings and reveals)
++                self.assertTrue(case['awake'])
++                self.assertTrue(case['lenis'])
++                pressed = case['pressed']
++                self.assertTrue(pressed['paused'])
++                self.assertEqual(pressed['hidden'], [])  # no opacity below 1, no vertical offset, no closing clip-path
++                self.assertEqual(pressed['once'], 0)  # every one-time trigger is gone
++                self.assertEqual(pressed['running'], 0)  # nothing is left part-way
++                self.assertTrue(all(d == 0 for d in pressed['scrubs']), pressed['scrubs'])  # scrubs follow the scroll directly
++                self.assertFalse(pressed['awake'])  # the ticker is left asleep
++                self.assertFalse(pressed['lenis'])  # native scrolling
++                order = pressed['order']
++                self.assertEqual(order[-1], 'sleep')
++                self.assertLess(order.index('lenis.destroy'), order.index('sleep'))
++                released = case['released']
++                self.assertFalse(released['paused'])
++                self.assertEqual(released['hidden'], [])  # what was shown stays shown
++                self.assertTrue(released['awake'])
++                self.assertEqual(released['order'][0], 'wake')
++                self.assertEqual(released['refreshes'], 1)
++                self.assertTrue(released['lenis'])
++                self.assertEqual(released['lenisMade'], 2)
++                self.assertTrue(all(d not in (0, None) for d in released['scrubs']), released['scrubs'])  # easing again
++                self.assertFalse(case['refreshedWhilePaused']['awake'])
++        self.assertTrue(r['innerMid']['midReveal'])
++        self.assertTrue(r['inner']['pressed']['cue'])  # scenes finish in their shipped state (the card's cue class is back)
++        self.assertTrue(r['inner']['released']['scrubs'])
++        # Save-Data: Pause motion starts pressed, so everything is shown and the ticker sleeps from the start, with no Lenis.
++        save = r['saveData']
++        self.assertEqual(save['errors'], [])
++        self.assertEqual(save['before'], [])
++        self.assertFalse(save['awake'])
++        self.assertFalse(save['lenis'])
++        # Reduced motion: nothing is held, the ticker sleeps at once and nothing is added to it.
++        reduced = r['reduced']
++        self.assertEqual(reduced['errors'], [])
++        self.assertEqual(reduced['before'], [])
++        self.assertFalse(reduced['awake'])
++        self.assertEqual(reduced['sleeps'], 1)
++        self.assertEqual(reduced['lenisMade'], 0)
+diff --git a/tests/test_site.py b/tests/test_site.py
+index 15b951d..f2acf5a 100644
+--- a/tests/test_site.py
++++ b/tests/test_site.py
+@@ -1859,6 +1859,21 @@ def rules_for(css, selector):
+             if selector in [part.strip() for part in selectors.split(',')]]
+ 
+ 
++def module_graph(entry):
++    """Every file an ES module loads, itself included: its static `import ... from '...'` (and `export ... from '...'`)
++    specifiers, followed recursively. Task 48: what a page's WebGL scene makes the browser fetch."""
++    seen, todo = [], [Path(entry).resolve()]
++    while todo:
++        path = todo.pop()
++        if path in seen:
++            continue
++        seen.append(path)
++        text = path.read_text()
++        for spec in re.findall(r"^\s*(?:import|export)\b[^;]*?\bfrom\s*'([^']+)'", text, re.M) + re.findall(r"^\s*import\s*'([^']+)'", text, re.M):
++            todo.append((path.parent / spec).resolve())
++    return seen
++
++
+ def gradient_stops(gradient):
+     """[(alpha, position %)] for a linear-gradient's ink stops (`rgba(14,14,13,a) p%` or `var(--ink) p%`)."""
+     stops = []
+@@ -2366,20 +2381,26 @@ class LiquidGlassTests(unittest.TestCase):
+ 
+     def test_scene_imports_only_vendored_three_by_relative_path(self):
+         imports = re.findall(r"^import [^;]*? from '([^']+)';", self.scene, re.M)
+-        self.assertEqual(imports, ['./vendor/three/three.module.min.js', './vendor/three/jsm/SVGLoader.js', './vendor/three/jsm/BufferGeometryUtils.js'])
++        # Task 48: the helpers both scenes share live in glass-shapes.js (vendored three only, by the same relative path).
++        self.assertEqual(imports, ['./vendor/three/three.module.min.js', './vendor/three/jsm/SVGLoader.js', './vendor/three/jsm/BufferGeometryUtils.js',
++                                   './glass-shapes.js'])
+         for path in imports:
+             self.assertTrue((OUT / 'assets' / path).resolve().is_file(), path)
++        shapes = (OUT / 'assets/glass-shapes.js').read_text()
++        self.assertEqual(re.findall(r"^import [^;]*? from '([^']+)';", shapes, re.M), ['./vendor/three/three.module.min.js'])
+         # The vendored helpers import three by the same relative path, so the browser fetches one copy and needs no map.
+         for helper in ('SVGLoader.js', 'BufferGeometryUtils.js'):
+             self.assertRegex((OUT / 'assets/vendor/three/jsm' / helper).read_text(), r"\} from '\.\./three\.module\.min\.js';")
+-        self.assertNotRegex(self.scene, r"from 'three|import\('three")
+-        for banned in ('http', 'fetch(', 'XMLHttpRequest', 'innerHTML', 'eval(', 'localStorage', '?poster', 'preserveDrawingBuffer'):
+-            self.assertNotIn(banned, self.scene)
++        for code in (self.scene, shapes):
++            self.assertNotRegex(code, r"from 'three|import\('three")
++            for banned in ('http', 'fetch(', 'XMLHttpRequest', 'innerHTML', 'eval(', 'localStorage', '?poster', 'preserveDrawingBuffer'):
++                self.assertNotIn(banned, code)
+         self.assertEqual(self.scene, (ROOT / 'assets/glass-scene.js').read_text())  # modules ship as written
+-        # Budgets: the scene file 40 KB at most, and everything the boot imports (three, its two helpers and the scene)
+-        # 900 KB at most; none of it is on any page's first load (no page names it in a tag).
++        self.assertEqual(shapes, (ROOT / 'assets/glass-shapes.js').read_text())
++        # Budgets: the scene file 40 KB at most, and everything the boot imports (three, its two helpers, the shared shapes
++        # and the scene) 900 KB at most; none of it is on any page's first load (no page names it in a tag).
+         self.assertLessEqual(len(self.scene.encode()), 40 * 1024)
+-        total = sum((OUT / 'assets' / path).stat().st_size for path in imports) + len(self.scene.encode())
++        total = sum(path.stat().st_size for path in module_graph(OUT / 'assets/glass-scene.js'))
+         self.assertLessEqual(total, 900 * 1024)
+         for route, html in self.html.items():
+             with self.subTest(route=route):
+@@ -2424,7 +2445,8 @@ class LiquidGlassTests(unittest.TestCase):
+         js = (OUT / 'assets/glass.js').read_text()
+         self.assertIn("root.classList.add('lg-refract');", js)
+         self.assertLess(js.index("brands.some(b => /Chromium/.test(b.brand))"), js.index("root.classList.add('lg-refract');"))
+-        self.assertLess(js.index('if (!motionOK) return;'), js.index('new win.Lenis('))
++        # Task 48: under reduced motion GSAP's ticker is put to sleep and glass.js stops before Lenis.
++        self.assertLess(js.index('if (!motionOK) { if (ticker) ticker.sleep(); return; }'), js.index('new win.Lenis('))
+         for banned in MOTION_SCRIPT_BANS:
+             self.assertNotIn(banned, js)
+ 
+@@ -2433,13 +2455,14 @@ class LiquidGlassTests(unittest.TestCase):
+         # scripts with template literals). Every shipped script must still parse, and keep every line of code in order.
+         import shutil
+         import subprocess
+-        from scripts.build_site import strip_js
++        from scripts.build_site import strip_js, STRIP_SKIP
+         node = shutil.which('node')
++        self.assertEqual(STRIP_SKIP, {'glass-scene.js', 'glass-page.js', 'glass-shapes.js'})  # the ES modules (Task 48)
+         for path in sorted((ROOT / 'assets').glob('*.js')):
+             shipped = (OUT / 'assets' / path.name).read_text()
+             source = path.read_text()
+             with self.subTest(script=path.name):
+-                if path.name in ('glass-scene.js', 'glass-page.js') or '`' in source:
++                if path.name in STRIP_SKIP or '`' in source:
+                     self.assertEqual(shipped, source)
+                 else:
+                     self.assertEqual(shipped, strip_js(source))
+@@ -2448,7 +2471,7 @@ class LiquidGlassTests(unittest.TestCase):
+                     for line in shipped.splitlines():
+                         self.assertTrue(any(line == candidate or candidate.endswith('*/ ' + line) for candidate in lines), line)
+                 if node:
+-                    module = ['--input-type=module'] if path.name in ('glass-scene.js', 'glass-page.js') else []
++                    module = ['--input-type=module'] if path.name in STRIP_SKIP else []
+                     result = subprocess.run(['node', *module, '--check'], input=shipped, capture_output=True, text=True)
+                     self.assertEqual(result.returncode, 0, result.stderr)
+         self.assertEqual(strip_js('a();\n  // note\n  /* block\n   still */ b();\n/* one */\n  c(); // kept\n'), 'a();\nb();\nc(); // kept\n')
+@@ -2795,11 +2818,12 @@ class MotionQualityTests(unittest.TestCase):
+         self.assertNotIn("$$('h1', head)", opening)
+ 
+     def test_css_hold_matches_the_opening_elements(self):
+-        # Daylight (Task 34): each inner hero holds its headline lines, its fading copy and its un-masking frames, exactly
+-        # the elements motion.js opens with fromTo (data-ph-fade, data-ph-media), and nothing else.
++        # Daylight (Task 34): each inner hero holds its headline lines, its rising copy and its un-masking frames, exactly
++        # the elements motion.js opens with fromTo (data-ph-fade, data-ph-media), and nothing else. Task 48: the copy is
++        # only held 18px low, never at opacity 0, so it paints with the headline (LCP).
+         guarded = self.guarded(self.pages_css)
+         held = {'.ph-wait :is(.wk-hero,.sv-hero,.pr-hero,.ab-hero) .ln>span': 'transform:translateY(108%)',
+-                '.ph-wait :is(.wk-hero .pg-sub,.wk-clip,.sv-hero .pg-sub,.chap-nav,.pr-hero .pg-sub,.pr-hero .pg-actions)': 'opacity:0;transform:translateY(18px)',
++                '.ph-wait :is(.wk-hero .pg-sub,.wk-clip,.sv-hero .pg-sub,.chap-nav,.pr-hero .pg-sub,.pr-hero .pg-actions)': 'transform:translateY(18px)',
+                 '.ph-wait :is(.sv-hero-media,.pr-hero .quote,.ab-photos .photo)': 'clip-path:inset(0 0 0 100%)'}
+         for selector, body in held.items():
+             with self.subTest(selector=selector):
+@@ -2828,9 +2852,10 @@ class MotionQualityTests(unittest.TestCase):
+                     self.assertIn('<div class="ab-photos" aria-hidden="true">', head.group(2))
+         # The homepage hero is held the same way and opened with fromTo, never from. Liquid Glass (Task 37): the headline
+         # lines, the copy and the glass cards are held, and nothing else (the WebGL host and its still are never hidden).
++        # Task 48: the copy and buttons only sit 18px low, never at opacity 0 (LCP).
+         home = self.guarded(self.home_css)
+         held = ['.ph-wait .hero-h .ln>span{transform:translateY(108%)}',
+-                '.ph-wait :is(.hero-sub,.hero .actions){opacity:0;transform:translateY(18px)}', '.ph-wait .hero-cards{opacity:0}']
++                '.ph-wait :is(.hero-sub,.hero .actions){transform:translateY(18px)}', '.ph-wait .hero-cards{opacity:0}']
+         for rule in held:
+             with self.subTest(rule=rule):
+                 self.assertIn(rule, home)
+@@ -3021,8 +3046,9 @@ class ViewTransitionAndDetailTests(unittest.TestCase):
+             for selectors, body in re.findall(r'([^{}]+)\{([^{}]*)\}', self.css[name]):
+                 for value in re.findall(r'view-transition-name:([\w-]+)', body):
+                     named[value] = selectors.strip()
+-        # The header stays put; each page's one H1 morphs into the next page's.
+-        self.assertEqual(named, {'site-header': '.site-header', 'page-title': 'main h1'})
++        # The header's glass pill stays put; each page's one H1 morphs into the next page's. Task 48: the name is on the pill,
++        # never on .site-header (a named ancestor stops the pill's backdrop-filter blurring the page under it).
++        self.assertEqual(named, {'site-header': '.site-header .nav', 'page-title': 'main h1'})
+         for route, html in self.html.items():
+             with self.subTest(route=route):
+                 self.assertNotIn('view-transition', html)  # never inline (style-src 'self')
+@@ -3250,8 +3276,10 @@ class DaylightTests(unittest.TestCase):
+         boot = (ROOT / 'assets/glass-boot.js').read_text()
+         self.assertIn("canvas.setAttribute('aria-hidden', 'true')", scene)
+         self.assertIn("canvas.addEventListener('webglcontextlost', () => { host.classList.remove('is-live');", scene)
+-        catch = re.search(r"\.catch\(\(\) => ([^;]*\))\);", boot)
+-        self.assertEqual(catch.group(1), "host.classList.remove('is-live')")  # nothing removes the still
++        # Task 48: a failed import or start also releases the tested WebGL context (lose only calls loseContext).
++        catch = re.search(r"\.catch\(\(\) => (\{[^}]*\})\);", boot)
++        self.assertEqual(catch.group(1), "{ host.classList.remove('is-live'); lose(gl); }")  # nothing removes the still
++        self.assertIn("const lose = gl => gl.context.getExtension?.('WEBGL_lose_context')?.loseContext();", boot)
+         for code in (scene, boot):
+             self.assertNotIn('.remove()', code)
+             self.assertNotIn('backgroundImage', code)
+@@ -3724,7 +3752,7 @@ class DaylightInnerPageTests(unittest.TestCase):
+ class GlassPageSceneTests(unittest.TestCase):
+     """Liquid Glass inner pages, part 1 (Task 39): Work and Services each get one aria-hidden WebGL scene host behind the hero,
+     fitted to a hero element, imported by glass-boot.js from a fixed list (tests/test_demo_js.py covers when). The media it
+-    stands in for stays in the page; the module imports only vendored three and glass-scene.js by relative path."""
++    stands in for stays in the page; the module imports only vendored three and (Task 48) glass-shapes.js by relative path."""
+ 
+     PAGES = {'work/index.html': ('slab', '.wk-clip', False), 'services/index.html': ('panes', '.sv-hero-media', True),
+              'pricing/index.html': ('sheets', '.quote-desk', False), 'about/index.html': ('photos', '.ab-photos', True),
+@@ -3815,7 +3843,8 @@ class GlassPageSceneTests(unittest.TestCase):
+ 
+     def test_module_imports_only_by_relative_path_and_shares_pause_motion(self):
+         imports = re.findall(r"^import [^;]*? from '([^']+)';", self.module, re.M)
+-        self.assertEqual(imports, ['./vendor/three/three.module.min.js', './glass-scene.js'])
++        # Task 48: the shared helpers come from glass-shapes.js, never from the homepage scene.
++        self.assertEqual(imports, ['./vendor/three/three.module.min.js', './glass-shapes.js'])
+         self.assertNotRegex(self.module, r"from 'three|from '/|import\(")
+         for banned in ('http', 'fetch(', 'XMLHttpRequest', 'innerHTML', 'eval(', 'localStorage', 'preserveDrawingBuffer', 'preload = \'auto\''):
+             self.assertNotIn(banned, self.module)
+@@ -4451,3 +4480,102 @@ class EnquiryRobustnessAndAccessTests(unittest.TestCase):
+         home = main_of((OUT / 'index.html').read_text())
+         self.assertRegex(home, r'<div class="reel-head" data-rise-group><h2 id="reel-title" data-rise>[^<]+</h2><p id="reel-desc" data-rise>')
+         self.assertRegex(home, r'<div class="work-head" data-rise-group><h2 id="work-title" data-rise>')
++
++
++class PerformanceTask48Tests(unittest.TestCase):
++    """Task 48 (performance): hero copy paints with the headline (never held at opacity 0), the /work/ Play button's space is
++    kept before scripts run, the inner pages' WebGL never fetches the homepage scene or three's SVG helpers, and the glass
++    nav pill's blur is never cut off by an ancestor. Behaviour (video timing, the WebGL test context, GSAP's ticker under
++    Pause motion and reduced motion) is in tests/test_demo_js.py."""
++
++    COPY = ('.pg-sub', '.hero-sub', '.hero .actions', '.pr-hero .pg-actions', '.wk-clip', '.chap-nav')
++    # What makes an element a backdrop root (or its own composited layer) and so stops a descendant's backdrop-filter
++    # from reaching the page behind it.
++    BACKDROP_ROOT = re.compile(r'(?<![-\w])(?:filter|mask|mask-image|mask-border|-webkit-mask|will-change|contain|clip-path|'
++                               r'mix-blend-mode|view-transition-name):|(?<![-\w])opacity:(?:0?\.\d+|0)(?![.\d])')
++
++    @classmethod
++    def setUpClass(cls):
++        build()
++        cls.css = {name: (OUT / 'assets' / name).read_text() for name in SHEETS}
++
++    @staticmethod
++    def rules(css):
++        """(selector, body) for every rule, inside @media blocks too; comments removed."""
++        css = re.sub(r'/\*.*?\*/', '', css, flags=re.S)
++        return [(sel.strip(), body) for sel, body in re.findall(r'([^{}@]+)\{([^{}]*)\}', css)]
++
++    def test_hero_copy_is_never_held_at_opacity_zero(self):
++        for name in ('pages.css', 'home.css'):
++            for selectors, body in self.rules(self.css[name]):
++                if '.ph-wait' not in selectors or not any(part in selectors for part in self.COPY):
++                    continue
++                with self.subTest(css=name, selectors=selectors):
++                    self.assertNotRegex(body, r'opacity:0(?![.\d])')
++                    self.assertIn('transform:translateY(18px)', body)  # it still rises 18px into place
++        for script in ('motion.js', 'home.js'):
++            js = (OUT / 'assets' / script).read_text()
++            with self.subTest(script=script):
++                self.assertIn("tl.fromTo(fades, { y: 18 }, { y: 0, duration: 0.7, stagger: 0.08, clearProps: 'transform' }", js)
++                self.assertNotIn('{ y: 18, opacity: 0 }', js)
++
++    def test_work_play_button_space_is_kept_before_scripts_run(self):
++        kit = self.css['kit.css']
++        rules = dict(self.rules(kit))
++        # An empty placeholder exactly the button's size (16px gap + 44px), only while scripts are on and the button hidden.
++        self.assertEqual(rules['.js .clip-side:has(>.vt[hidden])::after'], 'content:"";display:block;height:44px;margin-top:16px')
++        self.assertEqual(rules['.clip-side .vt'], 'display:flex;width:fit-content')  # block-level: no line box adds height
++        vt = rules['.vt']
++        self.assertIn('min-height:44px', vt)
++        self.assertIn('margin-top:16px', vt)
++        self.assertIn('*,*::before,*::after{box-sizing:border-box}', self.css['site.css'])
++        work = main_of((OUT / 'work/index.html').read_text())
++        self.assertRegex(work, r'<div class="clip-side">.*<button class="vt" type="button" data-reel-toggle hidden>Play three signs video</button></div>')
++        for route in MOTION_ROUTES:
++            with self.subTest(route=route):  # .js is set in <head>, before the first paint
++                html = (OUT / route).read_text()
++                self.assertLess(html.index('/assets/motion-boot.js'), html.index('</head>'))
++        self.assertIn("c.add('js');", (OUT / 'assets/motion-boot.js').read_text())
++
++    def test_inner_page_webgl_never_fetches_the_homepage_scene_or_svg_helpers(self):
++        page = OUT / 'assets/glass-page.js'
++        graph = [path.name for path in module_graph(page)]
++        self.assertEqual(sorted(graph), ['glass-page.js', 'glass-shapes.js', 'three.module.min.js'])
++        for name in ('glass-page.js', 'glass-shapes.js'):
++            code = re.sub(r'/\*.*?\*/|^\s*//.*$', '', (OUT / 'assets' / name).read_text(), flags=re.S | re.M)  # code, not comments
++            for banned in ('SVGLoader', 'BufferGeometryUtils', 'glass-scene', 'mergeGeometries', 'extrude('):
++                with self.subTest(module=name, banned=banned):
++                    self.assertNotIn(banned, code)
++        self.assertNotIn('import(', page.read_text())  # nothing loaded later either
++        boot = (OUT / 'assets/glass-boot.js').read_text()
++        for kind in ('slab', 'panes', 'sheets', 'photos', 'mark'):
++            self.assertIn(f"{kind}: '/assets/glass-page.js'", boot)
++        # The homepage scene still has its wordmark helpers.
++        self.assertIn('SVGLoader.js', [path.name for path in module_graph(OUT / 'assets/glass-scene.js')])
++
++    def test_nav_backdrop_blur_is_plain_and_no_ancestor_cuts_it_off(self):
++        glass_js = (OUT / 'assets/glass.js').read_text()
++        # The edge refraction (an SVG url() filter) never reaches the nav pill: glass.js only maps .lg panels.
++        self.assertIn("const REFRACT = '.lg';", glass_js)
++        self.assertIn('const apply = () => $$(REFRACT).forEach(el => {', glass_js)
++        self.assertEqual(glass_js.count('--lg-filter'), 1)
++        self.assertNotIn('url(', rules_for(base_rules(self.css['glass.css']), '.site-header .nav')[0])
++        # The nav's ancestors (.site-header, body, html) never become a backdrop root in any stylesheet, at any width.
++        ancestor = re.compile(r'^(?:html|body|:root)(?:[.:\[][^\s>+~]*)?$|^\.site-header(?:[.:\[][^\s>+~]*)?$')
++        checked = 0
++        for name, css in self.css.items():
++            for selectors, body in self.rules(css):
++                for selector in [part.strip() for part in re.sub(r'\([^()]*\)', '()', selectors).split(',')]:
++                    if '::' in selector or not ancestor.match(re.split(r'[\s>+~]+', selector)[-1]):
++                        continue
++                    checked += 1
++                    with self.subTest(css=name, selector=selector):
++                        self.assertNotRegex(body, self.BACKDROP_ROOT)
++                        if name != 'site.css':  # site.css's old header blur is overridden by glass.css (loaded after it)
++                            self.assertNotRegex(body, r'backdrop-filter:(?!none)')
++        self.assertGreaterEqual(checked, 5)
++        header = rules_for(base_rules(self.css['glass.css']), '.site-header')[0]
++        self.assertIn('-webkit-backdrop-filter:none;backdrop-filter:none', header)
++        # The page transition names the pill itself, never the header around it.
++        self.assertIn('.site-header .nav{view-transition-name:site-header}', self.css['site.css'])
++        self.assertNotIn('.site-header{view-transition-name', self.css['site.css'])

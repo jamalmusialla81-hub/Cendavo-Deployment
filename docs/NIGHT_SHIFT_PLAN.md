@@ -340,3 +340,27 @@ Use `docs/OWNER_DRAFT_POLICIES.md` (drafted at the owner's request; owner will c
 2. **About:** rewrite in the studio voice from the draft (small Sydney studio, you deal directly with the designer, new so we show labelled concept work, how we work). Personal, confident, plain language; no corporate jargon; no invented biography or credentials.
 3. **Contact:** "We reply within one business day" may be stated (from the draft).
 Keep accessibility, motion rules, budgets, tests. Add tests that the pages contain no currency amounts and no testimonial/rating markup. **Never `cd` in Bash.**
+
+### Task 58 — land Task 48
+Task 48's builder finished the performance work but hit the 30-minute builder clock. Its work is saved as `docs/design/glass/task48-complete.patch`; the supervisor applied it to a clean export and the full suite passed (489 tests OK). Apply it with `git apply --binary docs/design/glass/task48-complete.patch`, run the build and focused test modules, fix only genuine problems. **Never `cd` in Bash.**
+
+## Phase 3 — owner-approved creative upgrades (2026-10-13; profile `site`)
+Owner approved: showreel re-cut, Portfolio + Services upgrades, mobile 3D (NOT the homepage scroll story). Owner: "make website insane." Brief rules still bind: preserve identity (warm cream, bold black type, restrained gold, liquid glass), quality over quantity, every effect has a purpose, no fabricated proof (concept projects clearly labelled, no measured-improvement claims), accessibility + reduced motion, budgets. Each task small (30-minute builder clock). **Never `cd` in Bash.**
+
+### Task 52 — showreel v2 in
+Supervisor-rendered re-cut vendored in `assets/glass/` (replacing the v1 files of the same names): `glass-reel-1600.mp4` (24.67 s), `glass-reel-vertical-720.mp4`, posters, plus `docs/design/glass/reel-v2-chapters.json`. Update the homepage chapter list to these times/labels: 0 Cendavo · 1.0 Your work is excellent · 3.27 Your website should say so · 5.2 Harbourside (concept) · 7.87 Greenline (concept) · 10.13 Fade & Co (concept) · 12.13 Book from a phone · 14.47 Before / after · 18.4 New websites, redesigns, care plans (merge the two "Cendavo" logo beats into the first chapter; keep labels short in the UI). Keep the player controller and tests; update chapter tests.
+
+### Task 53 — Work page part 1: Harbourside + Greenline as distinct case studies
+Each project gets its own visual treatment (not the same template): Harbourside — dark, high-contrast automotive treatment, a large 3D-tilting laptop+phone pair with the loops, a "packages" interface close-up and a phone booking sequence; Greenline — light, airy, photography-led editorial layout with a horizontal photo strip and the site-visit request flow on a phone. For each, a short structured story: the kind of business; the problem the site solves; key design decisions; how a customer uses it; the conversion action it encourages. Plain language, no claimed results. If a working demo exists link it; otherwise label mockups as mockups. Smooth, purposeful transitions between projects; remove dead space.
+
+### Task 54 — Work page part 2: Fade & Co + Work index rhythm
+Fade & Co — moody barbershop treatment with the "Book a chair" phone flow and walk-in wait info; same story structure. Work index: project cards with glass rim, hover tilt + loop video, clear concept labels; better rhythm/spacing; the request-queue demo card links to /demo/ ("A working demo you can try"). Mobile: art-directed, not shrunk.
+
+### Task 55 — Services part 1: New website build sequence
+In the New website section, a scroll-driven (no scroll-jacking; short pin ≤ 1 viewport allowed) sequence where a site assembles from wireframe → typography → photography → service info → enquiry/booking button → responsive phone view, each step labelled in plain language. Built with DOM/CSS/GSAP (no new libraries); reduced motion shows the finished state with the step list.
+
+### Task 56 — Services part 2: Redesign transform + Care plan
+Redesign: a controlled scroll-triggered transformation from an outdated page to the modern one (reuse the before/after assets; no glitch effects), with 3–4 labelled improvements (clearer navigation, service info, mobile layout, obvious enquiry button). Care plan: a calm "this month" activity panel (updates applied, backup taken, enquiry form checked, small change made) that ticks through once in view — reassuring, no claims of automated monitoring or guarantees.
+
+### Task 57 — Mobile 3D hero
+Phones currently get a still image. Add a lightweight mobile version: on capable phones (WebGL2, ≥ 4 cores or deviceMemory ≥ 4, not Save-Data, not reduced motion) render the glass C only (lower tessellation, DPR ≤ 1.25, smaller env map), scroll-driven gentle turn and a slow idle sway, paused off-screen/hidden/Pause motion; others keep the poster. Must not delay LCP (load after idle), must keep the headline and CTAs fully visible at 360–430 px, ≥ 50 fps target on a mid-range phone (measure with CPU throttling in tests where possible).
