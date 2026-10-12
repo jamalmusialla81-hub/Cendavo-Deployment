@@ -75,6 +75,42 @@
         update();
       }
     }));
+    // Task 46: the picture is draggable too. A mouse or pen press, a drag, or a touch that ends without scrolling sets the
+    // range and fires its input event, so the range stays the one source of truth and the accessible control. Touch
+    // moves only once the browser has ruled out a vertical scroll (touch-action: pan-y); a scroll ends in pointercancel.
+    const stage = figure.querySelector('.compare-stage');
+    if (stage) {
+      let id = null, moved = false;
+      const seek = e => {
+        const box = stage.getBoundingClientRect();
+        if (!box.width) return;
+        range.value = Math.round(Math.min(100, Math.max(0, (e.clientX - box.left) / box.width * 100)));
+        range.dispatchEvent(new Event('input', { bubbles: true }));
+      };
+      const letGo = e => {
+        if (id !== e.pointerId) return;
+        id = null;
+        if (stage.hasPointerCapture?.(e.pointerId)) stage.releasePointerCapture(e.pointerId);
+      };
+      stage.addEventListener('pointerdown', e => {
+        if (e.button > 0) return;
+        id = e.pointerId;
+        moved = false;
+        stage.setPointerCapture?.(e.pointerId);
+        stopSweep();
+        if (e.pointerType !== 'touch') seek(e);
+      });
+      stage.addEventListener('pointermove', e => {
+        if (id !== e.pointerId) return;
+        moved = true;
+        seek(e);
+      });
+      stage.addEventListener('pointerup', e => {
+        if (id === e.pointerId && e.pointerType === 'touch' && !moved) seek(e);
+        letGo(e);
+      });
+      stage.addEventListener('pointercancel', letGo);
+    }
     controls.hidden = false;
     update();
   }

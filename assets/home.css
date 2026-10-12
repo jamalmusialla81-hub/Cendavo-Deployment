@@ -17,13 +17,14 @@
    motion-capable wide screens the hero is taller than the screen and its stage stays pinned by CSS (sticky) while the
    copy and cards leave and the 3D scene tilts away. */
 .hero{position:relative}
-.hero-pin{position:relative;height:100svh;min-height:640px;overflow:hidden}
+/* A column, so where its height is released the copy still fills the screen and the tag adds height (Task 46). */
+.hero-pin{position:relative;display:flex;flex-direction:column;height:100svh;min-height:640px;overflow:hidden}
 /* Task 44: the scene (and the still) feathers out at its foot into the page, never a hard edge over a flat band. */
 .hero-gl{position:absolute;inset:0;background:#F6F5F1 url("/assets/glass/hero-glass-poster.jpg") 50% 50%/cover no-repeat;-webkit-mask-image:linear-gradient(180deg,#000 74%,transparent);mask-image:linear-gradient(180deg,#000 74%,transparent)}
 .hero-gl::after{content:"";position:absolute;inset:0;background:linear-gradient(90deg,rgba(246,245,241,.92) 0%,rgba(246,245,241,.6) 34%,rgba(246,245,241,0) 58%)}
 .hero-canvas{position:absolute;inset:0;width:100%;height:100%}
 .hero-gl:not(.is-live) .hero-canvas{display:none}
-.hero-in{position:relative;z-index:2;display:grid;grid-template-columns:repeat(12,minmax(0,1fr));column-gap:24px;align-items:end;height:100%;padding-block:120px clamp(56px,9vh,104px)}
+.hero-in{position:relative;z-index:2;flex:1 0 auto;display:grid;grid-template-columns:repeat(12,minmax(0,1fr));column-gap:24px;align-items:end;height:100%;padding-block:120px clamp(56px,9vh,104px)}
 .hero-copy{grid-column:1/7;grid-row:1}
 .hero-h{margin:0;font-size:clamp(2.75rem,.5rem + 6vw,6.6rem);font-weight:820;font-stretch:84%;line-height:.9;letter-spacing:-.035em}
 .ln{display:block;overflow:hidden;padding:0 .08em .06em 0;margin-bottom:-.06em}
@@ -52,16 +53,9 @@
 .c-book.booked .book-btn{background:var(--ok);color:#fff}
 .bb-b{display:inline-flex;align-items:center;gap:.4em}
 .gcard svg{width:1.1em;height:1.1em;fill:none;stroke:currentColor;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round}
-.hero-cap{position:absolute;z-index:2;right:var(--gut);bottom:88px;display:flex;align-items:baseline;gap:10px;margin:0;padding:10px 16px;border-radius:999px;font:640 .875rem/1.3 var(--font-display)}
+/* Text only: it never takes a click meant for a hero button (Task 46). */
+.hero-cap{position:absolute;z-index:2;right:var(--gut);bottom:88px;display:flex;align-items:baseline;gap:10px;margin:0;padding:10px 16px;border-radius:999px;font:640 .875rem/1.3 var(--font-display);pointer-events:none}
 .hero-cap span{font:400 .82rem/1.4 var(--font-text);color:var(--ink-soft)}
-/* One Pause motion control for the whole page (WCAG 2.2.2): it stops the videos, the marquee, the atmosphere and the 3D
-   loop. It floats in the corner as a glass pill. */
-.motion-btn{display:inline-flex;align-items:center;gap:8px;min-height:44px;padding:0 16px;border:1px solid rgba(255,255,255,.85);border-radius:var(--radius-pill);background:rgba(255,255,255,.66);-webkit-backdrop-filter:blur(14px) saturate(1.7);backdrop-filter:blur(14px) saturate(1.7);box-shadow:inset 0 1px 0 #fff,0 12px 30px -14px rgba(58,40,12,.4);font:600 .875rem/1 var(--font-display);color:var(--ink)}
-.motion-btn::before{content:"";width:8px;height:10px;border-inline:2.5px solid currentColor}
-.motion-btn[aria-pressed="true"]::before{border-inline-width:3px}
-.motion-btn:hover{background:#fff}
-.motion-btn[aria-pressed="true"],.motion-btn[aria-pressed="true"]:hover{border-color:var(--ink);background:var(--ink);color:#fff}
-@media(forced-colors:active){.motion-btn[aria-pressed="true"]{forced-color-adjust:none;border-color:ButtonText;background:ButtonText;color:ButtonFace}}
 
 /* Showreel: the frame opens from a rounded glass lens to its full size as it scrolls in (home.js, clip-path). Task 44:
    no box: no radius, no frame shadow, its edges feather into the page (a mask), full-bleed on wide screens; the chapters
@@ -151,12 +145,14 @@
 .browser-bar{display:flex;align-items:center;gap:14px;height:38px;padding:0 10px;background:#F4F3EF;border-bottom:1px solid var(--line-dark)}
 .browser-url{flex:0 1 340px;min-width:0;margin:0 auto;padding:2px 12px;border-radius:3px;background:#fff;color:var(--mute);font-size:12px;text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .compare-tag{flex:none;padding:3px 9px;border-radius:var(--radius-pill);background:var(--ink);color:#fff;font:650 12px/1.3 var(--font-display)}
-.compare-stage{position:relative;isolation:isolate;aspect-ratio:16/10;overflow:hidden;container-type:inline-size}
-.mock{position:absolute;inset:0}
+/* Task 46: draggable (home.js sets the range, still the accessible control); vertical swipes still scroll. */
+.compare-stage{position:relative;isolation:isolate;aspect-ratio:16/10;overflow:hidden;container-type:inline-size;touch-action:pan-y;cursor:ew-resize;-webkit-user-select:none;user-select:none}
+.mock{position:absolute;inset:0;pointer-events:none}
 .mock-before{background:#BDBDBD}
 .mock-after{clip-path:inset(0 calc(100% - var(--pos)) 0 0)}
 .compare-seam{position:absolute;z-index:2;top:0;bottom:0;left:var(--pos);width:2px;margin-left:-1px;background:#fff;box-shadow:0 0 0 1px rgba(0,0,0,.25);pointer-events:none}
-.compare-seam::after{content:"";position:absolute;top:50%;left:50%;width:36px;height:36px;margin:-18px 0 0 -18px;border-radius:50%;background:linear-gradient(90deg,transparent 14px,var(--ink) 14px 16px,transparent 16px 20px,var(--ink) 20px 22px,transparent 22px) #fff;box-shadow:0 6px 18px rgba(0,0,0,.35)}
+/* The grip stops its radius short of each edge, so it shows whole at 0 and 100. */
+.compare-stage::after{content:"";position:absolute;z-index:3;top:50%;left:clamp(18px,var(--pos),calc(100% - 18px));width:36px;height:36px;margin:-18px 0 0 -18px;border-radius:50%;background:linear-gradient(90deg,transparent 14px,var(--ink) 14px 16px,transparent 16px 20px,var(--ink) 20px 22px,transparent 22px) #fff;box-shadow:0 6px 18px rgba(0,0,0,.35);pointer-events:none}
 .compare-controls{display:flex;flex-wrap:wrap;align-items:end;justify-content:space-between;gap:12px 20px;margin-top:18px}
 .compare-label{flex:1 1 220px;display:grid;gap:4px;font:600 1rem/1.3 var(--font-display)}
 .compare-label input{width:100%;min-height:44px;margin:0;accent-color:var(--ink)}
@@ -285,6 +281,11 @@
 @media(max-width:1023px){
 .hero-copy{grid-column:1/-1;grid-row:auto;max-width:640px}
 .hero-h{font-size:clamp(2.6rem,10vw,6rem)}
+/* Tasks 42 and 46: the tag follows the copy, below the buttons (at 768 it covered "See concept projects"); relative,
+   so it paints above the stage. */
+.hero-pin{height:auto;min-height:100svh}
+.hero-in{height:auto;padding-bottom:28px}
+.hero-cap{position:relative;right:auto;bottom:auto;flex-wrap:wrap;row-gap:2px;width:fit-content;max-width:calc(100% - 2 * var(--gut));margin:0 var(--gut) 56px;padding:8px 14px;border-radius:20px}
 }
 @media(max-width:960px){
 .ba-copy,.compare{grid-column:1/-1;grid-row:auto}
@@ -300,23 +301,19 @@
 .svc-list{grid-template-columns:1fr;gap:44px}
 }
 @media(max-width:760px){
-.hero-pin{height:auto;min-height:100svh}
 /* The phone poster scales with the screen width (not the hero's height), so the glass wordmark stays above the headline
    however tall the copy and the tag below it make the hero; under the poster's foot the paper colour shows, behind the veil. */
 .hero-gl{background-image:url("/assets/glass/hero-glass-poster-m.jpg");background-position:50% 0;background-size:100% auto}
 .hero-gl::after{background:linear-gradient(0deg,rgba(246,245,241,.96) 0%,rgba(246,245,241,.85) 42%,rgba(246,245,241,0) 64%)}
 .hero-in{padding-top:52svh;padding-bottom:32px}
-/* Task 42: the tag leaves the corner under the nav pill and follows the copy, below the stage and the buttons. Relative
-   (not static) so it still paints above the stage. */
-.hero-cap{position:relative;right:auto;bottom:auto;flex-wrap:wrap;row-gap:2px;width:fit-content;max-width:calc(100% - 2 * var(--gut));margin:0 var(--gut) 56px;padding:8px 14px;border-radius:20px}
 }
 @media(max-width:640px){
 .actions .button,.band .button{width:100%}
-/* Task 42: the stacked hero buttons keep a lane clear of the Pause motion button in the bottom-right corner (glass.css),
-   so it never sits on "See concept projects", whatever the screen height or scroll position. */
-body:has(.motion-fab:not([hidden])) .hero .actions{padding-right:calc(44px + max(12px,env(safe-area-inset-right)))}
-/* Task 43: the marquee pills move, so a padding lane cannot hold them; the strip fades out before the same lane instead. */
-body:has(.motion-fab:not([hidden])) .mq-strip{-webkit-mask-image:linear-gradient(90deg,#000 calc(100% - 44px - max(12px,env(safe-area-inset-right)) - 24px),transparent calc(100% - 44px - max(12px,env(safe-area-inset-right))));mask-image:linear-gradient(90deg,#000 calc(100% - 44px - max(12px,env(safe-area-inset-right)) - 24px),transparent calc(100% - 44px - max(12px,env(safe-area-inset-right))))}
+/* Task 46: both buttons in view at 360x780; the copy starts under the poster's wordmark (its foot: ~106% of the width). */
+.hero-in{padding-top:min(52svh,calc(106.5vw + 12px))}
+.hero-h{font-size:clamp(2.25rem,10.2vw,2.75rem)}
+.hero-sub{margin-top:16px;font-size:1.0625rem}
+.hero .actions{gap:8px;margin-top:18px}
 .compare-stage{aspect-ratio:4/5}
 /* Phones: the vertical cut in a 9:16 frame, capped so it never fills more than about three quarters of the screen. */
 .reel-frame{width:min(100%,calc(74svh * 9 / 16));aspect-ratio:9/16}
@@ -324,6 +321,26 @@ body:has(.motion-fab:not([hidden])) .mq-strip{-webkit-mask-image:linear-gradient
 .work-head .ulink{display:flex;width:fit-content}
 .work-head .ulink+.ulink{margin-left:0}
 .band-panel{padding:24px 20px}
+}
+/* Task 46: short screens (150% zoom, ~960x600) size the hero by height; phones keep their layout. */
+@media(min-width:761px) and (max-height:720px){
+.hero-pin{height:auto;min-height:100svh}
+.hero-in{height:auto;padding-top:96px;padding-bottom:36px}
+.hero-h{font-size:clamp(2.6rem,10.5svh,5rem)}
+.hero-sub{margin-top:18px}
+.hero .actions{margin-top:22px}
+.hero-cap{margin-bottom:24px}
+}
+/* Landscape phones (844x390): the wide poster and veil; headline and first button in view. */
+@media(max-height:500px){
+.hero-pin{height:auto;min-height:100svh}
+.hero-gl{background-image:url("/assets/glass/hero-glass-poster.jpg");background-position:50% 50%;background-size:cover}
+.hero-gl::after{background:linear-gradient(90deg,rgba(246,245,241,.94) 0%,rgba(246,245,241,.8) 46%,rgba(246,245,241,0) 78%)}
+.hero-in{height:auto;padding-top:84px;padding-bottom:20px}
+.hero-h{font-size:clamp(1.9rem,9.5svh,3.2rem)}
+.hero-sub{margin-top:10px;font-size:1rem}
+.hero .actions{margin-top:14px}
+.hero-cap{margin-bottom:16px}
 }
 
 /* Motion: only for people who have not asked for reduced motion; only transform and opacity move.

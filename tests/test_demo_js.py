@@ -2262,5 +2262,138 @@ console.log(JSON.stringify(out));
 """
 
 
+# Task 46: site.js's Pause motion toggle on its own (it now sits in the header): its initial state from reduced motion and
+# Save-Data, and a press flipping aria-pressed, window.__glass.paused and every pauseFns listener. The name never changes.
+SITE_TOGGLE_SCRIPT = HARNESS + r"""
+const source = fs.readFileSync(process.argv[1], 'utf8');
+function run(env) {
+  const toggle = element('toggle'); toggle.hidden = true; toggle.attrs['aria-pressed'] = 'false'; toggle.textContent = 'Pause motion';
+  const parts = { '[data-motion-toggle]': [toggle] };
+  const doc = { documentElement: element('html'), listeners: {}, addEventListener(type, fn) { (this.listeners[type] = this.listeners[type] || []).push(fn); },
+    querySelector: s => (parts[s] || [])[0] || null, querySelectorAll: s => parts[s] || [] };
+  const { win } = makeWindow(env, { scrollY: 0, location: { pathname: '/' }, navigator: { connection: { saveData: Boolean(env.saveData) } } });
+  const calls = [];
+  win.__glass = { paused: false, heroP: 0, pointer: { x: 0, y: 0 }, pauseFns: [p => calls.push(['a', p]), p => calls.push(['b', p])] };
+  vm.runInNewContext(source, { window: win, document: doc, getComputedStyle: () => ({}) });
+  const snap = () => ({ aria: toggle.attrs['aria-pressed'], paused: win.__glass.paused, name: toggle.textContent, label: toggle.getAttribute('aria-label') });
+  const out = { hidden: toggle.hidden, load: snap() };
+  (toggle.listeners.click || []).forEach(fn => fn({ type: 'click' })); out.first = snap();
+  (toggle.listeners.click || []).forEach(fn => fn({ type: 'click' })); out.second = snap();
+  out.calls = calls;
+  return out;
+}
+const desktop = { width: 1440, height: 900, fine: true, reduce: false };
+console.log(JSON.stringify({ plain: run(desktop), reduced: run({ ...desktop, reduce: true }), saveData: run({ ...desktop, saveData: true }) }));
+"""
+
+# Task 46: the before/after picture is draggable. Pointer events on .compare-stage drive the range input (value, then its
+# input event), which stays the source of truth: --pos, aria-valuetext and the Before/After buttons follow from it.
+DRAG_SCRIPT = HARNESS + r"""
+const source = fs.readFileSync(process.argv[1], 'utf8');
+class Event { constructor(type, options) { this.type = type; Object.assign(this, options || {}); } }
+function run(env) {
+  const range = element('range'), before = element('before'), after = element('after'), controls = element('controls');
+  const figure = element('figure'), stage = element('stage');
+  before.dataset.compareSet = '0'; after.dataset.compareSet = '100'; controls.hidden = true;
+  controls.parts = { 'input[type="range"]': [range], '[data-compare-set]': [before, after] };
+  figure.parts = { '[data-compare-controls]': [controls], '.compare-stage': [stage] };
+  stage.getBoundingClientRect = () => ({ left: 100, top: 0, width: 400, height: 250 });
+  const captured = new Set(), captures = [], releases = [];
+  stage.setPointerCapture = id => { captured.add(id); captures.push(id); };
+  stage.releasePointerCapture = id => { captured.delete(id); releases.push(id); };
+  stage.hasPointerCapture = id => captured.has(id);
+  let inputs = 0;
+  range.dispatchEvent = e => { if (e.type === 'input') inputs++; (range.listeners[e.type] || []).forEach(fn => fn(e)); return true; };
+  const root = element('html'); root.classList = classList(['js', 'motion']);
+  const parts = { '[data-compare]': [figure] };
+  const doc = { documentElement: root, querySelector: s => (parts[s] || [])[0] || null, querySelectorAll: s => parts[s] || [] };
+  const { win } = makeWindow(env, { requestAnimationFrame: () => 1, cancelAnimationFrame() {} });
+  let log = null;
+  if (env.gsap) { const stub = makeGsap(env); win.gsap = stub.gsap; win.ScrollTrigger = stub.ScrollTrigger; log = stub.log; }
+  vm.runInNewContext(source, { window: win, document: doc, Event });
+  const fire = (type, e) => (stage.listeners[type] || []).forEach(fn => fn({ type, pointerId: 1, button: 0, pointerType: 'mouse', ...e }));
+  const snap = () => ({ value: String(range.value), pos: figure.style.props['--pos'], text: range.attrs['aria-valuetext'],
+    before: before.attrs['aria-pressed'], after: after.attrs['aria-pressed'], inputs, captured: captured.size });
+  const out = { listens: Object.keys(stage.listeners).sort(), start: snap(), steps: [] };
+  const step = (name, act) => { act(); out.steps.push([name, snap()]); };
+  step('mouse down at 25%', () => fire('pointerdown', { clientX: 200 }));
+  step('drag to 60%', () => fire('pointermove', { clientX: 340 }));
+  step('drag past the right edge', () => fire('pointermove', { clientX: 900 }));
+  step('drag past the left edge', () => fire('pointermove', { clientX: -50 }));
+  step('mouse up', () => fire('pointerup', { clientX: -50 }));
+  step('hover after release', () => fire('pointermove', { clientX: 300 }));
+  step('right button', () => fire('pointerdown', { clientX: 300, button: 2 }));
+  step('touch down', () => fire('pointerdown', { pointerId: 7, pointerType: 'touch', clientX: 400 }));
+  step('touch scrolls the page', () => fire('pointercancel', { pointerId: 7, pointerType: 'touch' }));
+  step('touch tap', () => { fire('pointerdown', { pointerId: 8, pointerType: 'touch', clientX: 400 }); fire('pointerup', { pointerId: 8, pointerType: 'touch', clientX: 400 }); });
+  step('touch drag', () => { fire('pointerdown', { pointerId: 9, pointerType: 'touch', clientX: 400 }); fire('pointermove', { pointerId: 9, pointerType: 'touch', clientX: 140 }); });
+  step('touch lifts after the drag', () => fire('pointerup', { pointerId: 9, pointerType: 'touch', clientX: 400 }));
+  out.captures = captures; out.releases = releases;
+  if (log) {
+    // A drag before the comparison scrolls into view means the demonstration sweep never runs on top of it.
+    const trigger = log.creates.find(c => c.trigger === figure);
+    const timelines = log.timelines.length;
+    if (trigger) trigger.onEnter();
+    out.sweepAfterDrag = log.timelines.length > timelines;
+    out.hadTrigger = Boolean(trigger);
+  }
+  return out;
+}
+const desktop = { width: 1440, height: 900, fine: true, reduce: false };
+console.log(JSON.stringify({ plain: run(desktop), motion: run({ ...desktop, gsap: true }) }));
+"""
+
+
+class HeaderPauseAndDragScriptTests(unittest.TestCase):
+    def node_json(self, script, path):
+        out = subprocess.run(['node', '-e', script, str(path)], capture_output=True, text=True, check=True)
+        return json.loads(out.stdout)
+
+    def test_site_js_pause_toggle_starts_from_the_visitors_settings_and_flips_everything(self):
+        r = self.node_json(SITE_TOGGLE_SCRIPT, SITE)
+        for case, start in (('plain', False), ('reduced', True), ('saveData', True)):
+            with self.subTest(case=case):
+                out = r[case]
+                self.assertFalse(out['hidden'])  # revealed once site.js runs
+                on, off = str(start).lower(), str(not start).lower()
+                name = {'name': 'Pause motion', 'label': None}
+                self.assertEqual(out['load'], {'aria': on, 'paused': start, **name})
+                self.assertEqual(out['first'], {'aria': off, 'paused': not start, **name})
+                self.assertEqual(out['second'], {'aria': on, 'paused': start, **name})
+                # Every listener in the fan-out hears each press, in order.
+                self.assertEqual(out['calls'], [['a', not start], ['b', not start], ['a', start], ['b', start]])
+
+    def test_dragging_the_picture_moves_the_range_which_stays_the_source_of_truth(self):
+        r = self.node_json(DRAG_SCRIPT, HOME)
+        for case in ('plain', 'motion'):
+            with self.subTest(case=case):
+                out = r[case]
+                self.assertEqual(out['listens'], ['pointercancel', 'pointerdown', 'pointermove', 'pointerup'])
+                steps = dict(out['steps'])
+                at25 = steps['mouse down at 25%']
+                self.assertEqual((at25['value'], at25['pos'], at25['text']), ('25', '25%', '25 of 100 showing the redesign'))
+                self.assertEqual((at25['inputs'], at25['captured']), (1, 1))  # through the input event, with capture
+                self.assertEqual((steps['drag to 60%']['value'], steps['drag to 60%']['pos']), ('60', '60%'))
+                right = steps['drag past the right edge']
+                self.assertEqual((right['value'], right['pos'], right['text'], right['after']), ('100', '100%', 'After only', 'true'))
+                left = steps['drag past the left edge']
+                self.assertEqual((left['value'], left['text'], left['before'], left['after']), ('0', 'Before only', 'true', 'false'))
+                self.assertEqual(steps['mouse up']['captured'], 0)  # released
+                self.assertEqual(steps['hover after release'], steps['mouse up'])  # moving without a press does nothing
+                self.assertEqual(steps['right button'], steps['mouse up'])  # only the main button drags
+                # Touch: nothing moves on contact (the page may be scrolling); a scroll ends in pointercancel and lets go.
+                self.assertEqual(steps['touch down']['value'], '0')
+                self.assertEqual(steps['touch scrolls the page']['value'], '0')
+                self.assertEqual(steps['touch scrolls the page']['captured'], 0)
+                self.assertEqual(steps['touch tap']['value'], '75')  # a tap jumps there
+                self.assertEqual(steps['touch drag']['value'], '10')
+                self.assertEqual(steps['touch lifts after the drag']['value'], '10')  # lifting does not jump back
+                self.assertEqual(steps['touch lifts after the drag']['captured'], 0)
+                self.assertEqual(out['captures'], [1, 7, 8, 9])
+                self.assertEqual(out['releases'], [1, 7, 8, 9])
+        self.assertTrue(r['motion']['hadTrigger'])
+        self.assertFalse(r['motion']['sweepAfterDrag'])  # the visitor's choice is never swept over
+
+
 if __name__ == '__main__':
     unittest.main()

@@ -42,8 +42,9 @@ if (header) {
   }, { passive: true });
   header.addEventListener('focusin', showHeader);
 }
-// Pause motion (Task 41, WCAG 2.2.2): build_site.py puts one fixed button on every page with ongoing motion (WebGL, the
-// drifting atmosphere, the marquee, video loops). It works on its own, video or not: it holds the shared state
+// Pause motion (Task 41, WCAG 2.2.2): build_site.py puts one button in the header (Task 46) on every page with ongoing
+// motion (WebGL, the drifting atmosphere, the marquee, video loops). Its name stays "Pause motion"; aria-pressed is the
+// state, and glass.css swaps its icon from it. It works on its own, video or not: it holds the shared state
 // window.__glass.paused and tells every listener through __glass.onPauseChange (the pauseFns fan-out, which glass.js,
 // reel.js and the WebGL scenes join). It is shown once this runs and stays put; reduced motion or Save-Data start it pressed.
 {

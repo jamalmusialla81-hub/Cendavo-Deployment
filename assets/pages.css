@@ -64,14 +64,6 @@
 .close-foot p{max-width:42ch;margin:0;color:rgba(255,255,255,.82)}
 .close :focus-visible{outline-color:#fff}
 
-/* Pause motion (Work, Services): one fixed button for every silent loop; reel.js shows it only while a loop is on screen. */
-.motion-btn{display:inline-flex;align-items:center;gap:8px;min-height:44px;padding:0 16px;border:1px solid var(--line-2);border-radius:var(--radius-pill);background:rgba(255,255,255,.94);color:var(--ink-2);font:600 .875rem/1 var(--font-display)}
-.motion-btn::before{content:"";width:8px;height:10px;border-inline:2.5px solid currentColor}
-.motion-btn[aria-pressed="true"]::before{border-inline-width:3px}
-.motion-btn:hover{border-color:var(--ink)}
-.motion-btn[aria-pressed="true"],.motion-btn[aria-pressed="true"]:hover{border-color:var(--ink);background:var(--ink);color:#fff}
-@media(forced-colors:active){.motion-btn[aria-pressed="true"]{forced-color-adjust:none;border-color:ButtonText;background:ButtonText;color:ButtonFace}}
-
 /* Contact: the steps left, the form on a warm panel right. The form markup is the enquiry contract (site.css styles it). */
 .ct{padding:clamp(40px,6vw,88px) 0 clamp(72px,8vw,120px)}
 .ct-grid{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));column-gap:24px;align-items:start}
@@ -154,11 +146,6 @@
 .field-row{grid-template-columns:minmax(0,1fr)}
 .ct-form{border-radius:22px}
 .form-foot .button,.close-foot .button,.pg-actions .button{width:100%}
-/* Task 42: the full-width hero buttons keep a lane clear of the Pause motion button in the bottom-right corner (glass.css),
-   so it never sits on them, whatever the screen height or scroll position. */
-body:has(.motion-fab:not([hidden])) .pg-actions{padding-right:calc(44px + max(12px,env(safe-area-inset-right)))}
-/* Task 43: the FAQ toggles (their +/- sits at the right edge) keep the same lane, so the button never covers one. */
-body:has(.motion-fab:not([hidden])) .faq summary{padding-right:calc(44px + max(12px,env(safe-area-inset-right)))}
 }
 
 /* Motion: only for people who have not asked for reduced motion; only transform and opacity move, hover within 200 ms.

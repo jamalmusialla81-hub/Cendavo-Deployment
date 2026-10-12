@@ -1072,7 +1072,7 @@ class DesignSystemTests(unittest.TestCase):
 
     def test_layout_basics(self):
         for selector, css in (('.button{', self.css), ('.menu{', self.css), ('.compare-button{', self.home_css),
-                              ('.motion-btn{', self.pages_css), ('.vt{', self.kit_css)):
+                              ('.motion-btn{', (OUT / 'assets/glass.css').read_text()), ('.vt{', self.kit_css)):
             with self.subTest(selector=selector):
                 rule = css.split(selector, 1)[1].split('}', 1)[0]
                 height = re.search(r'min-height:(\d+)px', rule)
@@ -3324,14 +3324,16 @@ class DaylightTests(unittest.TestCase):
         self.assertLessEqual(total, FIRST_LOAD_BUDGET, f'first load is {total} bytes')
 
     def test_pause_motion_is_a_real_toggle_button_hidden_without_js(self):
-        # Task 41: the homepage's button is the site-wide fixed one (after <main>, same corner as every other page).
-        button = '<button class="motion-btn motion-fab" type="button" data-motion-toggle aria-pressed="false" hidden>Pause motion</button>'
+        # Task 41: the homepage's button is the site-wide one. Task 46: it sits in the header pill, after the logo.
+        button = '<button class="motion-btn" type="button" data-motion-toggle aria-pressed="false" hidden>Pause motion</button>'
         self.assertEqual(self.html.count(button), 1)
         self.assertEqual(self.html.count('data-motion-toggle'), 1)
-        self.assertIn('</main>' + button + '<footer', self.html)
-        rule = rules_for(base_rules(self.css['home.css']), '.motion-btn')[0]
+        self.assertIn('CENDAVO</a>' + button + '<button class="menu"', self.html)
+        glass = base_rules((OUT / 'assets/glass.css').read_text())
+        rule = rules_for(glass, '.motion-btn')[0]
         self.assertGreaterEqual(int(re.search(r'min-height:(\d+)px', rule).group(1)), 44)
-        self.assertTrue(rules_for(base_rules(self.css['home.css']), '.motion-btn[aria-pressed="true"]::before'))  # pressed looks different
+        self.assertTrue(rules_for(glass, '.motion-btn[aria-pressed="true"]::before'))  # pressed looks different
+        self.assertNotIn('.motion-btn', self.css['home.css'])  # styled once, in the shared glass.css
 
     def test_showreel_chapters_are_buttons_revealed_by_script(self):
         section = re.search(r'<section class="reel band-warm".*?</section>', self.home, re.S).group(0)
@@ -3651,29 +3653,30 @@ class DaylightInnerPageTests(unittest.TestCase):
 
     def test_pause_motion_button_on_every_page_that_moves(self):
         # Task 41 (WCAG 2.2.2): every page with ongoing motion (WebGL, the drift, the marquee, video loops) gets exactly one
-        # fixed Pause motion button right after <main>, hidden until site.js runs; Demo and the 404 page have none.
-        button = '<button class="motion-btn motion-fab" type="button" data-motion-toggle aria-pressed="false" hidden>Pause motion</button>'
+        # Pause motion button, hidden until site.js runs; Demo and the 404 page have none. Task 46: it lives inside the
+        # header (the glass nav pill), never after <main>, so it can never cover page content.
+        button = '<button class="motion-btn" type="button" data-motion-toggle aria-pressed="false" hidden>Pause motion</button>'
         moving = ('index.html', 'work/index.html', 'services/index.html', 'pricing/index.html', 'about/index.html', 'contact/index.html')
         for route in moving:
             with self.subTest(route=route):
                 html = (OUT / route).read_text()
                 self.assertEqual(html.count('data-motion-toggle'), 1)
-                self.assertIn('</main>' + button + '<footer', html)
-                self.assertNotIn('data-motion-toggle', main_of(html))
+                header = re.search(r'<header class="site-header">.*?</header>', html, re.S).group(0)
+                self.assertIn('CENDAVO</a>' + button + '<button class="menu"', header)
+                self.assertNotIn('data-motion-toggle', html.split('</header>', 1)[1])
+                self.assertNotIn('data-motion-toggle', html[html.index('id="site-nav"'):])  # not inside the collapsible menu
                 self.assertLess(html.index('/assets/site.js'), html.index('/assets/glass-boot.js'))  # site.js drives it
         for route in ('demo/index.html', '404.html'):
             with self.subTest(route=route):
                 self.assertNotIn('data-motion-toggle', (OUT / route).read_text())
-        # One position for every page, set in the shared glass.css (no page sheet moves it), clear of the home bar.
-        glass = base_rules((OUT / 'assets/glass.css').read_text())
-        fab = rules_for(glass, '.motion-fab')[0]
-        for needle in ('position:fixed', 'env(safe-area-inset-bottom)', 'z-index:45'):
-            self.assertIn(needle, fab)
-        self.assertTrue(rules_for(glass, '.motion-fab:not([hidden])~.footer'))  # room under the footer's last line
-        for sheet in ('home.css', 'pages.css'):
-            css = (OUT / 'assets' / sheet).read_text()
-            self.assertNotIn('.motion-fab{', css)
-            self.assertNotRegex(css, r'\.motion-btn\{[^}]*position:fixed')
+        # One style for every page, in the shared glass.css; nothing floats or pins it any more.
+        for sheet in SHEETS:
+            with self.subTest(sheet=sheet):
+                css = (OUT / 'assets' / sheet).read_text()
+                self.assertNotIn('.motion-fab', css)
+                self.assertNotRegex(css, r'\.motion-btn[^{]*\{[^}]*position:(?:fixed|sticky|absolute)')
+                if sheet != 'glass.css':
+                    self.assertNotIn('.motion-btn', css)
         site = (OUT / 'assets/site.js').read_text()
         self.assertIn("document.querySelector('[data-motion-toggle]')", site)
         reel = (OUT / 'assets/reel.js').read_text()
@@ -3794,10 +3797,10 @@ class GlassPageSceneTests(unittest.TestCase):
 
 class MobileAndContactPolishTests(unittest.TestCase):
     """Task 42 (owner-mandated): on phones the Pause motion button is a 44x44 icon that keeps its name and never sits on the
-    hero buttons; the homepage tag leaves the nav pill's corner; the Contact glass C refracts a light photo, a little larger."""
+    hero buttons; the homepage tag leaves the nav pill's corner; the Contact glass C refracts a light photo, a little larger.
+    Task 46 moved the button into the header, so these now check it there."""
 
-    BUTTON = '<button class="motion-btn motion-fab" type="button" data-motion-toggle aria-pressed="false" hidden>Pause motion</button>'
-    LANE = 'padding-right:calc(44px + max(12px,env(safe-area-inset-right)))'
+    BUTTON = '<button class="motion-btn" type="button" data-motion-toggle aria-pressed="false" hidden>Pause motion</button>'
 
     @classmethod
     def setUpClass(cls):
@@ -3811,36 +3814,37 @@ class MobileAndContactPolishTests(unittest.TestCase):
         for route in ('index.html', 'work/index.html', 'services/index.html', 'pricing/index.html', 'about/index.html', 'contact/index.html'):
             with self.subTest(route=route):
                 self.assertEqual((OUT / route).read_text().count(self.BUTTON), 1)
-        phone = rules_for(media_blocks(self.css['glass.css'], 'max-width:640px'), '.motion-btn.motion-fab')
-        self.assertEqual(len(phone), 1)
-        for needle in ('width:44px', 'height:44px', 'min-height:44px', 'padding:0', 'font-size:0', 'justify-content:center'):
-            self.assertIn(needle, phone[0])
+        # Task 46: an icon on phones and tablets (the header row has no room for the words below 1200px), with its words
+        # shown on wide screens. One rule, in the shared glass.css.
+        narrow = rules_for(media_blocks(self.css['glass.css'], 'max-width:1199px'), '.motion-btn')
+        self.assertEqual(len(narrow), 1)
+        for needle in ('width:44px', 'height:44px', 'padding:0', 'font-size:0'):
+            self.assertIn(needle, narrow[0])
+        base = rules_for(base_rules(self.css['glass.css']), '.motion-btn')[0]
+        for needle in ('min-height:44px', 'min-width:44px', 'justify-content:center'):
+            self.assertIn(needle, base)
         # The label is shrunk, never removed from the accessibility tree, and the button never disappears.
         for banned in ('display:none', 'visibility:hidden', 'opacity:0'):
-            self.assertNotIn(banned, phone[0])
-        self.assertNotRegex(phone[0], r'(?<![-\w])content:')  # no generated text replacing the label
-        self.assertNotIn('.motion-btn.motion-fab::before', self.css['glass.css'])
-        # It stays fixed in the corner, clear of the home bar; the icon still shows both states (drawn with borders).
-        base = rules_for(base_rules(self.css['glass.css']), '.motion-fab')[0]
-        for needle in ('position:fixed', 'bottom:max(12px,env(safe-area-inset-bottom))', 'right:max(12px,env(safe-area-inset-right))'):
-            self.assertIn(needle, base)
+            self.assertNotIn(banned, narrow[0])
+        self.assertNotRegex(narrow[0], r'(?<![-\w])content:')  # no generated text replacing the label
+        self.assertNotIn('font-size:0', base)  # the words show on wide screens
+        # The icon is drawn with borders in both states (Task 46: pause bars, then a play triangle when pressed).
+        self.assertIn('border-inline:2.5px solid currentColor', rules_for(base_rules(self.css['glass.css']), '.motion-btn::before')[0])
+        self.assertIn('background:var(--ink)', rules_for(base_rules(self.css['glass.css']), '.motion-btn[aria-pressed="true"]')[0])
         for sheet in ('home.css', 'pages.css'):
             with self.subTest(sheet=sheet):
-                css = base_rules(self.css[sheet])
-                self.assertIn('border-inline:2.5px solid currentColor', rules_for(css, '.motion-btn::before')[0])
-                # Task 43: the pressed state keeps the pause bars (still borders) on an inverted ink button, never a play triangle.
-                self.assertIn('border-inline-width:3px', rules_for(css, '.motion-btn[aria-pressed="true"]::before')[0])
-                self.assertIn('background:var(--ink)', rules_for(css, '.motion-btn[aria-pressed="true"]')[0])
-                self.assertNotIn('.motion-btn.motion-fab', self.css[sheet])  # one place sizes the phone button
+                self.assertNotIn('.motion-btn', self.css[sheet])  # one place styles and sizes the button
         self.assertIn(':focus-visible{outline:2px solid var(--ink)', (OUT / 'assets/site.css').read_text())
 
-    def test_phone_hero_buttons_keep_a_lane_clear_of_the_pause_button(self):
-        # Buttons are full width on phones; the lane is the button's 44px plus its corner offset, so their rectangles can
-        # never meet. Only while the button is shown (without JavaScript it stays hidden and the buttons use the full width).
-        home = rules_for(media_blocks(self.css['home.css'], 'max-width:640px'), 'body:has(.motion-fab:not([hidden])) .hero .actions')
-        pages = rules_for(media_blocks(self.css['pages.css'], 'max-width:640px'), 'body:has(.motion-fab:not([hidden])) .pg-actions')
-        self.assertEqual(home, [self.LANE])
-        self.assertEqual(pages, [self.LANE])
+    def test_phone_hero_buttons_cannot_meet_the_pause_button(self):
+        # Task 46: the button lives in the header, so the full-width phone hero buttons need no lane beside them: nothing
+        # floats over the page. The header row keeps the logo, the button and the menu button.
+        for sheet in ('home.css', 'pages.css'):
+            with self.subTest(sheet=sheet):
+                self.assertNotIn('body:has(.motion-fab', self.css[sheet])
+                self.assertNotIn('44px + max(12px,env(safe-area-inset-right))', self.css[sheet])
+        self.assertNotRegex(self.css['glass.css'], r'\.motion-btn[^{]*\{[^}]*position:fixed')
+        self.assertIn('CENDAVO</a>' + self.BUTTON + '<button class="menu"', self.home)
         self.assertIn('width:100%', rules_for(media_blocks(self.css['home.css'], 'max-width:640px'), '.actions .button')[0])
         self.assertIn('href="#work">See concept projects</a>', main_of(self.home))
         pricing = main_of((OUT / 'pricing/index.html').read_text())
@@ -3849,7 +3853,9 @@ class MobileAndContactPolishTests(unittest.TestCase):
     def test_phone_hero_tag_follows_the_copy_instead_of_the_nav_corner(self):
         hero = re.search(r'<section class="hero".*?</section>', self.home, re.S).group(0)
         self.assertLess(hero.index('class="wrap hero-in"'), hero.index('<p class="hero-cap lg">'))  # after the stage and buttons
-        tablet = rules_for(media_blocks(self.css['home.css'], 'max-width:760px'), '.hero-cap')
+        # Task 46: in the flow at every width up to 1023px (at 768 the corner tag used to cover "See concept projects").
+        self.assertEqual(rules_for(media_blocks(self.css['home.css'], 'max-width:760px'), '.hero-cap'), [])
+        tablet = rules_for(media_blocks(self.css['home.css'], 'max-width:1023px'), '.hero-cap')
         self.assertEqual(len(tablet), 1)
         self.assertIn('position:relative', tablet[0])  # in the flow, still painted above the absolutely placed stage
         self.assertNotRegex(tablet[0], r'(?<![-\w])top:')
@@ -3880,7 +3886,7 @@ class MobileAndContactPolishTests(unittest.TestCase):
 
 class GlassCritiqueFixesTests(unittest.TestCase):
     """Task 43 (owner-mandated): the Pause motion button's icon agrees with its pressed state and keeps clear of FAQ toggles
-    and the marquee on phones; the demo heading fits its card; the Work queue labels show in full; the footer wordmark is no
+    and the marquee on phones (since Task 46 by living in the header); the demo heading fits its card; the Work queue labels show in full; the footer wordmark is no
     longer cut at its foot; reveal companions (labels, intros, card shells) rise with what they belong to."""
 
     LANE = 'calc(44px + max(12px,env(safe-area-inset-right)))'
@@ -3891,25 +3897,28 @@ class GlassCritiqueFixesTests(unittest.TestCase):
         build()
         cls.css = {name: (OUT / 'assets' / name).read_text() for name in ('site.css', 'glass.css', 'home.css', 'pages.css', 'work.css')}
 
-    def test_pressed_pause_button_shows_pressed_pause_bars_not_a_play_triangle(self):
+    def test_pressed_pause_button_is_inverted_and_its_icon_follows_the_state(self):
+        # Task 46 (owner): the icon reflects the state: pause bars while motion runs, a play triangle once pressed (motion
+        # paused). The name stays "Pause motion" (a toggle button's name is fixed; aria-pressed carries the state).
+        css = base_rules(self.css['glass.css'])
+        rest = rules_for(css, '.motion-btn')[0]
+        pressed = rules_for(css, '.motion-btn[aria-pressed="true"]')
+        self.assertEqual(len(pressed), 1)
+        self.assertIn('background:var(--ink)', pressed[0])
+        self.assertIn('color:#fff', pressed[0])
+        self.assertNotIn('background:var(--ink)', rest)  # resting and pressed look different
+        self.assertEqual(rules_for(css, '.motion-btn[aria-pressed="true"]:hover'), pressed)  # hover keeps the state
+        self.assertIn('border-inline:2.5px solid currentColor', rules_for(css, '.motion-btn::before')[0])  # pause bars
+        icon = rules_for(css, '.motion-btn[aria-pressed="true"]::before')[0]
+        for needle in ('width:0', 'height:0', 'border-inline:0', 'border-block:6px solid transparent', 'border-left:10px solid currentColor'):
+            self.assertIn(needle, icon)  # a play triangle, drawn with borders
+        self.assertLess(icon.index('border-inline:0'), icon.index('border-left:'))  # the triangle's side survives the reset
+        forced = rules_for(media_blocks(self.css['glass.css'], 'forced-colors:active'), '.motion-btn[aria-pressed="true"]')
+        self.assertEqual(len(forced), 1)  # still distinct when the system forces colours (::before inherits the opt-out)
+        for needle in ('forced-color-adjust:none', 'background:ButtonText', 'color:ButtonFace'):
+            self.assertIn(needle, forced[0])
         for sheet in ('home.css', 'pages.css'):
-            with self.subTest(sheet=sheet):
-                css = base_rules(self.css[sheet])
-                rest = rules_for(css, '.motion-btn')[0]
-                pressed = rules_for(css, '.motion-btn[aria-pressed="true"]')
-                self.assertEqual(len(pressed), 1)
-                self.assertIn('background:var(--ink)', pressed[0])
-                self.assertIn('color:#fff', pressed[0])
-                self.assertNotIn('background:var(--ink)', rest)  # resting and pressed look different
-                self.assertEqual(rules_for(css, '.motion-btn[aria-pressed="true"]:hover'), pressed)  # hover keeps the state
-                icon = rules_for(css, '.motion-btn[aria-pressed="true"]::before')[0]
-                self.assertNotRegex(icon, r'border-left:\d+px')  # no play triangle under a "Pause motion" name
-                self.assertNotIn('width:0', icon)
-                self.assertIn('border-inline:2.5px solid currentColor', rules_for(css, '.motion-btn::before')[0])  # bars, both states
-                forced = rules_for(media_blocks(self.css[sheet], 'forced-colors:active'), '.motion-btn[aria-pressed="true"]')
-                self.assertEqual(len(forced), 1)  # still distinct when the system forces colours
-                for needle in ('forced-color-adjust:none', 'background:ButtonText', 'color:ButtonFace'):
-                    self.assertIn(needle, forced[0])
+            self.assertNotIn('.motion-btn', self.css[sheet])
         # The name never changes with the state (aria-pressed carries it), so the label and state cannot disagree.
         site = (OUT / 'assets/site.js').read_text()
         toggle = site[site.index("const toggle = document.querySelector('[data-motion-toggle]');"):site.index("const asked = document.querySelector('[data-nf-path]');")]
@@ -3917,15 +3926,15 @@ class GlassCritiqueFixesTests(unittest.TestCase):
             self.assertNotIn(banned, toggle)
 
     def test_phone_faq_toggles_and_marquee_keep_clear_of_the_pause_button(self):
-        pages = media_blocks(self.css['pages.css'], 'max-width:640px')
-        self.assertEqual(rules_for(pages, f'{self.SHOWN} .faq summary'), [f'padding-right:{self.LANE}'])
-        home = media_blocks(self.css['home.css'], 'max-width:640px')
-        strip = rules_for(home, f'{self.SHOWN} .mq-strip')
-        self.assertEqual(len(strip), 1)
-        # The moving pills cannot take padding, so the strip fades to nothing before the button's lane.
-        edge = f'transparent calc(100% - 44px - max(12px,env(safe-area-inset-right)))'
-        for prop in ('-webkit-mask-image', 'mask-image'):
-            self.assertRegex(strip[0], rf'(?:^|;){re.escape(prop)}:linear-gradient\(90deg,#000 [^;]*,{re.escape(edge)}\)')
+        # Task 46: the button moved into the header, so the FAQ toggles and the marquee use the full width again: no lane
+        # rules remain, and nothing positions the button over the page.
+        for sheet in ('home.css', 'pages.css'):
+            with self.subTest(sheet=sheet):
+                self.assertNotIn(self.SHOWN, self.css[sheet])
+                self.assertNotIn(self.LANE, self.css[sheet])
+        self.assertEqual(rules_for(media_blocks(self.css['home.css'], 'max-width:640px'), '.mq-strip'), [])
+        self.assertEqual(rules_for(media_blocks(self.css['pages.css'], 'max-width:640px'), '.faq summary'), [])
+        self.assertNotRegex(self.css['glass.css'], r'\.motion-btn[^{]*\{[^}]*position:fixed')
 
     def test_demo_heading_fits_its_card(self):
         rule = rules_for(base_rules(self.css['site.css']), '.demo-side h2')
@@ -4229,3 +4238,72 @@ class CleanPanesWhiteTypeAndWordExitTests(unittest.TestCase):
         frame = self.scene.split('function frame(dt) {', 1)[1].split('\n  }', 1)[0]
         self.assertNotIn('transparent', frame)
         self.assertNotRegex(self.scene, r'wordGlass\.(?:transparent|opacity)\s*=')
+
+
+class HeroFitPauseGripTests(unittest.TestCase):
+    """Task 46 (owner-mandated): the hero tag never takes a click meant for a hero button and sits in the flow up to 1023px;
+    short screens (150% zoom, landscape phones) and small phones get height-aware hero rules; the before/after picture is
+    draggable, with the range input still the control, and its grip shows whole at both ends. These check that the rules
+    exist, not how they render: the screenshots at the plan's viewports are an owner follow-up."""
+
+    @classmethod
+    def setUpClass(cls):
+        build()
+        cls.home_css = (OUT / 'assets/home.css').read_text()
+        cls.home_js = (OUT / 'assets/home.js').read_text()
+        cls.home = (OUT / 'index.html').read_text()
+
+    def test_hero_tag_never_takes_clicks_and_follows_the_copy_up_to_1023px(self):
+        self.assertIn('pointer-events:none', rules_for(base_rules(self.home_css), '.hero-cap')[0])
+        tablet = media_blocks(self.home_css, 'max-width:1023px')
+        self.assertIn('position:relative', rules_for(tablet, '.hero-cap')[0])
+        # The pin is a column and grows to hold the tag, instead of clipping it at a fixed screen height.
+        pin = rules_for(base_rules(self.home_css), '.hero-pin')[0]
+        self.assertIn('display:flex', pin)
+        self.assertIn('flex-direction:column', pin)
+        self.assertIn('flex:1 0 auto', rules_for(base_rules(self.home_css), '.hero-in')[0])
+        self.assertIn('height:auto', rules_for(tablet, '.hero-pin')[0])
+        self.assertIn('min-height:100svh', rules_for(tablet, '.hero-pin')[0])
+        hero = re.search(r'<section class="hero".*?</section>', self.home, re.S).group(0)
+        self.assertLess(hero.index('See concept projects'), hero.index('<p class="hero-cap lg">'))
+
+    def test_short_screens_size_the_hero_by_height(self):
+        for query, top in (('min-width:761px) and (max-height:720px', 96), ('max-height:500px', 84)):
+            with self.subTest(query=query):
+                block = media_blocks(self.home_css, query)
+                self.assertTrue(block)
+                self.assertIn('height:auto', rules_for(block, '.hero-pin')[0])
+                self.assertIn(f'padding-top:{top}px', rules_for(block, '.hero-in')[0])  # less than the 120px default
+                size = rules_for(block, '.hero-h')[0]
+                self.assertRegex(size, r'font-size:clamp\([\d.]+rem,[\d.]+svh,[\d.]+rem\)')  # scales with the height
+                self.assertTrue(rules_for(block, '.hero .actions'))
+        # Height rules come after the width rules, so they win where both apply.
+        self.assertLess(self.home_css.index('@media(max-width:640px)'), self.home_css.index('@media(min-width:761px) and (max-height:720px)'))
+        self.assertLess(self.home_css.index('@media(min-width:761px) and (max-height:720px)'), self.home_css.index('@media(max-height:500px)'))
+        # Landscape phones use the wide poster (a real file) behind the copy.
+        landscape = rules_for(media_blocks(self.home_css, 'max-height:500px'), '.hero-gl')[0]
+        self.assertIn('url("/assets/glass/hero-glass-poster.jpg")', landscape)
+
+    def test_small_phones_tighten_the_hero_so_both_buttons_fit(self):
+        phone = media_blocks(self.home_css, 'max-width:640px')
+        self.assertIn('padding-top:min(52svh,', rules_for(phone, '.hero-in')[0])  # never lower than before
+        self.assertRegex(rules_for(phone, '.hero-h')[0], r'font-size:clamp\(2\.25rem,')
+        self.assertIn('margin-top:18px', rules_for(phone, '.hero .actions')[0])
+
+    def test_before_after_picture_is_draggable_and_its_grip_stays_whole(self):
+        stage = rules_for(base_rules(self.home_css), '.compare-stage')[0]
+        for needle in ('touch-action:pan-y', 'cursor:ew-resize', 'user-select:none'):
+            self.assertIn(needle, stage)
+        self.assertIn('pointer-events:none', rules_for(base_rules(self.home_css), '.compare-seam')[0])
+        self.assertIn('left:var(--pos)', rules_for(base_rules(self.home_css), '.compare-seam')[0])  # the true seam
+        grip = rules_for(base_rules(self.home_css), '.compare-stage::after')[0]
+        self.assertIn('left:clamp(18px,var(--pos),calc(100% - 18px))', grip)
+        self.assertIn('width:36px', grip)
+        self.assertIn('pointer-events:none', grip)
+        self.assertNotIn('.compare-seam::after', self.home_css)
+        self.assertIn('pointer-events:none', rules_for(base_rules(self.home_css), '.mock')[0])  # no image drag, no selection
+        # The range input is still the control: the drag writes its value and fires its input event.
+        for needle in ("figure.querySelector('.compare-stage')", "range.dispatchEvent(new Event('input', { bubbles: true }))",
+                       "stage.addEventListener('pointercancel', letGo)", 'setPointerCapture', 'releasePointerCapture'):
+            self.assertIn(needle, self.home_js)
+        self.assertIn('<input', main_of(self.home)[main_of(self.home).index('data-compare-controls'):])
