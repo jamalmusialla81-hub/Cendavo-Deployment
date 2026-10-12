@@ -9,7 +9,8 @@
      sheets - Pricing: two frosted sheets and a warm disc behind the HTML quote card, which stays in front as text
      photos - About: a big glass C with the three studio photos floating behind it (the DOM collage steps back)
      mark   - Contact: a small glass C in its own fixed box (.ct-gl-spot) at the hero's top-right, above the form panel and
-              never behind it (Task 41), a headlight photo behind it; the form is untouched
+              never behind it (Task 41), a light photo (white kitchen) behind it, so the C refracts light, never a dark
+              plane (Task 42); the form is untouched
    The loop runs only while the hero is on screen, the tab is visible and Pause motion is off (registered on the shared
    G.pauseFns fan-out, never by replacing G.onPauseChange); otherwise setAnimationLoop(null) stops it and videos pause. */
 import * as THREE from './vendor/three/three.module.min.js';
@@ -25,7 +26,7 @@ export const PANES = [['01', 'New website', 'Planned, written and built'], ['02'
 const LOOP = { 'loop-gl-desktop': '/assets/video/loop-gl-desktop' }; // the only video a page can ask for
 /* the only photos the About and Contact scenes draw: [src, x, y, z, yaw]; never read from the page */
 export const PHOTOS = { photos: [['/assets/images/barber-shave-800.jpg', -1.2, 0.9, -2.6, 0.12], ['/assets/images/detail-wax-800.jpg', 1.5, 1.2, -3.8, -0.1],
-  ['/assets/images/garden-wall-800.jpg', 0.6, -1.1, -3.0, -0.06]], mark: [['/assets/images/detail-headlight-800.jpg', 0.9, 0.5, -3.2, 0.15]] };
+  ['/assets/images/garden-wall-800.jpg', 0.6, -1.1, -3.0, -0.06]], mark: [['/assets/images/clean-kitchen-800.jpg', 0.9, 0.5, -3.2, 0.15]] };
 
 /* Runs `run(on)` whenever the scene should start or stop: on screen, tab visible, Pause motion off. Joins the shared
    pause fan-out from glass.js (or starts it, without replacing an existing one). */
@@ -177,7 +178,7 @@ export function start(host, shared) {
 
   /* fit to the anchor: centre and scale from its rectangle, relative to the canvas */
   const P = { x: 0, y: 0, s: 1 };
-  const fit = { slab: [0.02, -0.06, 0.66], panes: [-0.08, 0.05, 1.1], sheets: [0, 0, 1.0], photos: [0, 0, 1.0], mark: [0, 0, 1.0] }[kind];
+  const fit = { slab: [0.02, -0.06, 0.66], panes: [-0.08, 0.05, 1.1], sheets: [0, 0, 1.0], photos: [0, 0, 1.0], mark: [0, 0, 1.15] }[kind];
   const halfH = Math.tan(THREE.MathUtils.degToRad(15)) * 14;
   function layout() {
     const w = Math.max(1, host.clientWidth), h = Math.max(1, host.clientHeight);

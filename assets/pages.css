@@ -87,9 +87,9 @@
 .ct-mail{margin:28px 0 0;padding-top:20px;border-top:1px solid var(--line);color:var(--ink-2)}
 .ct-mail .mail{font-weight:700}
 /* Task 41: the glass C's own fixed-size box at the top-right (the scene fits the C to it), so the form never clips it;
-   the form panel sits above the scene layer all the same. */
+   the form panel sits above the scene layer all the same. Task 42: a little larger, so it reads as the homepage's C. */
 .ct-side{grid-row:1/span 2}
-.ct-gl-spot{grid-column:10/13;grid-row:1;justify-self:end;width:176px;height:176px;margin-bottom:16px}
+.ct-gl-spot{grid-column:10/13;grid-row:1;justify-self:end;width:216px;height:216px;margin-bottom:16px}
 .ct-form{position:relative;z-index:2;grid-row:2;grid-column:7/13;padding:clamp(22px,3.4vw,48px);border-radius:28px;background:var(--warm);box-shadow:inset 0 0 0 1px rgba(14,14,13,.04)}
 .ct-form-h{margin:0 0 8px;font:780 clamp(1.6rem,1rem + 1.4vw,2.4rem)/1 var(--font-display);font-stretch:88%;letter-spacing:-.025em}
 .ct-form .notice{margin:0;color:var(--mute);line-height:1.5}
@@ -152,6 +152,9 @@
 .field-row{grid-template-columns:minmax(0,1fr)}
 .ct-form{border-radius:22px}
 .form-foot .button,.close-foot .button,.pg-actions .button{width:100%}
+/* Task 42: the full-width hero buttons keep a lane clear of the Pause motion button in the bottom-right corner (glass.css),
+   so it never sits on them, whatever the screen height or scroll position. */
+body:has(.motion-fab:not([hidden])) .pg-actions{padding-right:calc(44px + max(12px,env(safe-area-inset-right)))}
 }
 
 /* Motion: only for people who have not asked for reduced motion; only transform and opacity move, hover within 200 ms.

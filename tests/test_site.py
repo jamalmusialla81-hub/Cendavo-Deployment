@@ -2463,7 +2463,7 @@ class GlassPolishTests(unittest.TestCase):
         self.assertLess(self.contact.index('ct-gl-spot"'), form_start)  # before the form panel, never inside it
         # A fixed size (no layout shift when the scene arrives), at the top-right; gone where WebGL never runs (<=760px).
         spot = rules_for(self.pages_css, '.ct-gl-spot')[0]
-        for needle in ('width:176px', 'height:176px', 'grid-row:1', 'justify-self:end'):
+        for needle in ('width:216px', 'height:216px', 'grid-row:1', 'justify-self:end'):  # Task 42: a little larger
             self.assertIn(needle, spot)
         self.assertIn('.ct-gl-spot{display:none}', self.full_pages_css.split('@media(max-width:760px){', 1)[1].split('}}', 1)[0] + '}')
         # The form panel sits above the scene layer (.pg-gl is z-index 0).
@@ -2473,7 +2473,7 @@ class GlassPolishTests(unittest.TestCase):
         self.assertIn('z-index:0', rules_for(self.pages_css, '.pg-gl')[0])
         # The scene centres the C on that box: no negative corner offsets any more.
         module = (OUT / 'assets/glass-page.js').read_text()
-        self.assertIn('mark: [0, 0, 1.0]', module)
+        self.assertIn('mark: [0, 0, 1.15]', module)  # centred; Task 42: scaled up a little
         self.assertNotIn('mark: [-0.5, -0.5', module)
 
     def test_work_queue_tile_is_a_static_illustrative_mock(self):
@@ -3778,3 +3778,87 @@ class GlassPageSceneTests(unittest.TestCase):
         self.assertRegex(self.module, r"const LOOP = \{ 'loop-gl-desktop': '/assets/video/loop-gl-desktop' \};")
         self.assertTrue((OUT / 'assets/video/loop-gl-desktop.mp4').is_file())
         self.assertTrue((OUT / 'assets/video/loop-gl-desktop-poster.jpg').is_file())
+
+
+class MobileAndContactPolishTests(unittest.TestCase):
+    """Task 42 (owner-mandated): on phones the Pause motion button is a 44x44 icon that keeps its name and never sits on the
+    hero buttons; the homepage tag leaves the nav pill's corner; the Contact glass C refracts a light photo, a little larger."""
+
+    BUTTON = '<button class="motion-btn motion-fab" type="button" data-motion-toggle aria-pressed="false" hidden>Pause motion</button>'
+    LANE = 'padding-right:calc(44px + max(12px,env(safe-area-inset-right)))'
+
+    @classmethod
+    def setUpClass(cls):
+        build()
+        cls.css = {name: (OUT / 'assets' / name).read_text() for name in ('glass.css', 'home.css', 'pages.css')}
+        cls.home = (OUT / 'index.html').read_text()
+        cls.module = (OUT / 'assets/glass-page.js').read_text()
+
+    def test_phone_pause_button_is_a_44px_icon_that_keeps_its_name(self):
+        # Same markup on every page that moves, so the accessible name stays "Pause motion".
+        for route in ('index.html', 'work/index.html', 'services/index.html', 'pricing/index.html', 'about/index.html', 'contact/index.html'):
+            with self.subTest(route=route):
+                self.assertEqual((OUT / route).read_text().count(self.BUTTON), 1)
+        phone = rules_for(media_blocks(self.css['glass.css'], 'max-width:640px'), '.motion-btn.motion-fab')
+        self.assertEqual(len(phone), 1)
+        for needle in ('width:44px', 'height:44px', 'min-height:44px', 'padding:0', 'font-size:0', 'justify-content:center'):
+            self.assertIn(needle, phone[0])
+        # The label is shrunk, never removed from the accessibility tree, and the button never disappears.
+        for banned in ('display:none', 'visibility:hidden', 'opacity:0'):
+            self.assertNotIn(banned, phone[0])
+        self.assertNotRegex(phone[0], r'(?<![-\w])content:')  # no generated text replacing the label
+        self.assertNotIn('.motion-btn.motion-fab::before', self.css['glass.css'])
+        # It stays fixed in the corner, clear of the home bar; the icon still shows both states (drawn with borders).
+        base = rules_for(base_rules(self.css['glass.css']), '.motion-fab')[0]
+        for needle in ('position:fixed', 'bottom:max(12px,env(safe-area-inset-bottom))', 'right:max(12px,env(safe-area-inset-right))'):
+            self.assertIn(needle, base)
+        for sheet in ('home.css', 'pages.css'):
+            with self.subTest(sheet=sheet):
+                css = base_rules(self.css[sheet])
+                self.assertIn('border-inline:2.5px solid currentColor', rules_for(css, '.motion-btn::before')[0])
+                self.assertIn('border-left:8px solid currentColor', rules_for(css, '.motion-btn[aria-pressed="true"]::before')[0])
+                self.assertNotIn('.motion-btn.motion-fab', self.css[sheet])  # one place sizes the phone button
+        self.assertIn(':focus-visible{outline:2px solid var(--ink)', (OUT / 'assets/site.css').read_text())
+
+    def test_phone_hero_buttons_keep_a_lane_clear_of_the_pause_button(self):
+        # Buttons are full width on phones; the lane is the button's 44px plus its corner offset, so their rectangles can
+        # never meet. Only while the button is shown (without JavaScript it stays hidden and the buttons use the full width).
+        home = rules_for(media_blocks(self.css['home.css'], 'max-width:640px'), 'body:has(.motion-fab:not([hidden])) .hero .actions')
+        pages = rules_for(media_blocks(self.css['pages.css'], 'max-width:640px'), 'body:has(.motion-fab:not([hidden])) .pg-actions')
+        self.assertEqual(home, [self.LANE])
+        self.assertEqual(pages, [self.LANE])
+        self.assertIn('width:100%', rules_for(media_blocks(self.css['home.css'], 'max-width:640px'), '.actions .button')[0])
+        self.assertIn('href="#work">See concept projects</a>', main_of(self.home))
+        pricing = main_of((OUT / 'pricing/index.html').read_text())
+        self.assertRegex(pricing, re.compile(r'<section class="pg-hero[^"]*"(?:(?!</section>).)*<div class="pg-actions"', re.S))  # in the hero
+
+    def test_phone_hero_tag_follows_the_copy_instead_of_the_nav_corner(self):
+        hero = re.search(r'<section class="hero".*?</section>', self.home, re.S).group(0)
+        self.assertLess(hero.index('class="wrap hero-in"'), hero.index('<p class="hero-cap lg">'))  # after the stage and buttons
+        tablet = rules_for(media_blocks(self.css['home.css'], 'max-width:760px'), '.hero-cap')
+        self.assertEqual(len(tablet), 1)
+        self.assertIn('position:relative', tablet[0])  # in the flow, still painted above the absolutely placed stage
+        self.assertNotRegex(tablet[0], r'(?<![-\w])top:')
+        self.assertIn('flex-wrap:wrap', tablet[0])
+        self.assertIn('z-index:2', rules_for(base_rules(self.css['home.css']), '.hero-cap')[0])
+        # The phone poster scales with the width, so the taller hero never enlarges the wordmark into the headline.
+        self.assertIn('background-size:100% auto', rules_for(media_blocks(self.css['home.css'], 'max-width:760px'), '.hero-gl')[0])
+
+    def test_contact_glass_c_refracts_a_light_photo_and_is_larger(self):
+        block = re.search(r'export const PHOTOS = \{.*?\};', self.module, re.S).group(0)
+        mark = re.search(r"mark: \[\['(/assets/images/[a-z-]+-800\.jpg)'", block)
+        self.assertIsNotNone(mark)
+        self.assertNotIn('detail-headlight', block)  # mostly black: it showed as a dark fill inside the C
+        self.assertIn(mark.group(1), ('/assets/images/clean-kitchen-800.jpg', '/assets/images/clean-living-800.jpg',
+                                      '/assets/images/garden-deck-800.jpg'))
+        self.assertTrue((OUT / mark.group(1).lstrip('/')).is_file())
+        scale = float(re.search(r'mark: \[0, 0, ([\d.]+)\]', self.module).group(1))
+        self.assertGreater(scale, 1.0)
+        self.assertLessEqual(scale, 1.3)  # a little larger, not a different composition
+        # The scene's own background stays the light paper colour; nothing in the module paints a dark plane for the mark.
+        self.assertIn('scene.background = paper;', self.module)
+        spot = rules_for(base_rules(self.css['pages.css']), '.ct-gl-spot')[0]
+        size = [int(v) for v in re.findall(r'(?:^|;)(?:width|height):(\d+)px', spot)]
+        self.assertEqual(len(size), 2)
+        self.assertTrue(all(v >= 200 for v in size), spot)
+        self.assertIn('.ct-gl-spot{display:none}', media_blocks(self.css['pages.css'], 'max-width:760px'))

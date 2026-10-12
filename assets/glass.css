@@ -67,3 +67,10 @@
    footer gains room below so the button never sits over its last line. The header (z-index 50) and its menu stay above it. */
 .motion-fab{position:fixed;right:max(12px,env(safe-area-inset-right));bottom:max(12px,env(safe-area-inset-bottom));z-index:45;box-shadow:0 12px 30px -14px rgba(58,40,12,.4)}
 .motion-fab:not([hidden])~.footer{padding-bottom:64px}
+/* Task 42: on phones it is a 44x44 glass circle showing only its pause/play icon (the ::before bars or triangle, drawn with
+   borders, so they survive forced colours). The words stay in the button at font-size 0: still its accessible name,
+   "Pause motion", for screen readers and voice control. The two-class selector outranks .motion-btn in home.css and
+   pages.css, which load later. Hero button rows keep a lane clear of it (home.css, pages.css). */
+@media(max-width:640px){
+.motion-btn.motion-fab{justify-content:center;width:44px;height:44px;min-height:44px;padding:0;gap:0;font-size:0;line-height:0}
+}

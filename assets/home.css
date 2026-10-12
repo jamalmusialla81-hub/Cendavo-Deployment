@@ -284,13 +284,20 @@
 }
 @media(max-width:760px){
 .hero-pin{height:auto;min-height:100svh}
-.hero-gl{background-image:url("/assets/glass/hero-glass-poster-m.jpg");background-position:50% 0}
+/* The phone poster scales with the screen width (not the hero's height), so the glass wordmark stays above the headline
+   however tall the copy and the tag below it make the hero; under the poster's foot the paper colour shows, behind the veil. */
+.hero-gl{background-image:url("/assets/glass/hero-glass-poster-m.jpg");background-position:50% 0;background-size:100% auto}
 .hero-gl::after{background:linear-gradient(0deg,rgba(246,245,241,.96) 0%,rgba(246,245,241,.85) 42%,rgba(246,245,241,0) 64%)}
-.hero-in{padding-top:52svh;padding-bottom:88px}
-.hero-cap{top:92px;bottom:auto;right:16px;padding:8px 12px}
+.hero-in{padding-top:52svh;padding-bottom:32px}
+/* Task 42: the tag leaves the corner under the nav pill and follows the copy, below the stage and the buttons. Relative
+   (not static) so it still paints above the stage. */
+.hero-cap{position:relative;right:auto;bottom:auto;flex-wrap:wrap;row-gap:2px;width:fit-content;max-width:calc(100% - 2 * var(--gut));margin:0 var(--gut) 56px;padding:8px 14px;border-radius:20px}
 }
 @media(max-width:640px){
 .actions .button,.band .button{width:100%}
+/* Task 42: the stacked hero buttons keep a lane clear of the Pause motion button in the bottom-right corner (glass.css),
+   so it never sits on "See concept projects", whatever the screen height or scroll position. */
+body:has(.motion-fab:not([hidden])) .hero .actions{padding-right:calc(44px + max(12px,env(safe-area-inset-right)))}
 .compare-stage{aspect-ratio:4/5}
 /* Phones: the vertical cut in a 9:16 frame, capped so it never fills more than about three quarters of the screen. */
 .reel-frame{width:min(100%,calc(74svh * 9 / 16));aspect-ratio:9/16}
