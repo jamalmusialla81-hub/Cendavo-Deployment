@@ -1,4 +1,4 @@
-/* Cendavo Liquid Glass inner-page centrepiece (Task 39), ported from docs/design/glass/prototype/gl-page.js. An ES module
+/* Cendavo Liquid Glass inner-page centrepiece (Tasks 39 and 40), ported from docs/design/glass/prototype/gl-page.js. An ES module
    imported by glass-boot.js only after load and idle, only on capable desktops, never with reduced motion, Save-Data or
    without WebGL. Same white frosted glass family as the homepage C, imported by relative path (no import map).
    The host ([data-gl], aria-hidden) sits behind its hero; the object is fitted to a hero element named by data-gl-anchor.
@@ -6,19 +6,25 @@
    accessibility tree. Kinds (anything else draws nothing):
      slab  - Work: a frosted glass slab at an angle, the Greenline concept loop playing behind it; the DOM phone stays in front
      panes - Services: three stacked glass panes (New website / Redesign / Care plan) fanning out, upper panes further back
+     sheets - Pricing: two frosted sheets and a warm disc behind the HTML quote card, which stays in front as text
+     photos - About: a big glass C with the three studio photos floating behind it (the DOM collage steps back)
+     mark   - Contact: a small glass C behind the form panel's top-left corner, a headlight photo behind it; the form is untouched
    The loop runs only while the hero is on screen, the tab is visible and Pause motion is off (registered on the shared
    G.pauseFns fan-out, never by replacing G.onPauseChange); otherwise setAnimationLoop(null) stops it and videos pause. */
 import * as THREE from './vendor/three/three.module.min.js';
-import { roundedRect } from './glass-scene.js';
+import { roundedRect, MARK, extrude, silhouette } from './glass-scene.js';
 
 const easeOut = (t) => (t >= 1 ? 1 : 1 - Math.pow(2, -10 * t)); // expo out, no overshoot
 const damp = (a, b, lambda, dt) => a + (b - a) * (1 - Math.exp(-lambda * dt));
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 
-export const KINDS = ['slab', 'panes'];
+export const KINDS = ['slab', 'panes', 'sheets', 'photos', 'mark'];
 export const PANES = [['01', 'New website', 'Planned, written and built'], ['02', 'Redesign', 'Same name, a better first impression'],
   ['03', 'Care plan', 'Updates, backups and small changes']];
 const LOOP = { 'loop-gl-desktop': '/assets/video/loop-gl-desktop' }; // the only video a page can ask for
+/* the only photos the About and Contact scenes draw: [src, x, y, z, yaw]; never read from the page */
+export const PHOTOS = { photos: [['/assets/images/barber-shave-800.jpg', -1.2, 0.9, -2.6, 0.12], ['/assets/images/detail-wax-800.jpg', 1.5, 1.2, -3.8, -0.1],
+  ['/assets/images/garden-wall-800.jpg', 0.6, -1.1, -3.0, -0.06]], mark: [['/assets/images/detail-headlight-800.jpg', 0.9, 0.5, -3.2, 0.15]] };
 
 /* Runs `run(on)` whenever the scene should start or stop: on screen, tab visible, Pause motion off. Joins the shared
    pause fan-out from glass.js (or starts it, without replacing an existing one). */
@@ -120,6 +126,7 @@ export function start(host, shared) {
 
   const obj = new THREE.Group(); scene.add(obj);   // the glass centrepiece
   const back = new THREE.Group(); scene.add(back); // what it refracts
+  const photoCard = (src, w, h) => new THREE.Mesh(roundedRect(w, h, 0.12), new THREE.MeshBasicMaterial({ map: img(src), toneMapped: false }));
   let unitH = 3.4;
   const parts = [];
   if (kind === 'slab') {
@@ -127,7 +134,7 @@ export function start(host, shared) {
     const base = LOOP[host.dataset.glVideo] || LOOP['loop-gl-desktop'];
     const scr = new THREE.Mesh(roundedRect(4.1, 2.56, 0.14), loopMaterial(base)); scr.position.set(0.55, 0.4, -0.75); obj.add(scr);
     const bez = new THREE.Mesh(roundedRect(4.24, 2.7, 0.2), new THREE.MeshBasicMaterial({ color: 0x1b1a17, toneMapped: false })); bez.position.set(0.55, 0.4, -0.76); obj.add(bez);
-  } else {
+  } else if (kind === 'panes') {
     PANES.forEach((d) => {
       const g = new THREE.Group();
       g.add(new THREE.Mesh(slabGeo(3.2, 2.0, 0.2, 0.08, 0.07), glass));
@@ -139,6 +146,29 @@ export function start(host, shared) {
     const ph = new THREE.Mesh(roundedRect(3.4, 2.26, 0.12), new THREE.MeshBasicMaterial({ map: img('/assets/images/barber-chair-800.jpg'), toneMapped: false }));
     ph.position.set(1.6, 1.0, -6.5); back.add(ph);
     unitH = 3.6;
+  } else if (kind === 'sheets') {
+    const sheet = slabGeo(3.0, 3.8, 0.24, 0.1, 0.08); // one geometry, one material, two meshes
+    [[1.3, 0.9, -1.4, 0.22], [-1.1, -0.7, -2.6, -0.16]].forEach(([x, y, z, r]) => {
+      const s = new THREE.Mesh(sheet, glass); s.position.set(x, y, z); s.rotation.set(0.1, r, r * 0.4); obj.add(s);
+    });
+    const sun = new THREE.Mesh(new THREE.CircleGeometry(1.5, 48), new THREE.MeshBasicMaterial({ color: new THREE.Color('#E8B45C'), toneMapped: false }));
+    sun.position.set(1.9, 1.5, -4); back.add(sun);
+    unitH = 4.2;
+  } else {
+    /* the C: big for About (the photos float behind it), small for Contact */
+    const g = extrude(`<svg viewBox="0 0 200 200">${MARK.map((d) => `<path d="${d}"/>`).join('')}</svg>`,
+      { depth: 40, bevelEnabled: true, bevelThickness: 14, bevelSize: 8, bevelSegments: 14, curveSegments: 48 });
+    const s = 3.2 / 152; g.scale(s, s, s);
+    obj.add(new THREE.Mesh(g, glass));
+    const sh = silhouette(MARK, [24, 24, 135, 152], { pad: 0.22, blur: 12, color: 'rgba(52,40,24,0.4)' });
+    const w = 3.2 * 135 / 152 * sh.scaleW;
+    const shm = new THREE.Mesh(new THREE.PlaneGeometry(w, w / sh.aspect), new THREE.MeshBasicMaterial({ map: sh.tex, transparent: true, depthWrite: false, toneMapped: false }));
+    shm.position.set(0.08, -0.16, -0.7); shm.renderOrder = 10; obj.add(shm);
+    PHOTOS[kind].forEach(([src, x, y, z, r]) => {
+      const p = kind === 'photos' ? photoCard(src, 2.7, 1.8) : photoCard(src, 2.6, 1.75);
+      p.position.set(x, y, z); p.rotation.set(0, r, r * 0.3); back.add(p); if (kind === 'photos') parts.push(p);
+    });
+    unitH = kind === 'photos' ? 3.9 : 3.4;
   }
   const key = new THREE.DirectionalLight(0xffffff, 1.5); key.position.set(-3, 5, 6); scene.add(key);
   const rimL = new THREE.DirectionalLight(0xffffff, 2.2); rimL.position.set(-1, 5, -7); scene.add(rimL);
@@ -146,7 +176,7 @@ export function start(host, shared) {
 
   /* fit to the anchor: centre and scale from its rectangle, relative to the canvas */
   const P = { x: 0, y: 0, s: 1 };
-  const fit = { slab: [0.02, -0.06, 0.66], panes: [-0.08, 0.05, 1.1] }[kind];
+  const fit = { slab: [0.02, -0.06, 0.66], panes: [-0.08, 0.05, 1.1], sheets: [0, 0, 1.0], photos: [0, 0, 1.0], mark: [-0.5, -0.5, 0.3] }[kind];
   const halfH = Math.tan(THREE.MathUtils.degToRad(15)) * 14;
   function layout() {
     const w = Math.max(1, host.clientWidth), h = Math.max(1, host.clientHeight);
@@ -166,7 +196,9 @@ export function start(host, shared) {
 
   const clock = new THREE.Clock(); let t = 0, intro = 0;
   const sm = { px: 0, py: 0, p: 0 };
-  const yaw = kind === 'slab' ? -0.42 : -0.36;
+  const yaw = { slab: -0.42, panes: -0.36, sheets: -0.2, photos: -0.26, mark: -0.3 }[kind];
+  const roll = kind === 'photos' || kind === 'mark' ? -0.06 : 0;
+  const rest = parts.map((g) => g.position.z);
   function frame(dt) {
     t += dt; intro += dt;
     sm.px = damp(sm.px, G.pointer.x || 0, 2.5, dt); sm.py = damp(sm.py, G.pointer.y || 0, 2.5, dt);
@@ -178,8 +210,9 @@ export function start(host, shared) {
     obj.scale.setScalar(P.s * (0.86 + 0.14 * k));
     back.position.set(P.x, P.y + sm.p * 0.3, -(1 - k) * 6);
     back.scale.setScalar(P.s);
-    obj.rotation.set(0.1 + Math.sin(t * 0.21) * 0.035 + sm.py * 0.1 + sm.p * 0.3, yaw * k - 0.5 * (1 - k) + Math.sin(t * 0.28) * 0.07 + sm.px * 0.16, 0);
-    parts.forEach((g, i) => {
+    obj.rotation.set(0.1 + Math.sin(t * 0.21) * 0.035 + sm.py * 0.1 + sm.p * 0.3, yaw * k - 0.5 * (1 - k) + Math.sin(t * 0.28) * 0.07 + sm.px * 0.16, roll);
+    if (kind === 'photos') parts.forEach((g, i) => { g.position.z = rest[i] + Math.sin(t * 0.4 + i * 2) * 0.12; }); // a slow depth breath
+    else parts.forEach((g, i) => {
       const f = easeOut(clamp((intro - 0.3 - i * 0.18) / 2, 0, 1));
       g.position.set((i - 1) * 0.8 * f, (1 - i) * 0.95 * f, (i - 1) * 0.75 * f); // upper panes sit further back, so every title stays clear
       g.rotation.set(0, (i - 1) * 0.1 * f + Math.sin(t * 0.3 + i) * 0.03, 0);

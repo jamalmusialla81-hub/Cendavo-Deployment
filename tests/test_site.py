@@ -1,3 +1,4 @@
+import hashlib
 import re
 import struct
 import unittest
@@ -406,7 +407,8 @@ INDEX_GSAP_TAGS = GSAP_TAGS[:2]
 GLASS_TAGS = ['<script src="/assets/vendor/lenis/lenis.min.js" defer></script>', '<script src="/assets/glass.js" defer></script>']
 GLASS_BOOT_TAG = '<script src="/assets/glass-boot.js" defer></script>'
 GL_HOOKS = {'data-gl', 'data-gl-kind', 'data-gl-video', 'data-gl-anchor', 'data-gl-hide'}  # the scene host (Task 39)
-GL_ROUTES = ('index.html', 'work/index.html', 'services/index.html')  # pages with a WebGL scene host (Task 39)
+GL_ROUTES = ('index.html', 'work/index.html', 'services/index.html', 'pricing/index.html', 'about/index.html',
+             'contact/index.html')  # pages with a WebGL scene host (Tasks 39 and 40)
 DETAILS_TAG = GSAP_TAGS[3]
 # Network, storage and markup-injection APIs no motion script may use; autoAlpha (visibility:hidden), snap (scroll
 # hijacking) and preventDefault (swallowing a visitor's key or click) are banned too.
@@ -824,7 +826,8 @@ class DesignSystemTests(unittest.TestCase):
                 for tag in HOME_GSAP_TAGS:
                     self.assertEqual(html.count(tag), 1 if route in MOTION_ROUTES and tag in gsap_tags else 0)
                 # Liquid Glass (Task 37): Lenis and glass.js follow the page scripts on every motion page; the WebGL boot
-                # follows them on the homepage, Work and Services (Task 39). Contact, Demo and 404 load neither.
+                # follows them on the homepage and the inner pages (Tasks 39 and 40). Contact loads only the boot; Demo and 404
+                # load neither.
                 for tag in GLASS_TAGS:
                     self.assertEqual(html.count(tag), 1 if route in MOTION_ROUTES else 0)
                 self.assertEqual(html.count(GLASS_BOOT_TAG), 1 if route in GL_ROUTES else 0)
@@ -1759,7 +1762,7 @@ class AboutPageTests(unittest.TestCase):
         self.assertEqual(hero.count('<picture><source type="image/avif" '), 3)
         # The intro paragraph sits directly under the headline, before the photos.
         self.assertRegex(hero, r'</h1>\s*<p class="pg-sub">')
-        self.assertLess(hero.index('</h1>'), hero.index('ab-photos'))
+        self.assertLess(hero.index('</h1>'), hero.index('<div class="ab-photos"'))  # the collage, not the scene host's anchor (Task 40)
         below = ImageCollector()
         below.feed(rest)
         # Below the opening: the "How we think" photo, the five trades photos moved from the homepage (Task 28, same
@@ -1811,7 +1814,8 @@ class AboutPageTests(unittest.TestCase):
         scripts = re.findall(r'<script src="([^"]+)"', self.html)
         self.assertEqual(scripts, ['/assets/motion-boot.js', '/assets/site.js', '/assets/vendor/gsap/gsap.min.js',
                                    '/assets/vendor/gsap/ScrollTrigger.min.js', '/assets/motion.js', '/assets/scenes.js', '/assets/reel.js',
-                                   '/assets/vendor/lenis/lenis.min.js', '/assets/glass.js'])  # Liquid Glass shell (Task 37)
+                                   '/assets/vendor/lenis/lenis.min.js', '/assets/glass.js',  # Liquid Glass shell (Task 37)
+                                   '/assets/glass-boot.js'])  # the WebGL scene boot (Task 40)
         self.assertNotIn('data-intro', self.html)
         # Night Shift Task 23: About opens like Work, Services and Pricing (headline line masks, staggered photo reveal).
         self.assertEqual(self.main.count(' data-ph '), 1)
@@ -3561,7 +3565,11 @@ class GlassPageSceneTests(unittest.TestCase):
     fitted to a hero element, imported by glass-boot.js from a fixed list (tests/test_demo_js.py covers when). The media it
     stands in for stays in the page; the module imports only vendored three and glass-scene.js by relative path."""
 
-    PAGES = {'work/index.html': ('slab', '.wk-clip', False), 'services/index.html': ('panes', '.sv-hero-media', True)}
+    PAGES = {'work/index.html': ('slab', '.wk-clip', False), 'services/index.html': ('panes', '.sv-hero-media', True),
+             'pricing/index.html': ('sheets', '.quote-desk', False), 'about/index.html': ('photos', '.ab-photos', True),
+             'contact/index.html': ('mark', '.ct-form', False)}
+    # Task 40: the Contact form block as it stood before the scene was added (pages/contact.html source, placeholders intact).
+    CONTACT_FORM_SHA256 = 'd2e002ac26f55a10571d853e20320bd8ee5fe26a07ee0e99003c9e3c10559220'
 
     @classmethod
     def setUpClass(cls):
@@ -3575,7 +3583,8 @@ class GlassPageSceneTests(unittest.TestCase):
             with self.subTest(route=route):
                 main = main_of(self.html[route])
                 self.assertEqual(main.count(' data-gl '), 1)
-                hero = re.search(r'<section class="pg-hero[^"]*".*?</section>', main, re.S).group(0)
+                # Contact has no .pg-hero: its scene sits in the .ct section, beside the form, never inside it.
+                hero = re.search(r'<section class="(?:pg-hero[^"]*|ct)".*?</section>', main, re.S).group(0)
                 host = re.search(r'<div class="pg-gl" data-gl data-gl-kind="([a-z]+)"[^>]*></div>', hero)
                 self.assertIsNotNone(host)
                 self.assertEqual(host.group(1), kind)
@@ -3602,6 +3611,44 @@ class GlassPageSceneTests(unittest.TestCase):
         self.assertRegex(self.pages_css, r'\.pg-gl\{[^}]*pointer-events:none')
         self.assertRegex(self.pages_css, r'\.pg-gl canvas\{[^}]*pointer-events:none')
         self.assertIn(".classList.add('gl-lead')", self.module)
+
+    def test_part_two_content_stays_html_and_the_contact_form_is_unchanged(self):
+        # Task 40. About: the collage photos stay in the page; only a motion-guarded .gl-lead rule fades them.
+        about = main_of(self.html['about/index.html'])
+        photos = re.search(r'<div class="ab-photos" aria-hidden="true">.*?</div>', about, re.S).group(0)
+        for name in ('barber-shave', 'detail-wax', 'garden-wall'):
+            self.assertRegex(photos, r'<img src="/assets/images/' + name + r'-800\.jpg"[^>]* alt=""')
+        guarded, unguarded = without_blocks(self.pages_css, MOTION_GUARD)[1], without_blocks(self.pages_css, MOTION_GUARD)[0]
+        self.assertIn('.gl-lead .ab-photos{opacity:0}', ''.join(guarded))
+        self.assertNotIn('.ab-photos{opacity:0}', unguarded)
+        # Pricing: every quote line is still HTML text in front of the sheets.
+        quote = re.search(r'<div class="quote-desk">.*?</figure>', main_of(self.html['pricing/index.html']), re.S).group(0)
+        for k, v in (('Pages', 'Home and the pages we agree on'), ('Enquiries', 'Enquiry form to your inbox'), ('Booking', 'If you need it'),
+                     ('Words', 'Written with you, or supplied'), ('Photos', 'Yours, edited and optimised'), ('Launch', 'Domain, hosting setup and go-live')):
+            self.assertIn(f'<span class="k">{k}</span><span class="v">{v}</span>', quote)
+        self.assertIn('<b>Fixed price</b>', quote)
+        # Contact: the form block is byte-for-byte what it was, there is one form, and the scene host is outside it.
+        source = (ROOT / 'pages/contact.html').read_text()
+        form = re.search(r'<form.*?</form>', source, re.S).group(0)
+        self.assertEqual(hashlib.sha256(form.encode()).hexdigest(), self.CONTACT_FORM_SHA256)
+        contact = main_of(self.html['contact/index.html'])
+        self.assertEqual(contact.count('<form'), 1)
+        built = re.search(r'<form.*?</form>', contact, re.S).group(0)
+        self.assertNotIn('data-gl', built)
+        self.assertLess(contact.index('class="pg-gl"'), contact.index('<form'))
+        self.assertIn('<script src="/assets/enquiry.js" defer></script>', self.html['contact/index.html'])
+        self.assertNotIn('glass.js"', self.html['contact/index.html'])  # Contact still gets no Lenis or glass.js shell
+        self.assertRegex(self.pages_css, r':is\(\.pg-hero,\.ct\):has\(>\.pg-gl\)>\.wrap\{position:relative;z-index:1\}')
+
+    def test_part_two_scene_photos_are_fixed_files(self):
+        # The photos the About and Contact scenes draw are hard-coded and exist; no path is read from the page.
+        block = re.search(r'export const PHOTOS = \{.*?\};', self.module, re.S).group(0)
+        srcs = re.findall(r"'(/assets/images/[a-z-]+-800\.jpg)'", block)
+        self.assertEqual(len(srcs), 4)
+        for src in srcs:
+            self.assertTrue((OUT / src.lstrip('/')).is_file(), src)
+        self.assertNotIn('dataset.glPhoto', self.module)
+        self.assertNotIn('getAttribute(', self.module)
 
     def test_module_imports_only_by_relative_path_and_shares_pause_motion(self):
         imports = re.findall(r"^import [^;]*? from '([^']+)';", self.module, re.M)

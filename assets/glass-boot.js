@@ -1,13 +1,14 @@
-// Liquid Glass hero boot (homepage, Work and Services; deferred). The hero ships a still render of the glass logo (CSS poster on
+// Liquid Glass hero boot (homepage and the inner pages; deferred). The hero ships a still render of the glass logo (CSS poster on
 // [data-gl]); this decides whether the live WebGL version replaces it. Never with reduced motion, Save-Data, small screens
 // (760px and below), low-end devices (under 4 GB memory or 4 cores or fewer) or without WebGL: those visitors keep the
 // still. Otherwise the scene module (three.js r170, about 800 KB) is imported only after the page has loaded and gone
 // idle, so it never competes with the headline or the first paint. A failed import or start leaves the still in place.
-// Which module loads comes from a fixed list: no data-gl-kind is the homepage scene, slab (Work) and panes (Services) the
-// inner-page scene; any other kind imports nothing. No path is ever read from the page.
+// Which module loads comes from a fixed list: no data-gl-kind is the homepage scene; slab (Work), panes (Services), sheets
+// (Pricing), photos (About) and mark (Contact) the inner-page scene; any other kind imports nothing. No path is ever read from the page.
 (() => {
   const win = window, doc = document;
-  const MODULES = { home: '/assets/glass-scene.js', slab: '/assets/glass-page.js', panes: '/assets/glass-page.js' };
+  const MODULES = { home: '/assets/glass-scene.js', slab: '/assets/glass-page.js', panes: '/assets/glass-page.js', sheets: '/assets/glass-page.js',
+    photos: '/assets/glass-page.js', mark: '/assets/glass-page.js' };
   const wantsGL = env => !env.reduce && !env.saveData && !env.narrow && !env.lowEnd && env.webgl;
   const G = win.__glass = win.__glass || { paused: false, heroP: 0, pointer: { x: 0, y: 0 } };
   G.wantsGL = wantsGL;
