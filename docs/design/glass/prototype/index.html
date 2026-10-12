@@ -1,0 +1,346 @@
+<!doctype html>
+<html lang="en-AU">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="color-scheme" content="light">
+<meta name="theme-color" content="#F4F2ED">
+<meta name="description" content="Cendavo designs, builds, redesigns and looks after websites for local service businesses in Sydney.">
+<title>Cendavo — Website design for Sydney’s local service businesses</title>
+<link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+<link rel="preload" href="assets/fonts/archivo-var-latin.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="glass.css">
+<script src="assets/vendor/gsap/gsap.min.js" defer></script>
+<script src="assets/vendor/gsap/ScrollTrigger.min.js" defer></script>
+<script src="assets/vendor/lenis/lenis.min.js" defer></script>
+<!-- glass.js is not deferred: it sets .js / .js-motion before first paint, then waits for DOMContentLoaded. -->
+<script src="glass.js"></script>
+<script type="importmap">{"imports":{"three":"./assets/vendor/three/three.module.min.js","three/jsm/":"./assets/vendor/three/jsm/"}}</script>
+<script type="module" src="gl-boot.js"></script>
+</head>
+<body>
+<a class="skip" href="#main">Skip to main content</a>
+
+<!-- soft colour fields behind every glass surface -->
+<div class="atmos" aria-hidden="true"><i class="f f1"></i><i class="f f2"></i><i class="f f3"></i><i class="f f4"></i></div>
+
+<header class="hdr" data-hdr>
+  <div class="hdr-pill lg" data-lg="pill">
+    <a class="brand" href="/" aria-label="Cendavo home">
+      <svg class="mark" viewBox="0 0 200 200" aria-hidden="true" focusable="false"><path d="M55.67 43.26C86.24 19.38 130.22 24.01 155.16 53.72L135.24 70.43C119.31 51.45 91.21 48.5 71.68 63.75Z"/><path d="M48.21 150.02C21.26 122.11 21.26 77.89 48.21 49.98L66.91 68.05C49.7 85.87 49.7 114.13 66.91 131.95Z"/><path d="M155.16 146.28C130.22 175.99 86.24 180.62 55.67 156.74L71.68 136.25C91.21 151.5 119.31 148.55 135.24 129.57Z"/></svg>
+      <span class="brand-word">Cendavo</span>
+    </a>
+    <nav class="nav" id="site-nav" aria-label="Main navigation">
+      <a href="/work.html">Work</a>
+      <a href="/services.html">Services</a>
+      <a href="/pricing.html">Pricing</a>
+      <a class="nav-extra" href="/demo/">Demo project</a>
+      <a href="/about.html">About</a>
+      <a href="/contact.html">Contact</a>
+      <a class="btn btn-ink nav-cta-m" href="/contact.html">Request a free consultation</a>
+    </nav>
+    <a class="btn btn-ink btn-sm hdr-cta" href="/contact.html" data-magnetic><span>Free consultation</span></a>
+    <button class="menu-btn" type="button" aria-controls="site-nav" aria-expanded="false" hidden>
+      <span class="menu-lines" aria-hidden="true"><i></i><i></i></span><span class="menu-label">Menu</span>
+    </button>
+  </div>
+</header>
+
+<main id="main" tabindex="-1">
+
+<!-- HERO: a white liquid-glass Cendavo mark, rendered in WebGL, refracting the concept sites playing behind it -->
+<section class="hero" data-hero aria-labelledby="hero-title">
+  <div class="hero-pin">
+    <div class="hero-gl" data-gl role="img" aria-label="The Cendavo mark and wordmark in clear white glass, floating in front of screens playing the homepages of three fictional concept businesses: Harbourside Mobile Detailing, Greenline Landscapes and Fade and Co.">
+      <picture class="hero-poster">
+        <source media="(max-width: 760px)" srcset="assets/hero-glass-poster-m.jpg">
+        <img src="assets/hero-glass-poster.jpg" width="2160" height="1350" alt="" decoding="async" fetchpriority="high">
+      </picture>
+    </div>
+    <div class="hero-veil" aria-hidden="true"></div>
+
+    <div class="hero-copy">
+      <h1 id="hero-title" class="kin" aria-label="Your work is excellent. Your website should say so.">
+        <span class="ln" aria-hidden="true"><span class="lt">Your work is</span></span>
+        <span class="ln" aria-hidden="true"><span class="lt">excellent.</span></span>
+        <span class="ln" aria-hidden="true"><span class="lt">Your website</span></span>
+        <span class="ln" aria-hidden="true"><span class="lt">should say so.</span></span>
+      </h1>
+      <div class="hero-foot" data-hero-fade>
+        <p class="lede">We design, build and look after websites for Sydney’s local service businesses.</p>
+        <div class="actions">
+          <a class="btn btn-ink btn-lg" href="/contact.html" data-magnetic><span>Request a free consultation</span></a>
+          <a class="btn btn-glass btn-lg lg" href="#work" data-magnetic><span>See concept projects</span></a>
+        </div>
+      </div>
+    </div>
+
+    <!-- illustrative interface cards floating in depth over the scene -->
+    <div class="hero-cards" aria-hidden="true">
+      <div class="gcard lg c-enq" data-depth="1.7">
+        <span class="ava">S</span>
+        <span class="gc-t"><b>New enquiry</b><small>Sam, website redesign</small></span>
+        <span class="when">now</span>
+      </div>
+      <div class="gcard lg c-book booked" data-depth="1">
+        <div class="book-top"><b class="book-title"><span class="bt-a">Choose a time</span><span class="bt-b">Booked</span></b><span class="tag">Concept</span></div>
+        <p class="book-day">Saturday, full detail</p>
+        <div class="slots"><span>8:00</span><span class="slot-pick on">10:30</span><span>1:00</span><span>3:30</span></div>
+        <span class="book-btn"><span class="bb-a">Book a detail</span><span class="bb-b"><svg viewBox="0 0 16 16"><path d="M3 8.5l3 3 7-7"/></svg>Booked for 10:30</span></span>
+      </div>
+    </div>
+
+    <p class="hero-cap lg" data-hero-fade><span class="dot" aria-hidden="true"></span>On screen: concept projects for fictional businesses</p>
+    <a class="scroll-cue" href="#reel" aria-label="Scroll to the showreel"><span></span></a>
+  </div>
+</section>
+
+<!-- SHOWREEL: opens from a glass lens to full bleed -->
+<section class="reel" id="reel" aria-labelledby="reel-title">
+  <div class="wrap reel-head">
+    <h2 id="reel-title" class="h2">Twenty seconds of what we build</h2>
+    <p class="reel-note">Pages from this website and the Harbourside Mobile Detailing concept, in a browser and on a phone. No sound.</p>
+  </div>
+  <div class="reel-stage" data-reel>
+    <div class="reel-lens">
+      <video class="reel-video" muted playsinline loop preload="metadata" poster="assets/video/cendavo-showreel-poster-1600.jpg" width="1600" height="900" aria-label="Showreel" aria-describedby="reel-desc">
+        <source src="assets/video/cendavo-showreel-1600.mp4" type="video/mp4">
+      </video>
+      <span class="lens-rim" aria-hidden="true"></span>
+    </div>
+    <div class="reel-panel lg lg-dark" data-lg="panel">
+      <ol class="chapters" data-chapters aria-label="Showreel chapters">
+        <li><button type="button" data-t="0"><span class="ch-t">0:00</span><span class="ch-n">Your work is excellent</span><span class="ch-bar" aria-hidden="true"></span></button></li>
+        <li><button type="button" data-t="6.5"><span class="ch-t">0:06</span><span class="ch-n">The real site</span><span class="ch-bar" aria-hidden="true"></span></button></li>
+        <li><button type="button" data-t="8"><span class="ch-t">0:08</span><span class="ch-n">Book from a phone</span><span class="ch-bar" aria-hidden="true"></span></button></li>
+        <li><button type="button" data-t="9.5"><span class="ch-t">0:09</span><span class="ch-n">Show the work</span><span class="ch-bar" aria-hidden="true"></span></button></li>
+        <li><button type="button" data-t="11"><span class="ch-t">0:11</span><span class="ch-n">Before and after</span><span class="ch-bar" aria-hidden="true"></span></button></li>
+        <li><button type="button" data-t="13"><span class="ch-t">0:13</span><span class="ch-n">Every screen</span><span class="ch-bar" aria-hidden="true"></span></button></li>
+        <li><button type="button" data-t="15.5"><span class="ch-t">0:15</span><span class="ch-n">Request a consultation</span><span class="ch-bar" aria-hidden="true"></span></button></li>
+      </ol>
+      <div class="reel-ui" data-reel-ui hidden>
+        <button class="reel-play" type="button" data-reel-play>Play showreel</button>
+        <span class="reel-time" aria-hidden="true">0:00 / 0:20</span>
+      </div>
+    </div>
+  </div>
+  <p class="wrap reel-cap"><span id="reel-desc">Showreel: pages from this website and the Harbourside Mobile Detailing concept, with the lines “Your work is excellent” and “Book from a phone”.</span> The businesses in it are concept projects and fictional.</p>
+</section>
+
+<!-- KINETIC MARQUEE: footage seen through the type, glass pills over photographs -->
+<section class="marq" aria-label="What we make">
+  <div class="mq-type" aria-hidden="true" data-mq-type>
+    <video class="mq-video" muted playsinline loop preload="none" poster="assets/video/cendavo-footage-loop-poster.jpg" data-src="assets/video/cendavo-footage-loop.mp4"></video>
+      </div>
+  <p class="sr-only">New websites, redesigns and care plans.</p>
+  <div class="mq-glass" aria-hidden="true">
+    <div class="mq-photos" data-marquee="1">
+      <img src="assets/images/detail-wax-800.jpg" alt="" width="800" height="533" loading="lazy" decoding="async"><img src="assets/images/garden-path-800.jpg" alt="" width="800" height="533" loading="lazy" decoding="async"><img src="assets/images/barber-cut-800.jpg" alt="" width="800" height="533" loading="lazy" decoding="async"><img src="assets/images/detail-splash-800.jpg" alt="" width="800" height="533" loading="lazy" decoding="async"><img src="assets/images/garden-wall-800.jpg" alt="" width="800" height="533" loading="lazy" decoding="async"><img src="assets/images/barber-interior-800.jpg" alt="" width="800" height="533" loading="lazy" decoding="async"><img src="assets/images/detail-wax-800.jpg" alt="" width="800" height="533" loading="lazy" decoding="async"><img src="assets/images/garden-path-800.jpg" alt="" width="800" height="533" loading="lazy" decoding="async"><img src="assets/images/barber-cut-800.jpg" alt="" width="800" height="533" loading="lazy" decoding="async"><img src="assets/images/detail-splash-800.jpg" alt="" width="800" height="533" loading="lazy" decoding="async"><img src="assets/images/garden-wall-800.jpg" alt="" width="800" height="533" loading="lazy" decoding="async"><img src="assets/images/barber-interior-800.jpg" alt="" width="800" height="533" loading="lazy" decoding="async">
+    </div>
+    <div class="mq-pills" data-marquee="-1">
+      <span class="pill lg">Booking from a phone</span><span class="pill lg">Written with you</span><span class="pill lg">Updates</span><span class="pill lg">Security</span><span class="pill lg">Backups</span><span class="pill lg">Site-visit requests</span><span class="pill lg">Packages in plain words</span>
+      <span class="pill lg">Booking from a phone</span><span class="pill lg">Written with you</span><span class="pill lg">Updates</span><span class="pill lg">Security</span><span class="pill lg">Backups</span><span class="pill lg">Site-visit requests</span><span class="pill lg">Packages in plain words</span>
+    </div>
+  </div>
+</section>
+
+<!-- WORK -->
+<section class="work" id="work" aria-labelledby="work-title">
+  <div class="wrap">
+    <div class="work-head">
+      <h2 id="work-title" class="h2">Concept projects</h2>
+      <div class="work-intro">
+        <p>Three fictional businesses, designed the way we would design yours. The photos are real; the businesses are not.</p>
+        <p class="links"><a class="ulink" href="/demo/">See a demonstration project</a><a class="ulink" href="/work.html">See all work</a></p>
+      </div>
+    </div>
+    <div class="cards">
+      <article class="card card-a" aria-labelledby="c1" data-tilt>
+        <div class="card-media">
+          <img class="card-photo" src="assets/images/detail-headlight-1600.jpg" srcset="assets/images/detail-headlight-800.jpg 800w, assets/images/detail-headlight-1600.jpg 1600w" sizes="(max-width: 860px) 100vw, 58vw" width="1600" height="1075" alt="The headlight of a bronze car catching the light in a black studio" loading="lazy" decoding="async">
+          <video class="card-video" muted playsinline loop preload="none" poster="assets/video/loop-hb-desktop-poster.jpg" data-src="assets/video/loop-hb-desktop.mp4" aria-hidden="true"></video>
+          <span class="sweep" aria-hidden="true"></span>
+        </div>
+        <div class="card-body lg lg-tint">
+          <h3 id="c1"><a href="/work.html#harbourside">Harbourside Mobile Detailing</a></h3>
+          <p class="label">Concept project · fictional business</p>
+          <p>A mobile detailer working Sydney’s east, with packages explained in plain words and booking from a phone.</p>
+        </div>
+      </article>
+      <article class="card card-b" aria-labelledby="c2" data-tilt>
+        <div class="card-media">
+          <img class="card-photo" src="assets/images/garden-lawn-800.jpg" srcset="assets/images/garden-lawn-800.jpg 800w, assets/images/garden-lawn-1600.jpg 1600w" sizes="(max-width: 860px) 100vw, 38vw" width="1600" height="1067" alt="A narrow backyard with a stacked stone wall, timber pergola and lawn at dusk" loading="lazy" decoding="async">
+          <video class="card-video" muted playsinline loop preload="none" poster="assets/video/loop-gl-desktop-poster.jpg" data-src="assets/video/loop-gl-desktop.mp4" aria-hidden="true"></video>
+          <span class="sweep" aria-hidden="true"></span>
+        </div>
+        <div class="card-body lg lg-tint">
+          <h3 id="c2"><a href="/work.html#greenline">Greenline Landscapes</a></h3>
+          <p class="label">Concept project · fictional business</p>
+          <p>A North Shore landscaping crew whose finished projects do the selling, with site-visit requests that ask the right questions.</p>
+        </div>
+      </article>
+      <article class="card card-c" aria-labelledby="c3" data-tilt>
+        <div class="card-media">
+          <img class="card-photo" src="assets/images/barber-interior-800.jpg" srcset="assets/images/barber-interior-800.jpg 800w, assets/images/barber-interior-1600.jpg 1600w" sizes="(max-width: 860px) 100vw, 38vw" width="1600" height="1096" alt="A row of leather barber chairs and mirrors in a warmly lit barbershop" loading="lazy" decoding="async">
+          <video class="card-video" muted playsinline loop preload="none" poster="assets/video/loop-fc-desktop-poster.jpg" data-src="assets/video/loop-fc-desktop.mp4" aria-hidden="true"></video>
+          <span class="sweep" aria-hidden="true"></span>
+        </div>
+        <div class="card-body lg lg-tint">
+          <h3 id="c3"><a href="/work.html#fade-co">Fade &amp; Co</a></h3>
+          <p class="label">Concept project · fictional business</p>
+          <p>A small barbershop with today’s hours and a booking button on the first screen, because that is what most customers came for.</p>
+        </div>
+      </article>
+    </div>
+  </div>
+</section>
+
+<!-- BEFORE / AFTER -->
+<section class="ba" aria-labelledby="ba-title">
+  <div class="wrap ba-grid">
+    <div class="ba-copy">
+      <h2 id="ba-title" class="h2">Same business. A very different first impression.</h2>
+      <p>Use the slider to compare. One side shows the kind of site many local businesses still have: cramped, hard to read and with no clear next step. The other shows the same business with its work up front and a booking button you can’t miss.</p>
+    </div>
+    <figure class="compare" data-compare style="--pos:50%">
+      <div class="cmp-frame lg" data-lg="panel">
+        <div class="cmp-bar" aria-hidden="true"><i></i><i></i><i></i><span>harbourside-detailing.example</span></div>
+        <div class="cmp-stage">
+          <img class="cmp-after" src="assets/screens/harbourside-desktop.jpg" width="1280" height="800" alt="" loading="lazy" decoding="async">
+          <div class="cmp-before" aria-hidden="true">
+            <div class="old">
+              <div class="old-top"><b>Harbourside Mobile Detailing!!!</b><small>*** The BEST car cleaning in Sydney ***</small></div>
+              <div class="old-marq"><span>WELCOME TO OUR WEBSITE *** CALL NOW FOR A QUOTE *** WE COME TO YOU *** NEW SPECIALS ***</span></div>
+              <div class="old-body">
+                <div class="old-side"><u>Home</u><u>About Us</u><u>Services</u><u>Gallery</u><u>Contact Us</u><u>Links</u><small>You are visitor no.</small><span class="old-count">004521</span></div>
+                <div class="old-main">
+                  <b class="old-h">About Us</b>
+                  <p>We are a mobile car detailing company that service all areas. We have many years experience and our prices are very competitive. Please call us for more information about our services.</p>
+                  <div class="old-row"><img src="assets/images/detail-wax-800.jpg" width="1600" height="1067" alt="" loading="lazy" decoding="async"><div class="old-news"><b>Latest news</b><span><i>14/02/2009</i> NEW wax special!! Call for price</span><span><i>05/01/2009</i> Now servicing ALL areas</span></div></div>
+                  <table><tr><th>Service</th><th>Price</th></tr><tr><td>Wash</td><td>Call for price</td></tr><tr><td>Wash and Wax</td><td>Call for price</td></tr></table>
+                  <p><u>Click HERE to email us!!</u></p>
+                </div>
+              </div>
+            </div>
+          </div>
+          <span class="cmp-tag cmp-tag-b lg" aria-hidden="true">Before</span>
+          <span class="cmp-tag cmp-tag-a lg" aria-hidden="true">After</span>
+          <span class="cmp-handle" aria-hidden="true"><span class="knob lg"><svg viewBox="0 0 24 24"><path d="M9 6l-5 6 5 6M15 6l5 6-5 6"/></svg></span></span>
+        </div>
+      </div>
+      <div class="cmp-controls" data-compare-controls hidden>
+        <label class="cmp-label"><span>Compare before and after</span><input type="range" min="0" max="100" value="50" data-compare-range></label>
+      </div>
+      <figcaption class="cap">Illustration of a fictional business, Harbourside Mobile Detailing: its dated website on the left and the redesign in our style on the right. It is not a client project.</figcaption>
+    </figure>
+  </div>
+</section>
+
+<!-- SERVICES -->
+<section class="svc" aria-labelledby="svc-title">
+  <div class="wrap">
+    <div class="svc-head"><h2 id="svc-title" class="h2">What we do</h2><a class="ulink" href="/services.html">All services</a></div>
+    <ul class="svc-list">
+      <li class="svc-card" data-vig="build" data-tilt>
+        <div class="svc-media" aria-hidden="true">
+          <img src="assets/images/garden-path-800.jpg" width="800" height="533" alt="" loading="lazy" decoding="async">
+          <div class="vig vb lg" data-lg="panel">
+            <div class="vb-bar"><i></i><i></i><i></i></div>
+            <div class="vb-wire"><span class="w w1"></span><span class="w w2"></span><span class="w w3"></span><span class="w w4"></span></div>
+            <div class="vb-done"><small>Greenline</small><b>Gardens built to be lived in.</b><span class="vb-btn">Book a site visit</span></div>
+          </div>
+          <span class="vig-tag">Wireframe to finished page, concept</span>
+        </div>
+        <div class="svc-text">
+          <span class="num">01</span>
+          <h3><a href="/services.html#new">New website</a></h3>
+          <p>For businesses with no site, or one that was never finished. We plan the pages, write the words with you and build it to bring in enquiries.</p>
+        </div>
+      </li>
+      <li class="svc-card" data-vig="redo" data-tilt>
+        <div class="svc-media" aria-hidden="true">
+          <img src="assets/images/barber-cut-800.jpg" width="800" height="533" alt="" loading="lazy" decoding="async">
+          <div class="vig vr-old"><b>Fade &amp; Co Barbers</b><span>~~ Welcome!! ~~</span><u>Click here for prices</u></div>
+          <div class="vig vr-new lg lg-dark" data-lg="panel"><small><i></i>Open today, 9 am to 7 pm</small><b>Sharp cuts. No waiting around.</b><span class="vr-btn">Book a chair</span></div>
+          <span class="vig-tag">Dated to modern, concept</span>
+        </div>
+        <div class="svc-text">
+          <span class="num">02</span>
+          <h3><a href="/services.html#redesign">Redesign</a></h3>
+          <p>Keep your name and the trust you’ve built. Replace the dated look, the slow pages and the form nobody fills in.</p>
+        </div>
+      </li>
+      <li class="svc-card" data-vig="care" data-tilt>
+        <div class="svc-media" aria-hidden="true">
+          <img src="assets/images/detail-dash-800.jpg" width="800" height="533" alt="" loading="lazy" decoding="async">
+          <div class="vig log lg" data-lg="panel">
+            <div class="log-head"><b>Site care log</b><span class="live"><i></i>Example</span></div>
+            <ol class="log-list">
+              <li><svg viewBox="0 0 16 16"><path d="M3 8.5l3 3 7-7"/></svg><span>Software and plugins updated</span><time>Mon</time></li>
+              <li><svg viewBox="0 0 16 16"><path d="M3 8.5l3 3 7-7"/></svg><span>Backup saved</span><time>Mon</time></li>
+              <li><svg viewBox="0 0 16 16"><path d="M3 8.5l3 3 7-7"/></svg><span>Security check, nothing found</span><time>Wed</time></li>
+              <li><svg viewBox="0 0 16 16"><path d="M3 8.5l3 3 7-7"/></svg><span>Holiday opening hours added</span><time>Thu</time></li>
+            </ol>
+          </div>
+          <span class="vig-tag">Illustration of a care plan log</span>
+        </div>
+        <div class="svc-text">
+          <span class="num">03</span>
+          <h3><a href="/services.html#care">Care plan</a></h3>
+          <p>Updates, security, backups and small changes, so the site stays right long after launch.</p>
+        </div>
+      </li>
+    </ul>
+  </div>
+</section>
+
+<!-- CLOSING CTA: glass over living footage -->
+<section class="close" aria-labelledby="close-title">
+  <div class="close-media" aria-hidden="true">
+    <video class="close-video" muted playsinline loop preload="none" poster="assets/video/cendavo-footage-loop-poster.jpg" data-src="assets/video/cendavo-footage-loop.mp4"></video>
+  </div>
+  <div class="close-devices" aria-hidden="true">
+    <div class="gphone lg gp-1"><video muted playsinline loop preload="none" poster="assets/video/loop-hb-phone-poster.jpg" data-src="assets/video/loop-hb-phone.mp4"></video></div>
+    <div class="gphone lg gp-2"><video muted playsinline loop preload="none" poster="assets/video/loop-gl-phone-poster.jpg" data-src="assets/video/loop-gl-phone.mp4"></video></div>
+  </div>
+  <div class="wrap close-in">
+    <div class="close-panel lg lg-dark" data-lg="panel">
+      <h2 id="close-title" class="close-h"><span class="cl">Let’s make your</span> <span class="cl">website as good</span> <span class="cl">as your work.</span></h2>
+      <div class="close-foot">
+        <p>A short call, no obligation. We’ll tell you honestly what your site needs, and what it doesn’t.</p>
+        <a class="btn btn-amber btn-lg" href="/contact.html" data-magnetic><span>Request a free consultation</span></a>
+      </div>
+    </div>
+  </div>
+</section>
+
+</main>
+
+<footer class="ftr">
+  <div class="wrap">
+    <div class="ftr-row">
+      <div class="ftr-brand">
+        <a class="brand" href="/">
+          <svg class="mark" viewBox="0 0 200 200" aria-hidden="true" focusable="false"><path d="M55.67 43.26C86.24 19.38 130.22 24.01 155.16 53.72L135.24 70.43C119.31 51.45 91.21 48.5 71.68 63.75Z"/><path d="M48.21 150.02C21.26 122.11 21.26 77.89 48.21 49.98L66.91 68.05C49.7 85.87 49.7 114.13 66.91 131.95Z"/><path d="M155.16 146.28C130.22 175.99 86.24 180.62 55.67 156.74L71.68 136.25C91.21 151.5 119.31 148.55 135.24 129.57Z"/></svg>
+          <span>Cendavo</span>
+        </a>
+        <p>Website design, redesign and care for local service businesses.<br>Sydney, Australia.<br><a class="ulink" href="mailto:cendavo.au@gmail.com">cendavo.au@gmail.com</a></p>
+      </div>
+      <nav class="ftr-links" aria-label="Footer navigation">
+        <a href="/">Home</a><a href="/work.html">Work</a><a href="/services.html">Services</a><a href="/pricing.html">Pricing</a><a href="/demo/">Demo project</a><a href="/about.html">About</a><a href="/contact.html">Contact</a>
+      </nav>
+    </div>
+    <div class="ftr-bottom">
+      <p>© 2026 Cendavo. The demonstration project uses sample data only.</p>
+      <p>Harbourside Mobile Detailing, Greenline Landscapes and Fade &amp; Co are fictional concept businesses.</p>
+    </div>
+  </div>
+  <div class="ftr-word" aria-hidden="true"><span data-word>Cendavo</span></div>
+</footer>
+
+<button class="motion-btn lg" type="button" data-motion-toggle hidden aria-pressed="false"><span class="mb-ico" aria-hidden="true"></span><span class="mb-label">Pause motion</span></button>
+
+<!-- refraction filters for Chromium are generated here by glass.js -->
+<svg class="lg-defs" width="0" height="0" aria-hidden="true" focusable="false"><defs data-lg-defs></defs></svg>
+</body>
+</html>
