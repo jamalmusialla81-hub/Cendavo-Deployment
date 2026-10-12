@@ -66,7 +66,9 @@
   const mm = gsap.matchMedia();
   // Scroll reveals only below the fold: hiding what is already on screen would make it blink.
   const later = list => list.filter(item => item.getBoundingClientRect().top >= window.innerHeight);
-  const once = (trigger, start) => ({ trigger, start: start || 'top 82%', once: true });
+  // Task 43: every reveal starts as its trigger's top crosses 85% of the viewport.
+  const START = 'top 85%';
+  const once = (trigger, start) => ({ trigger, start: start || START, once: true });
 
   mm.add(MOTION, () => {
     // Openings, only while CSS holds them (after the 2.5 s failsafe they stay shown): lines rise through their masks, frames
@@ -95,21 +97,23 @@
     const reveals = later($$('[data-reveal]'));
     if (rises.length) {
       gsap.set(rises, { opacity: 0, y: 28 });
-      ScrollTrigger.batch(rises, { start: 'top 88%', once: true, onEnter: batch => gsap.to(batch, { opacity: 1, y: 0, duration: 0.7, stagger: 0.08, ease: IN, clearProps: SHOWN }) });
+      ScrollTrigger.batch(rises, { start: START, once: true, onEnter: batch => gsap.to(batch, { opacity: 1, y: 0, duration: 0.7, stagger: 0.08, ease: IN, clearProps: SHOWN }) });
     }
     if (reveals.length) {
       gsap.set(reveals, { clipPath: 'inset(0 0 100% 0)' });
-      ScrollTrigger.batch(reveals, { start: 'top 85%', once: true, onEnter: batch => gsap.to(batch, { clipPath: 'inset(0 0 0% 0)', duration: 1, stagger: 0.08, ease: IO, clearProps: 'clipPath' }) });
+      ScrollTrigger.batch(reveals, { start: START, once: true, onEnter: batch => gsap.to(batch, { clipPath: 'inset(0 0 0% 0)', duration: 1, stagger: 0.08, ease: IO, clearProps: 'clipPath' }) });
     }
 
     // Device and document mockups slide up into place once.
     later($$('[data-devices]')).forEach(item => {
-      gsap.from(item, { y: 40, opacity: 0, duration: 1, ease: IN, clearProps: SHOWN, scrollTrigger: once(item, 'top 85%') });
+      gsap.from(item, { y: 40, opacity: 0, duration: 1, ease: IN, clearProps: SHOWN, scrollTrigger: once(item) });
     });
 
-    // Lists arrive in reading order.
+    // Lists arrive in reading order. A list inside a rising or un-masking card is triggered by that card, at the same
+    // line, so its items never arrive after the card and leave it standing empty (Task 43).
     later($$('[data-stagger]')).forEach(list => {
-      gsap.fromTo(Array.from(list.children), { opacity: 0, y: 12 }, { opacity: 1, y: 0, duration: 0.7, stagger: 0.06, ease: IN, clearProps: SHOWN, scrollTrigger: once(list) });
+      const host = list.parentElement?.closest?.('[data-rise], [data-reveal]') || list;
+      gsap.fromTo(Array.from(list.children), { opacity: 0, y: 12 }, { opacity: 1, y: 0, duration: 0.7, stagger: 0.06, ease: IN, clearProps: SHOWN, scrollTrigger: once(host) });
     });
 
     // The incoming photo wipes up over the outgoing one; other headings dim.

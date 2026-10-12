@@ -13,11 +13,13 @@
 .wk-tile a:hover .wk-tile-name,.wk-tile a:focus-visible .wk-tile-name{text-decoration:underline;text-decoration-color:var(--amber);text-decoration-thickness:2px;text-underline-offset:.2em}
 .wk-tile-trade{color:var(--mute);font-size:.9375rem}
 /* Task 41: a small glass mock of the queue, static illustrative labels (no names), aria-hidden like the rest of the tile. */
-.wk-demo-mini{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));align-items:start;gap:8px;padding:14px;background:linear-gradient(135deg,#f6efe2,#e9eef3)}
-.wk-demo-mini i{display:flex;flex-direction:column;gap:6px;min-width:0;padding:8px;border:1px solid rgba(255,255,255,.9);border-radius:12px;background:rgba(255,255,255,.55);-webkit-backdrop-filter:blur(10px) saturate(1.6);backdrop-filter:blur(10px) saturate(1.6);box-shadow:inset 0 1px 0 #fff,0 8px 18px -12px rgba(58,40,12,.35);font-style:normal}
-.wk-demo-mini em{display:flex;justify-content:space-between;gap:4px;padding:2px 2px 4px;color:var(--amber-ink);font:650 .6875rem/1 var(--font-display);font-style:normal}
+/* Task 43: the queue thumbnail scales with its tile (a size container, capped at the desktop sizes), so every label fits
+   in full, wrapping between words, at any width instead of being cut to "Website ...". */
+.wk-demo-mini{container-type:inline-size;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));align-items:start;gap:min(6px,2.1cqi);padding:min(12px,4.3cqi);background:linear-gradient(135deg,#f6efe2,#e9eef3)}
+.wk-demo-mini i{display:flex;flex-direction:column;gap:min(6px,2.1cqi);min-width:0;padding:min(6px,2.1cqi);border:1px solid rgba(255,255,255,.9);border-radius:12px;background:rgba(255,255,255,.55);-webkit-backdrop-filter:blur(10px) saturate(1.6);backdrop-filter:blur(10px) saturate(1.6);box-shadow:inset 0 1px 0 #fff,0 8px 18px -12px rgba(58,40,12,.35);font-style:normal}
+.wk-demo-mini em{display:flex;justify-content:space-between;gap:4px;padding:2px 2px 4px;color:var(--amber-ink);font:650 min(.6875rem,3.9cqi)/1 var(--font-display);font-style:normal}
 .wk-demo-mini s{text-decoration:none;color:var(--mute)}
-.wk-demo-mini b{display:block;overflow:hidden;padding:6px 7px;border-radius:8px;background:#fff;box-shadow:0 0 0 1px var(--line);color:var(--ink-2);font:600 .6875rem/1.2 var(--font-display);text-overflow:ellipsis;white-space:nowrap}
+.wk-demo-mini b{display:block;padding:min(6px,2.1cqi) min(5px,1.8cqi);border-radius:8px;background:#fff;box-shadow:0 0 0 1px var(--line);color:var(--ink-2);font:600 min(.6875rem,3.9cqi)/1.2 var(--font-display);overflow-wrap:break-word}
 
 /* Case studies */
 .cs{padding:clamp(72px,8vw,128px) 0 0}

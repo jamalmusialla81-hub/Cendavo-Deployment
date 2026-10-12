@@ -26,7 +26,7 @@
       const show = () => { el.textContent = String(Math.round(at.n)).padStart(finals[i].length, '0'); };
       show();
       gsap.to(at, { n: Number(finals[i]), duration: 0.9, ease: 'power2.out', onUpdate: show, onComplete: () => { el.textContent = finals[i]; },
-        scrollTrigger: { trigger: el, start: 'top 88%', once: true } });
+        scrollTrigger: { trigger: el, start: 'top 85%', once: true } });
     });
     return () => steps.forEach((el, i) => { el.textContent = finals[i]; });
   });

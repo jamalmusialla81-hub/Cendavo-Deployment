@@ -5,6 +5,9 @@
    glass.css; the "after" mini-site in the comparison comes from kit.css. Nothing is hidden outside the guarded block at
    the end, and there only while motion-boot.js holds .ph-wait. */
 .band-warm{background:var(--warm)}
+/* Task 43: homepage sections meet edge to edge, so each gets a little under the site-wide --section; two together no
+   longer leave a 240px gap. */
+:root{--home-sec:clamp(52px,6.4vw,92px)}
 .actions{display:flex;flex-wrap:wrap;gap:10px;margin-top:32px}
 /* The glass nav pill floats over the hero instead of pushing it down. */
 .site-header{margin-bottom:-76px}
@@ -54,13 +57,15 @@
    loop. It floats in the corner as a glass pill. */
 .motion-btn{display:inline-flex;align-items:center;gap:8px;min-height:44px;padding:0 16px;border:1px solid rgba(255,255,255,.85);border-radius:var(--radius-pill);background:rgba(255,255,255,.66);-webkit-backdrop-filter:blur(14px) saturate(1.7);backdrop-filter:blur(14px) saturate(1.7);box-shadow:inset 0 1px 0 #fff,0 12px 30px -14px rgba(58,40,12,.4);font:600 .875rem/1 var(--font-display);color:var(--ink)}
 .motion-btn::before{content:"";width:8px;height:10px;border-inline:2.5px solid currentColor}
-.motion-btn[aria-pressed="true"]::before{width:0;height:0;border:5px solid transparent;border-left:8px solid currentColor;border-right:0}
+.motion-btn[aria-pressed="true"]::before{border-inline-width:3px}
 .motion-btn:hover{background:#fff}
+.motion-btn[aria-pressed="true"],.motion-btn[aria-pressed="true"]:hover{border-color:var(--ink);background:var(--ink);color:#fff}
+@media(forced-colors:active){.motion-btn[aria-pressed="true"]{forced-color-adjust:none;border-color:ButtonText;background:ButtonText;color:ButtonFace}}
 
 /* Showreel: the frame opens from a rounded glass lens to its full size as it scrolls in (home.js, clip-path), and the
    chapters sit on dark glass over its corner. reel.js reveals the chapters, swaps the native controls for one Pause/Play
    button and, on a phone, the vertical cut. The frame's shape is set per screen size, so the swap never shifts layout. */
-.reel{padding-block:var(--section)}
+.reel{padding-block:var(--home-sec)}
 .reel-grid{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));column-gap:var(--col-gap);align-items:start}
 .reel-head{grid-column:1/-1;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));align-items:end;gap:16px 32px;margin-bottom:clamp(32px,4vw,56px)}
 .reel-head h2{margin:0;font-size:clamp(2.25rem,1.2rem + 3vw,4.25rem);font-weight:780;font-stretch:86%;letter-spacing:-.03em}
@@ -96,7 +101,7 @@
 /* Concept projects: three cards of uneven size (a wide lead card, two tall ones, the last set lower). The photo turns into
    the concept site's loop on hover (fine pointers) or when centred (touch), through reel.js; a light sweep follows the
    pointer. The text sits on a frosted glass body overlapping the photo. The title link covers the whole card. */
-.work{padding-block:var(--section)}
+.work{padding-block:var(--home-sec)}
 .work-head{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));align-items:end;gap:32px;padding-bottom:clamp(40px,4vw,64px)}
 .work-head h2{margin:0;font-size:clamp(2.75rem,1rem + 5.4vw,6.6rem);font-weight:780;font-stretch:78%;letter-spacing:-.03em}
 .work-head div{justify-self:end;max-width:42ch}
@@ -121,7 +126,7 @@
 .teaser-line{margin:12px 0 0;max-width:46ch;color:var(--ink-2);font-size:1rem}
 
 /* Before/after section */
-.ba{padding-block:var(--section)}
+.ba{padding-block:var(--home-sec)}
 .ba-grid{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));column-gap:var(--col-gap);align-items:center}
 .ba-copy{grid-column:1/span 4}
 .ba-copy h2{font-size:clamp(2.1rem,1.2rem + 2.6vw,3.75rem);font-weight:780;font-stretch:86%;letter-spacing:-.03em}
@@ -189,7 +194,7 @@
 
 /* What we do: three still glass cards, each with a still illustration (aria-hidden) above its heading. Its text is drawn in cqw so
    it scales with the column. */
-.services{padding-block:var(--section)}
+.services{padding-block:var(--home-sec)}
 .services-head{display:flex;justify-content:space-between;align-items:flex-end;gap:24px;margin-bottom:clamp(32px,4vw,56px)}
 .services-head h2{margin:0;font-size:clamp(2.75rem,1rem + 5.4vw,6.6rem);font-weight:780;font-stretch:78%;letter-spacing:-.03em}
 .svc-list{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:var(--col-gap);list-style:none;margin:0;padding:0}
@@ -235,7 +240,8 @@
 
 /* Closing call to action: a dark glass panel over the footage loop (a still photo underneath until it plays, and for
    everyone without motion), with two glass phones playing concept loops flying in on wide screens (home.js). */
-.band{position:relative;isolation:isolate;overflow:hidden;padding-block:clamp(110px,13vw,190px);background:var(--ink);color:#fff}
+/* Task 43: less dead black under the closing card (the bottom no longer matches the 190px top). */
+.band{position:relative;isolation:isolate;overflow:hidden;padding-block:clamp(110px,13vw,190px) clamp(56px,6vw,96px);background:var(--ink);color:#fff}
 .band-media{position:absolute;inset:0;z-index:-1;opacity:.6}
 .band-media img,.band-video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:50% 40%}
 .band-media::after{content:"";position:absolute;inset:0;background:linear-gradient(180deg,var(--ink) 0%,rgba(14,14,13,.4) 35%,rgba(14,14,13,.55) 70%,var(--ink) 100%)}
@@ -298,6 +304,8 @@
 /* Task 42: the stacked hero buttons keep a lane clear of the Pause motion button in the bottom-right corner (glass.css),
    so it never sits on "See concept projects", whatever the screen height or scroll position. */
 body:has(.motion-fab:not([hidden])) .hero .actions{padding-right:calc(44px + max(12px,env(safe-area-inset-right)))}
+/* Task 43: the marquee pills move, so a padding lane cannot hold them; the strip fades out before the same lane instead. */
+body:has(.motion-fab:not([hidden])) .mq-strip{-webkit-mask-image:linear-gradient(90deg,#000 calc(100% - 44px - max(12px,env(safe-area-inset-right)) - 24px),transparent calc(100% - 44px - max(12px,env(safe-area-inset-right))));mask-image:linear-gradient(90deg,#000 calc(100% - 44px - max(12px,env(safe-area-inset-right)) - 24px),transparent calc(100% - 44px - max(12px,env(safe-area-inset-right))))}
 .compare-stage{aspect-ratio:4/5}
 /* Phones: the vertical cut in a 9:16 frame, capped so it never fills more than about three quarters of the screen. */
 .reel-frame{width:min(100%,calc(74svh * 9 / 16));aspect-ratio:9/16}

@@ -39,8 +39,10 @@
    shadow; decorative and aria-hidden in the markup). */
 .footer{border-top:0;background:linear-gradient(180deg,rgba(255,255,255,0),rgba(246,245,241,.7))}
 .footer-bottom{border-top-color:rgba(14,14,13,.1)}
-.footer-sign{height:.66em;padding-top:.04em;color:#F1EEE7}
-.footer-word{background:linear-gradient(176deg,#fff 18%,#E7E3DA 46%,#fff 52%,#DCD7CC 88%);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;-webkit-text-stroke:1px rgba(255,255,255,.9);filter:drop-shadow(0 .04em .05em rgba(58,40,12,.14))}
+/* Task 43: the whole word shows (no hard cut at its foot): the frame takes the line height and only clips sideways, so
+   it still never widens a phone page. */
+.footer-sign{height:auto;overflow:clip visible;padding-top:.04em;line-height:.9;color:#F1EEE7}
+.footer-word{background:linear-gradient(176deg,#fff 18%,#E7E3DA 46%,#fff 52%,#DCD7CC 88%);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;-webkit-text-stroke:1px rgba(255,255,255,.9);filter:drop-shadow(0 .03em .05em rgba(58,40,12,.26))}
 
 /* Lenis smooth scrolling (motion pages only): native smooth scrolling must not fight it while it animates. */
 .lenis.lenis-smooth{scroll-behavior:auto!important}

@@ -1942,7 +1942,8 @@ class DesignCritiqueFixTests(unittest.TestCase):
         for article in work:
             with self.subTest(page='work', article=article[:60]):
                 self.assertEqual(article.count(CONCEPT_LABEL), 1)
-                self.assertRegex(article, rf'<p class="cs-label">{re.escape(CONCEPT_LABEL)}</p>\s*<h2 id="[a-z]+-title" class="cs-title" data-rise>')
+                # Task 43: the label rises with the title (both data-rise), so it never waits alone above a hidden title.
+                self.assertRegex(article, rf'<p class="cs-label" data-rise>{re.escape(CONCEPT_LABEL)}</p>\s*<h2 id="[a-z]+-title" class="cs-title" data-rise>')
         # Liquid Glass (Task 37): the hero's screens show two concepts, so its glass caption says so in general terms.
         self.assertIn('<p class="hero-cap lg">On screen<span>Concept projects for fictional businesses</span></p>', self.home)
         self.assertIn('.teaser-card h3{margin:20px 0 0;', self.home_css)
@@ -2136,7 +2137,8 @@ class RepetitionTests(unittest.TestCase):
 
 # Night Shift Task 20 pinned the Work page's Harbourside case study (sha256 of its source <article>) so later tasks could
 # not change it by accident. Daylight (Task 34, owner-mandated) rebuilt it from the prototype; this is the new baseline.
-HARBOURSIDE_SHA256 = '3c50b38c9601d0d4a587cd168ad886f97add301bab8b4fb1dc7666124c741f1e'
+# Task 43 (owner-mandated) adds only data-rise to its "Concept project" label, so it rises with the title.
+HARBOURSIDE_SHA256 = 'ceef9a57c29b0a23497efbd546e6a4f94255037c7a813121d75848cda3e42fe6'
 # The photos /work/ referenced before Task 20; the new art direction reuses them and adds no new downloads.
 # Task 24 adds detail-rear (the closing photo, already used on Home); garden-lawn stays inside the Greenline mockup.
 WORK_PHOTOS = {'barber-chair', 'barber-cut', 'barber-interior', 'barber-shave', 'detail-buffer', 'detail-dash', 'detail-headlight',
@@ -3816,7 +3818,9 @@ class MobileAndContactPolishTests(unittest.TestCase):
             with self.subTest(sheet=sheet):
                 css = base_rules(self.css[sheet])
                 self.assertIn('border-inline:2.5px solid currentColor', rules_for(css, '.motion-btn::before')[0])
-                self.assertIn('border-left:8px solid currentColor', rules_for(css, '.motion-btn[aria-pressed="true"]::before')[0])
+                # Task 43: the pressed state keeps the pause bars (still borders) on an inverted ink button, never a play triangle.
+                self.assertIn('border-inline-width:3px', rules_for(css, '.motion-btn[aria-pressed="true"]::before')[0])
+                self.assertIn('background:var(--ink)', rules_for(css, '.motion-btn[aria-pressed="true"]')[0])
                 self.assertNotIn('.motion-btn.motion-fab', self.css[sheet])  # one place sizes the phone button
         self.assertIn(':focus-visible{outline:2px solid var(--ink)', (OUT / 'assets/site.css').read_text())
 
@@ -3862,3 +3866,108 @@ class MobileAndContactPolishTests(unittest.TestCase):
         self.assertEqual(len(size), 2)
         self.assertTrue(all(v >= 200 for v in size), spot)
         self.assertIn('.ct-gl-spot{display:none}', media_blocks(self.css['pages.css'], 'max-width:760px'))
+
+
+class GlassCritiqueFixesTests(unittest.TestCase):
+    """Task 43 (owner-mandated): the Pause motion button's icon agrees with its pressed state and keeps clear of FAQ toggles
+    and the marquee on phones; the demo heading fits its card; the Work queue labels show in full; the footer wordmark is no
+    longer cut at its foot; reveal companions (labels, intros, card shells) rise with what they belong to."""
+
+    LANE = 'calc(44px + max(12px,env(safe-area-inset-right)))'
+    SHOWN = 'body:has(.motion-fab:not([hidden]))'
+
+    @classmethod
+    def setUpClass(cls):
+        build()
+        cls.css = {name: (OUT / 'assets' / name).read_text() for name in ('site.css', 'glass.css', 'home.css', 'pages.css', 'work.css')}
+
+    def test_pressed_pause_button_shows_pressed_pause_bars_not_a_play_triangle(self):
+        for sheet in ('home.css', 'pages.css'):
+            with self.subTest(sheet=sheet):
+                css = base_rules(self.css[sheet])
+                rest = rules_for(css, '.motion-btn')[0]
+                pressed = rules_for(css, '.motion-btn[aria-pressed="true"]')
+                self.assertEqual(len(pressed), 1)
+                self.assertIn('background:var(--ink)', pressed[0])
+                self.assertIn('color:#fff', pressed[0])
+                self.assertNotIn('background:var(--ink)', rest)  # resting and pressed look different
+                self.assertEqual(rules_for(css, '.motion-btn[aria-pressed="true"]:hover'), pressed)  # hover keeps the state
+                icon = rules_for(css, '.motion-btn[aria-pressed="true"]::before')[0]
+                self.assertNotRegex(icon, r'border-left:\d+px')  # no play triangle under a "Pause motion" name
+                self.assertNotIn('width:0', icon)
+                self.assertIn('border-inline:2.5px solid currentColor', rules_for(css, '.motion-btn::before')[0])  # bars, both states
+                forced = rules_for(media_blocks(self.css[sheet], 'forced-colors:active'), '.motion-btn[aria-pressed="true"]')
+                self.assertEqual(len(forced), 1)  # still distinct when the system forces colours
+                for needle in ('forced-color-adjust:none', 'background:ButtonText', 'color:ButtonFace'):
+                    self.assertIn(needle, forced[0])
+        # The name never changes with the state (aria-pressed carries it), so the label and state cannot disagree.
+        site = (OUT / 'assets/site.js').read_text()
+        toggle = site[site.index("const toggle = document.querySelector('[data-motion-toggle]');"):site.index("const asked = document.querySelector('[data-nf-path]');")]
+        for banned in ('textContent', 'innerHTML', 'aria-label', 'Play motion'):
+            self.assertNotIn(banned, toggle)
+
+    def test_phone_faq_toggles_and_marquee_keep_clear_of_the_pause_button(self):
+        pages = media_blocks(self.css['pages.css'], 'max-width:640px')
+        self.assertEqual(rules_for(pages, f'{self.SHOWN} .faq summary'), [f'padding-right:{self.LANE}'])
+        home = media_blocks(self.css['home.css'], 'max-width:640px')
+        strip = rules_for(home, f'{self.SHOWN} .mq-strip')
+        self.assertEqual(len(strip), 1)
+        # The moving pills cannot take padding, so the strip fades to nothing before the button's lane.
+        edge = f'transparent calc(100% - 44px - max(12px,env(safe-area-inset-right)))'
+        for prop in ('-webkit-mask-image', 'mask-image'):
+            self.assertRegex(strip[0], rf'(?:^|;){re.escape(prop)}:linear-gradient\(90deg,#000 [^;]*,{re.escape(edge)}\)')
+
+    def test_demo_heading_fits_its_card(self):
+        rule = rules_for(base_rules(self.css['site.css']), '.demo-side h2')
+        self.assertEqual(len(rule), 1)
+        self.assertRegex(rule[0], r'font-size:clamp\(')
+        self.assertIn('overflow-wrap:anywhere', rule[0])
+        self.assertNotIn('nowrap', rule[0])
+        self.assertIn('<h2 id="demo-glance-title">Requests at a glance</h2>', (OUT / 'demo/index.html').read_text())
+
+    def test_work_queue_labels_show_in_full(self):
+        css = base_rules(self.css['work.css'])
+        for selector in ('.wk-demo-mini', '.wk-demo-mini i', '.wk-demo-mini em', '.wk-demo-mini b'):
+            with self.subTest(selector=selector):
+                rule = rules_for(css, selector)[0]
+                for banned in ('ellipsis', 'nowrap', 'overflow:hidden'):
+                    self.assertNotIn(banned, rule)
+        self.assertIn('container-type:inline-size', rules_for(css, '.wk-demo-mini')[0])  # scales with its tile
+        self.assertIn('font:600 min(.6875rem,3.9cqi)/1.2', rules_for(css, '.wk-demo-mini b')[0])  # capped at today's size
+        work = (OUT / 'work/index.html').read_text()
+        for label in ('Website redesign', 'Booking question', 'Quote sent', 'Site visit booked'):
+            self.assertIn(f'<b>{label}</b>', work)
+
+    def test_footer_wordmark_is_whole_and_reads_on_glass(self):
+        sign = rules_for(base_rules(self.css['glass.css']), '.footer-sign')
+        self.assertEqual(len(sign), 1)
+        self.assertIn('height:auto', sign[0])  # no longer shorter than its line box
+        self.assertIn('overflow:clip visible', sign[0])  # clipped sideways only: a phone page never widens
+        self.assertNotIn('overflow:hidden', sign[0])
+        self.assertGreaterEqual(float(re.search(r'line-height:([\d.]+)', sign[0]).group(1)), 0.9)
+        self.assertNotIn('padding-bottom', sign[0])
+        self.assertNotIn('margin-bottom', sign[0])
+        word = rules_for(base_rules(self.css['glass.css']), '.footer-word')[0]
+        shadows = re.findall(r'drop-shadow\(([^()]*\([^()]*\))\)', word)
+        self.assertEqual(len(shadows), 1)  # one soft shadow: no glow layers
+        alpha = float(re.search(r'rgba\(58,40,12,([\d.]+)\)', shadows[0]).group(1))  # the same warm shade, a little stronger
+        self.assertGreater(alpha, 0.14)
+        self.assertLessEqual(alpha, 0.3)
+
+    def test_reveal_companions_rise_with_what_they_belong_to(self):
+        work = (OUT / 'work/index.html').read_text()
+        self.assertEqual(work.count('<p class="cs-label" data-rise>'), 3)
+        self.assertNotIn('<p class="cs-label">', work)
+        pricing = (OUT / 'pricing/index.html').read_text()
+        self.assertIn('<div class="pr-care-card" data-rise>\n<h2 id="pcare-title" class="h2">', pricing)  # the card, not just its title
+        self.assertIn('<p data-rise>Whatever the size of the site,', pricing)
+        about = (OUT / 'about/index.html').read_text()
+        self.assertIn('</h2><p data-rise>If customers find you on their phone', about)
+
+    def test_homepage_gaps_are_tighter(self):
+        css = base_rules(self.css['home.css'])
+        self.assertIn('--home-sec:clamp(52px,6.4vw,92px)', css)
+        for selector in ('.reel', '.work', '.ba', '.services'):
+            with self.subTest(selector=selector):
+                self.assertEqual(rules_for(css, selector), ['padding-block:var(--home-sec)'])
+        self.assertIn('padding-block:clamp(110px,13vw,190px) clamp(56px,6vw,96px)', rules_for(css, '.band')[0])

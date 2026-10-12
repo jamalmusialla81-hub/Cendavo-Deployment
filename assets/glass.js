@@ -1,7 +1,5 @@
-// Liquid Glass shell for the motion pages (Task 37), after GSAP and Lenis: the pointer light on glass panels, the edge
-// refraction filter (Chromium only), Lenis smooth scrolling and the slow drift of the colour-field atmosphere. Nothing
-// here hides or moves content: without it every panel is plain frosted glass and scrolling is native. Under reduced
-// motion there is no Lenis, no drift and no moving light; under Save-Data no refraction maps are drawn.
+// Liquid Glass shell (Task 37): pointer light, Chromium edge refraction, Lenis and the atmosphere drift. Hides nothing;
+// reduced motion: no Lenis, drift or light; Save-Data: no refraction maps.
 (() => {
   const win = window, doc = document, root = doc.documentElement;
   const motionOK = Boolean(win.matchMedia?.('(prefers-reduced-motion: no-preference)').matches);
@@ -45,8 +43,7 @@
     win.addEventListener('scroll', schedule, { passive: true });
   }
 
-  // Edge refraction (Chromium: backdrop-filter accepts an SVG filter). One displacement map per panel size: the backdrop
-  // bends inward along a band at the rounded edge, flat in the middle so text behind stays steady.
+  // Edge refraction (Chromium SVG backdrop filter): one map per panel size, bent at the edge, flat in the middle.
   const brands = win.navigator?.userAgentData?.brands || [];
   const defs = doc.querySelector('[data-lg-defs]');
   if (defs && motionOK && !saveData && brands.some(b => /Chromium/.test(b.brand))) {
@@ -99,10 +96,10 @@
   }
   if (!motionOK) return;
 
-  // Lenis smooth scrolling, driven by GSAP's ticker so ScrollTrigger stays in step. Touch scrolling stays native.
+  // Lenis on GSAP's ticker (touch stays native). Lenis 1.1.0 calls options.prevent on every wheel: its default `false` threw.
   const gsap = win.gsap, ScrollTrigger = win.ScrollTrigger;
   if (win.Lenis) {
-    const lenis = G.lenis = new win.Lenis({ lerp: 0.1, smoothWheel: true });
+    const lenis = G.lenis = new win.Lenis({ lerp: 0.1, smoothWheel: true, prevent: () => false });
     if (gsap && ScrollTrigger) {
       lenis.on('scroll', ScrollTrigger.update);
       gsap.ticker.add(t => lenis.raf(t * 1000));

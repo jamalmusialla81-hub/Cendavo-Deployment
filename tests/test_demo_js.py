@@ -1,4 +1,5 @@
 import json
+import re
 import shutil
 import subprocess
 import unittest
@@ -741,6 +742,51 @@ console.log(JSON.stringify({
 }));
 """
 
+# Task 43: motion.js with a [data-stagger] list inside a [data-rise] card and one list on its own, all below the fold.
+# The batch is recorded with its options, so the card's line and the nested list's trigger can be compared.
+MOTION_STAGGER_SCRIPT = HARNESS + r"""
+const source = fs.readFileSync(process.argv[1], 'utf8');
+const low = el => { el.getBoundingClientRect = () => ({ left: 0, top: 2000, width: 100, height: 100 }); return el; };
+const card = low(element('card')), nested = low(element('nested')), alone = low(element('alone'));
+nested.children = many('n', 3); alone.children = many('a', 2);
+card.closest = s => (s.split(', ').includes('[data-rise]') ? card : null);
+nested.parentElement = card;
+alone.parentElement = { closest: () => null };
+const root = element('html'); root.classList = classList(['js', 'motion']);
+const parts = { '[data-rise]': [card], '[data-stagger]': [nested, alone] };
+const doc = { documentElement: root, querySelectorAll: s => parts[s] || [], querySelector: s => (parts[s] || [])[0] || null };
+const env = { width: 1440, height: 900, fine: true, reduce: false };
+const { win } = makeWindow(env);
+const stub = makeGsap(env);
+const batches = [];
+stub.ScrollTrigger.batch = (targets, vars) => batches.push({ names: targets.map(t => t.name), start: vars.start, once: vars.once });
+win.gsap = stub.gsap; win.ScrollTrigger = stub.ScrollTrigger;
+vm.runInNewContext(source, { window: win, document: doc });
+const lists = stub.log.tweens.filter(t => t.kind === 'fromTo' && t.vars.scrollTrigger && t.vars.stagger === 0.06)
+  .map(t => ({ first: t.names[0], trigger: t.vars.scrollTrigger.trigger.name, start: t.vars.scrollTrigger.start, once: t.vars.scrollTrigger.once }));
+console.log(JSON.stringify({ batches, lists }));
+"""
+
+# Task 43: scenes.js's Services cards ("Every month", "Old addresses, redirected") below the fold, with and without motion.
+SCENES_CARDS_SCRIPT = HARNESS + r"""
+const source = fs.readFileSync(process.argv[1], 'utf8');
+function run(env) {
+  const low = el => { el.getBoundingClientRect = () => ({ left: 0, top: 2000, width: 100, height: 100 }); return el; };
+  const month = low(element('month', { li: many('mli', 3), '.box': many('box', 3) }));
+  const redir = low(element('redir', { li: many('rli', 2), '.arr': many('arr', 2) }));
+  const parts = { '[data-month]': [month], '[data-redir]': [redir] };
+  const doc = { documentElement: element('html'), querySelectorAll: s => parts[s] || [], querySelector: s => (parts[s] || [])[0] || null };
+  const { win } = makeWindow(env);
+  const stub = makeGsap(env);
+  win.gsap = stub.gsap; win.ScrollTrigger = stub.ScrollTrigger;
+  vm.runInNewContext(source, { window: win, document: doc });
+  return stub.log.timelines.map(tl => ({ trigger: tl.vars.scrollTrigger.trigger.name, start: tl.vars.scrollTrigger.start, once: tl.vars.scrollTrigger.once,
+    steps: tl.tweens.map(t => ({ first: t.names[0], at: t.at, from: t.from || null })) }));
+}
+console.log(JSON.stringify({ motion: run({ width: 1440, height: 900, fine: true, reduce: false }), reduced: run({ width: 1440, height: 900, fine: true, reduce: true }) }));
+"""
+SCENES = Path(__file__).resolve().parents[1] / 'assets' / 'scenes.js'
+
 SCRIPT = r"""
 const vm = require('vm');
 const source = require('fs').readFileSync(process.argv[1], 'utf8');
@@ -1418,7 +1464,7 @@ class DemoScriptTests(unittest.TestCase):
                 result = r[name]
                 self.assertIsNone(result['error'])
                 self.assertEqual(result['textsAtStart'], ['00'] * 5)
-                self.assertEqual(result['counts'], [{'n': n, 'once': True, 'start': 'top 88%'} for n in range(1, 6)])
+                self.assertEqual(result['counts'], [{'n': n, 'once': True, 'start': 'top 85%'} for n in range(1, 6)])  # Task 43: one reveal line
                 self.assertEqual(result['textsAfter'], ['01', '02', '03', '04', '05'])
                 self.assertEqual(result['onScreenText'], '01')  # already visible: left alone
                 self.assertEqual(result['stepAttrWrites'], 0)
@@ -1593,6 +1639,49 @@ class DemoScriptTests(unittest.TestCase):
                 self.assertFalse(r[name]['wipe'])
                 self.assertEqual(r[name]['wipes'], [])
                 self.assertEqual(r[name]['dims'], [])
+
+    def test_nested_list_reveals_with_its_card_never_after_it(self):
+        # Task 43: a [data-stagger] list inside a [data-rise] card is triggered by the card, at the card's own line, so
+        # the card never stands empty waiting for its items; a list on its own keeps its own trigger at the same line.
+        r = self.node_json(MOTION_STAGGER_SCRIPT, MOTION)
+        self.assertEqual(r['batches'], [{'names': ['card'], 'start': 'top 85%', 'once': True}])
+        lists = {item['first']: item for item in r['lists']}
+        self.assertEqual(lists['n0'], {'first': 'n0', 'trigger': 'card', 'start': 'top 85%', 'once': True})
+        self.assertEqual(lists['a0'], {'first': 'a0', 'trigger': 'alone', 'start': 'top 85%', 'once': True})
+
+    def test_services_cards_rise_with_their_rows_at_the_reveal_line(self):
+        # Task 43: the white "Every month" and "Old addresses" cards were painted while their rows waited for 78-80%,
+        # so they scrolled in empty. Now the card itself rises first in the same timeline, from 85%.
+        r = self.node_json(SCENES_CARDS_SCRIPT, SCENES)
+        self.assertEqual([(t['trigger'], t['start'], t['once']) for t in r['motion']], [('month', 'top 85%', True), ('redir', 'top 85%', True)])
+        for scene, rows in zip(r['motion'], ('mli0', 'rli0')):
+            with self.subTest(card=scene['trigger']):
+                first = scene['steps'][0]
+                self.assertEqual((first['first'], first['at']), (scene['trigger'], 0))  # the card leads
+                self.assertEqual(first['from'], {'opacity': 0, 'y': 24})
+                row = next(step for step in scene['steps'] if step['first'] == rows)
+                self.assertGreater(row['at'], 0)  # its rows follow inside the same timeline, never on a later trigger
+        self.assertEqual(r['reduced'], [])  # reduced motion: nothing is hidden or moved
+        source = SCENES.read_text(encoding='utf-8')
+        self.assertIn("const START = 'top 85%';", source)
+        self.assertEqual(re.findall(r"'top \d+%'", source), ["'top 85%'"])  # one line for every scene
+
+    def test_every_reveal_starts_at_the_same_line(self):
+        # Task 43: reveals (anything hidden until it scrolls in) start as their trigger's top crosses 85% of the viewport.
+        # Left alone on purpose: scrubbed effects (they never hide content) and the before/after sweep at 65%, which is a
+        # demonstration that should play with the frame well in view, not a reveal.
+        motion = MOTION.read_text(encoding='utf-8')
+        self.assertIn("const START = 'top 85%';", motion)
+        self.assertEqual(re.findall(r"'top \d+%'", motion), ["'top 85%'"])
+        self.assertIn("const host = list.parentElement?.closest?.('[data-rise], [data-reveal]') || list;", motion)
+        self.assertEqual(re.findall(r"'top \d+%'", DETAILS.read_text(encoding='utf-8')), ["'top 85%'"])
+        home = HOME.read_text(encoding='utf-8')
+        self.assertIn("start: start || 'top 85%'", home)
+        for gone in ("once(el, 'top 88%')", "once(frame, 'top 40%')", "once(panel, 'top 80%')"):
+            self.assertNotIn(gone, home)
+        self.assertEqual(sorted(set(re.findall(r"'top \d+%'", home))), ["'top 25%'", "'top 65%'", "'top 85%'", "'top 92%'"])
+        # Photo parallax stays small (yPercent +/-6) and only on screens wider than 1080px.
+        self.assertIn("mm.add(MOTION + ' and (min-width: 1081px)', () => {\n    $$('[data-parallax]').forEach(frame => {\n      gsap.fromTo($$('img', frame), { yPercent: -6, scale: 1.14 }, { yPercent: 6,", motion)
 
     def test_demo_js_makes_no_network_requests(self):
         js = DEMO.read_text(encoding='utf-8')
@@ -1952,6 +2041,87 @@ const { pathToFileURL } = require('url');
         self.assertEqual((reduced['lenis'], reduced['ticks'], reduced['driftFrames'], reduced['refract']), (0, 0, 0, False))
         self.assertIsNone(reduced['moved'])
         self.assertFalse(r['saveData']['refract'])  # Save-Data: no displacement maps are drawn
+
+    def test_real_lenis_handles_wheel_events_with_the_options_glass_js_passes(self):
+        # Vendored Lenis 1.1.0 defaults `prevent` to `false`, then calls `this.options.prevent(el)` for every element
+        # on a wheel event's path, which threw on every wheel tick. Run glass.js against the real file, not a stub.
+        source = GLASS.read_text(encoding='utf-8')
+        self.assertRegex(source, r'new win\.Lenis\(\{[^}]*prevent:\s*\(\)\s*=>\s*false')
+        out = subprocess.run(['node', '-e', REAL_LENIS_SCRIPT, str(GLASS), str(LENIS)], capture_output=True, text=True, check=True)
+        r = json.loads(out.stdout)
+        self.assertIsNone(r['error'])
+        self.assertEqual(r['version'], '1.1.0')
+        self.assertTrue(r['built'])
+        self.assertEqual(r['preventType'], 'function')
+        self.assertEqual(r['wheelListeners'], 1)
+        self.assertIsNone(r['wheelError'])
+        self.assertTrue(r['defaultPrevented'])  # Lenis took the wheel: smooth scrolling, not a native fallback
+        self.assertEqual(r['target'], 120)
+        self.assertTrue(r['optOutHonoured'])  # data-lenis-prevent still leaves inner scrollers native
+        # The unpatched default really does throw: the regression this test guards against.
+        self.assertIn('prevent is not a function', r['defaultError'])
+
+
+LENIS = Path(__file__).resolve().parents[1] / 'assets' / 'vendor' / 'lenis' / 'lenis.min.js'
+
+# Real vendored Lenis inside a fake window: glass.js builds it, then a wheel event whose path holds an element is sent.
+REAL_LENIS_SCRIPT = r"""
+const fs = require('fs'), vm = require('vm');
+const glassSource = fs.readFileSync(process.argv[1], 'utf8'), lenisSource = fs.readFileSync(process.argv[2], 'utf8');
+function el(tag, attrs) {
+  const a = attrs || {}, classes = new Set();
+  return { tagName: tag, nodeType: 1, className: '', style: {}, scrollTop: 0, scrollLeft: 0, scrollHeight: 5000, scrollWidth: 1440, clientHeight: 900, clientWidth: 1440,
+    hasAttribute: n => n in a, getAttribute: n => (n in a ? a[n] : null),
+    classList: { add: (...c) => c.forEach(x => classes.add(x)), remove: (...c) => c.forEach(x => classes.delete(x)), contains: c => classes.has(c), toggle() {} },
+    addEventListener() {}, removeEventListener() {}, getBoundingClientRect: () => ({ top: 0, left: 0, width: 1440, height: 900 }) };
+}
+function world() {
+  const html = el('html'), body = el('body');
+  const listeners = {};
+  const doc = { documentElement: html, body, hidden: false, addEventListener() {}, querySelector: () => null, querySelectorAll: () => [], fonts: { ready: { then() {} } } };
+  const win = { innerWidth: 1440, innerHeight: 900, document: doc, __glass: {},
+    addEventListener(type, fn) { (listeners[type] = listeners[type] || []).push(fn); }, removeEventListener() {},
+    matchMedia: q => ({ matches: /no-preference|min-width|pointer: fine/.test(q), addEventListener() {} }),
+    navigator: { connection: { saveData: false }, userAgentData: { brands: [{ brand: 'Firefox' }] } },
+    requestAnimationFrame: () => 1, cancelAnimationFrame() {}, setTimeout: () => 1, clearTimeout() {}, scrollTo() {} };
+  class ResizeObserver { observe() {} disconnect() {} }
+  const ctx = vm.createContext({ window: win, document: doc, ResizeObserver, setTimeout: () => 1, clearTimeout() {}, Math, Object, Promise,
+    getComputedStyle: () => ({ borderTopLeftRadius: '20px' }) });
+  ctx.self = ctx.globalThis;
+  vm.runInContext(lenisSource, ctx);
+  win.Lenis = ctx.Lenis;
+  return { win, doc, html, body, listeners, ctx };
+}
+function wheel(path) {
+  const ev = { type: 'wheel', deltaX: 0, deltaY: 120, deltaMode: 0, ctrlKey: false, defaultPrevented: false,
+    composedPath: () => path, preventDefault() { this.defaultPrevented = true; } };
+  return ev;
+}
+const out = { error: null };
+try {
+  const w = world();
+  vm.runInContext(glassSource, w.ctx);
+  const lenis = w.win.__glass.lenis;
+  out.version = w.win.lenisVersion;
+  out.built = Boolean(lenis);
+  out.preventType = typeof lenis.options.prevent;
+  out.wheelListeners = (w.listeners.wheel || []).length;
+  const card = el('div'), ev = wheel([card, w.body, w.html, w.doc, w.win]);
+  out.wheelError = null;
+  try { w.listeners.wheel.forEach(fn => fn(ev)); } catch (e) { out.wheelError = String(e); }
+  out.defaultPrevented = ev.defaultPrevented;
+  out.target = lenis.targetScroll;
+  const inner = el('div', { 'data-lenis-prevent': '' }), ev2 = wheel([inner, w.body, w.html, w.doc, w.win]);
+  w.listeners.wheel.forEach(fn => fn(ev2));
+  out.optOutHonoured = !ev2.defaultPrevented;
+  // The same wheel against Lenis built with its own default `prevent` (what glass.js did before).
+  const d = world();
+  new d.win.Lenis({ lerp: 0.1, smoothWheel: true });
+  out.defaultError = '';
+  try { d.listeners.wheel.forEach(fn => fn(wheel([el('div'), d.body, d.html, d.doc, d.win]))); } catch (e) { out.defaultError = String(e); }
+} catch (e) { out.error = String(e); }
+console.log(JSON.stringify(out));
+"""
 
 
 if __name__ == '__main__':

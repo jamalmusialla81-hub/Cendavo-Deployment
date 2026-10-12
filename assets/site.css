@@ -110,6 +110,8 @@ p{margin-bottom:var(--space-4);max-width:var(--measure)}
 .demo-side{padding:var(--space-8);border-radius:22px;background:var(--ink);color:var(--bone)}
 .demo-main{padding:var(--space-8);border-radius:22px;background:#fff;box-shadow:var(--shadow-lift)}
 .eyebrow.light{color:var(--amber)}
+/* Task 43: the sidebar is 280px wide, so its heading gets a size that fits it and may wrap rather than run out of the card. */
+.demo-side h2{font-size:clamp(1.5rem,1.2rem + 1vw,2rem);line-height:1.05;overflow-wrap:anywhere;text-wrap:balance}
 .demo-side h3{font-size:1.25rem}
 .demo-side p{color:var(--stone);font-size:var(--text-small)}
 .demo-side .notice{margin:var(--space-3) 0 0}
