@@ -1,4 +1,5 @@
-// Cloudflare Pages Function: POST /api/enquiry stores a website enquiry in D1 (binding ENQUIRIES_DB).
+// Cloudflare Pages Function: POST /api/enquiry stores a website enquiry in D1 (binding ENQUIRIES_DB) and,
+// when the secrets RESEND_API_KEY and ALERT_TO are set, emails the owner a plain-text alert after the response.
 // The validation rules and messages below are mirrored in assets/enquiry.js; tests/test_enquiry.py
 // runs one shared case table against both so they cannot drift apart.
 
@@ -135,7 +136,97 @@ const INSERT_SQL =
   'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(idempotency_key) DO NOTHING RETURNING id';
 const SELECT_SQL = 'SELECT id FROM enquiries WHERE idempotency_key = ?';
 
-async function handlePost(request, env) {
+// Built-in throttle (soft: concurrent requests can slightly exceed it). Cutoffs are ISO strings bound as
+// parameters; this only works because every created_at is written by toISOString() in UTC.
+// Indexes: migrations/0002_enquiry_throttle.sql.
+export const THROTTLE = { globalLimit: 20, globalWindowMs: 10 * 60 * 1000, emailLimit: 3, emailWindowMs: 60 * 60 * 1000 };
+const THROTTLE_SQL =
+  'SELECT (SELECT COUNT(*) FROM enquiries WHERE created_at > ?) AS recent, ' +
+  '(SELECT COUNT(*) FROM enquiries WHERE email = ? AND created_at > ?) AS recent_email';
+
+// Alert email to the owner through Resend. The URL is fixed; nothing else is ever fetched.
+const RESEND_URL = 'https://api.resend.com/emails';
+const ALERT_FROM = 'Cendavo enquiries <onboarding@resend.dev>';
+export const ALERT_TIMEOUT_MS = 5000;
+const ALERT_FAILED = 'enquiry: alert email failed';
+// reply_to is only set for addresses that cannot carry a display name or a second address.
+const REPLY_TO_UNSAFE = /[<>,;:"()[\]\\]/;
+
+function alertText(values, id, createdAt) {
+  const shown = value => value || '(not given)';
+  return [
+    'A new enquiry was submitted through the website contact form.',
+    'Everything below was typed by the visitor and is unverified. Do not open links you do not trust.',
+    '',
+    `Enquiry id: ${id}`,
+    `Received (UTC): ${createdAt}`,
+    `Name: ${values.name}`,
+    `Email: ${values.email}`,
+    `Phone: ${shown(values.phone)}`,
+    `Business: ${shown(values.business)}`,
+    `Website: ${shown(values.website)}`,
+    `Service: ${values.service}`,
+    '',
+    'Message:',
+    values.message,
+  ].join('\n');
+}
+
+export function buildAlert(values, id, createdAt, alertTo) {
+  const email = {
+    from: ALERT_FROM,
+    to: [alertTo],
+    subject: `New enquiry: ${values.name} (${values.service})`,
+    text: alertText(values, id, createdAt),
+  };
+  if (!REPLY_TO_UNSAFE.test(values.email)) email.reply_to = values.email;
+  return email;
+}
+
+// Never throws and never logs anything but one fixed string: no key, visitor data or Resend reply.
+async function sendAlert(env, values, id, createdAt) {
+  const controller = new AbortController();
+  let timer;
+  const timeout = new Promise((_, reject) => {
+    timer = setTimeout(() => {
+      controller.abort();
+      reject(new Error('timeout'));
+    }, ALERT_TIMEOUT_MS);
+  });
+  try {
+    const response = await Promise.race([
+      fetch(RESEND_URL, {
+        method: 'POST',
+        headers: { authorization: `Bearer ${env.RESEND_API_KEY}`, 'content-type': 'application/json' },
+        body: JSON.stringify(buildAlert(values, id, createdAt, env.ALERT_TO)),
+        signal: controller.signal,
+      }),
+      timeout,
+    ]);
+    if (!response || !response.ok) console.error(ALERT_FAILED);
+    if (response && response.body && typeof response.body.cancel === 'function') await response.body.cancel().catch(() => {});
+  } catch {
+    console.error(ALERT_FAILED);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+// Runs after the response through waitUntil, so the visitor's answer never waits for or depends on it.
+function scheduleAlert(context, values, id, createdAt) {
+  const env = context.env;
+  const configured = env && typeof env.RESEND_API_KEY === 'string' && env.RESEND_API_KEY && typeof env.ALERT_TO === 'string' && env.ALERT_TO;
+  if (!configured) return;
+  const task = sendAlert(env, values, id, createdAt).catch(() => {});
+  try {
+    if (typeof context.waitUntil === 'function') context.waitUntil(task);
+  } catch {
+    // Without waitUntil the send may be cut short, but it can never affect the response.
+  }
+}
+
+async function handlePost(context) {
+  const { request, env } = context;
   const contentType = (request.headers.get('content-type') || '').split(';')[0].trim().toLowerCase();
   if (contentType !== 'application/json') return json(415, { ok: false, message: 'Send the enquiry as JSON.' });
 
@@ -178,11 +269,29 @@ async function handlePost(request, env) {
   if (!db || typeof db.prepare !== 'function') return json(503, { ok: false, message: UNAVAILABLE });
 
   try {
+    // A repeat of a stored enquiry is answered before the throttle, so a retry is never told "not sent".
+    const stored = await db.prepare(SELECT_SQL).bind(values.idempotencyKey).first();
+    if (stored && stored.id != null) return json(200, { ok: true, id: stored.id });
+
+    const now = Date.now();
+    const counts = await db
+      .prepare(THROTTLE_SQL)
+      .bind(new Date(now - THROTTLE.globalWindowMs).toISOString(), values.email, new Date(now - THROTTLE.emailWindowMs).toISOString())
+      .first();
+    if (counts && (Number(counts.recent) >= THROTTLE.globalLimit || Number(counts.recent_email) >= THROTTLE.emailLimit)) {
+      console.warn('enquiry: throttled');
+      return json(429, { ok: false, retry: true, message: RETRY }, { 'retry-after': '60' });
+    }
+
+    const createdAt = new Date(now).toISOString();
     const inserted = await db
       .prepare(INSERT_SQL)
-      .bind(new Date().toISOString(), values.name, values.email, values.phone, values.business, values.website, values.service, values.message, values.idempotencyKey)
+      .bind(createdAt, values.name, values.email, values.phone, values.business, values.website, values.service, values.message, values.idempotencyKey)
       .first();
-    if (inserted && inserted.id != null) return json(201, { ok: true, id: inserted.id });
+    if (inserted && inserted.id != null) {
+      scheduleAlert(context, values, inserted.id, createdAt);
+      return json(201, { ok: true, id: inserted.id });
+    }
     const existing = await db.prepare(SELECT_SQL).bind(values.idempotencyKey).first();
     if (existing && existing.id != null) return json(200, { ok: true, id: existing.id });
     return json(503, { ok: false, message: NOT_CONFIRMED });
@@ -195,12 +304,12 @@ async function handlePost(request, env) {
 
 // One handler for every method so the 405 holds however Pages orders method-specific routes.
 export async function onRequest(context) {
-  const { request, env } = context;
+  const { request } = context;
   if (request.method !== 'POST') {
     return json(405, { ok: false, message: 'Use POST to send an enquiry.' }, { allow: 'POST' });
   }
   try {
-    return await handlePost(request, env);
+    return await handlePost(context);
   } catch (error) {
     console.error('enquiry: unexpected failure', error && error.name);
     return json(500, { ok: false, message: NOT_CONFIRMED });

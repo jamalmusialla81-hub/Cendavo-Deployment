@@ -130,6 +130,10 @@ class SiteBuildTests(unittest.TestCase):
             self.assertIn(f'<option value="{value}">', html)
         self.assertIn('<p data-enquiry-status class="status" role="status"></p>', html)
         self.assertIn('stored in a Cloudflare database', html)
+        # Task 30: enquiries are also emailed to the owner through Resend, so the notice must say so.
+        notice = re.search(r'<p class="notice" id="enquiry-privacy">([^<]+)</p>', html).group(1)
+        self.assertIn('also emailed to Cendavo through our email delivery provider, Resend', notice)
+        self.assertIn('not added to mailing lists or sold', notice)
         self.assertNotIn('A$', html)
         self.assertNotIn('@', html.split('<main', 1)[1].split('</main>', 1)[0])
 

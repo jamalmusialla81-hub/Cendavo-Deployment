@@ -56,3 +56,8 @@
 
 **Status:** verified on macOS; Linux/WSL2 behaviour is covered by tests that only run on Linux and must pass on a real Windows 11 + WSL2 host before Windows support is declared complete.
 
+## 008 — Enquiry alerts through Resend (2026-10-12)
+
+**Decision:** The owner approved Resend for enquiry alert emails on 2026-10-12, as recorded in Task 30 of [NIGHT_SHIFT_PLAN.md](NIGHT_SHIFT_PLAN.md). Each new enquiry sends one plain-text email to the owner from the shared `onboarding@resend.dev` sender, using the free tier. The key and recipient are Pages secrets (`RESEND_API_KEY`, `ALERT_TO`); without them alerts are skipped. Because WAF rate limits are not available on `*.pages.dev` (per the plan), the function also throttles enquiries itself: 20 per 10 minutes overall and 3 per email address per hour.
+
+**Trade-off:** Enquiry details now pass through Resend and the owner's inbox, so the contact form's privacy notice says so. The throttle is soft and a flood also blocks real visitors for up to 10 minutes; they are told honestly that nothing was sent. Resend's free-tier limits and log retention must be checked on the account. Details: [ENQUIRIES.md](ENQUIRIES.md).

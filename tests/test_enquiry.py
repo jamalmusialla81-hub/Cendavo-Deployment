@@ -5,6 +5,7 @@ the browser script is a classic script loaded with require(). Both run the same 
 """
 import functools
 import json
+import re
 import shutil
 import sqlite3
 import subprocess
@@ -16,6 +17,7 @@ ROOT = Path(__file__).resolve().parents[1]
 FUNCTION = ROOT / 'functions' / 'api' / 'enquiry.js'
 CLIENT = ROOT / 'assets' / 'enquiry.js'
 MIGRATION = ROOT / 'migrations' / '0001_enquiries.sql'
+THROTTLE_MIGRATION = ROOT / 'migrations' / '0002_enquiry_throttle.sql'
 
 KEY = '3f2b8c1e-9a4d-4e7b-8c2f-1a2b3c4d5e6f'
 VALID = {
@@ -93,9 +95,32 @@ class FakeD1 {
       const row = this.rows.find(r => r.idempotency_key === args[0]);
       return row ? { id: row.id } : null;
     }
+    if (/^SELECT \(SELECT COUNT\(\*\) FROM enquiries WHERE created_at > \?\) AS recent, \(SELECT COUNT\(\*\) FROM enquiries WHERE email = \? AND created_at > \?\) AS recent_email$/.test(sql)) {
+      return { recent: this.rows.filter(r => r.created_at > args[0]).length,
+               recent_email: this.rows.filter(r => r.email === args[1] && r.created_at > args[2]).length };
+    }
     throw new Error('unexpected SQL ' + sql);
   }
+  // Earlier enquiries, ageMs old, written the way the function writes created_at.
+  seed(count, { email = null, ageMs = 60 * 1000 } = {}) {
+    for (let i = 0; i < count; i++) {
+      const id = this.rows.length + 1;
+      this.rows.push({ id, created_at: new Date(Date.now() - ageMs).toISOString(), email: email || `other-${id}@example.org`,
+                       idempotency_key: `seed-${id}` });
+    }
+    return this;
+  }
+  inserts() { return this.calls.filter(c => c.sql.startsWith('INSERT')).length; }
 }
+
+// Every outbound request is recorded; the default answer is a Resend-style success.
+const fetches = [];
+let fetchImpl = async () => new Response('{"id":"resend-test"}', { status: 200 });
+globalThis.fetch = async (url, init) => {
+  fetches.push({ url: String(url), method: init && init.method, headers: init && init.headers, body: init && init.body ? JSON.parse(init.body) : null,
+                 signal: !!(init && init.signal) });
+  return fetchImpl(url, init);
+};
 
 const URL_ = 'https://cendavo.example/api/enquiry';
 function req(body, { method = 'POST', type = 'application/json', headers = {} } = {}) {
@@ -104,11 +129,17 @@ function req(body, { method = 'POST', type = 'application/json', headers = {} } 
   return new Request(URL_, init);
 }
 const human = extra => ({ ...VALID, elapsedMs: 8000, ...extra });
-async function call(request, env) {
-  const res = await mod.onRequest({ request, env });
+async function call(request, env, { waitUntil = true } = {}) {
+  const pending = [];
+  const context = { request, env };
+  if (waitUntil) context.waitUntil = p => { pending.push(p); };
+  const res = await mod.onRequest(context);
   const text = await res.text();
   let body = null; try { body = JSON.parse(text); } catch {}
-  return { status: res.status, body, text, allow: res.headers.get('allow'), type: res.headers.get('content-type'), cache: res.headers.get('cache-control'), retryAfter: res.headers.get('retry-after') };
+  // Background work must settle (success, failure or timeout) and must never reject.
+  const settled = await Promise.allSettled(pending);
+  return { status: res.status, body, text, allow: res.headers.get('allow'), type: res.headers.get('content-type'), cache: res.headers.get('cache-control'), retryAfter: res.headers.get('retry-after'),
+           headers: [...res.headers], waited: pending.length, rejected: settled.filter(s => s.status === 'rejected').length };
 }
 
 const out = {};
@@ -204,6 +235,136 @@ out.invalidBeatsNoBinding = await call(req(human({ email: 'x' })), {});
 db = new FakeD1({ fail: true });
 out.dbFail = { ...(await call(req(human()), { ENQUIRIES_DB: db })), calls: db.calls.length };
 out.secret = SECRET;
+// Nothing above configures alerts, so nothing above may reach the network.
+out.fetchesWithoutSecrets = fetches.length;
+
+// ---- Alerts (Resend) ----
+const API_KEY = 're_test_SECRET_KEY_9f8e7d';
+const ALERT_TO = 'owner@example.net';
+const RESEND_REPLY = '{"message":"invalid key for sam@example.com","name":"validation_error"}';
+const alerting = (db, extra) => ({ ENQUIRIES_DB: db, RESEND_API_KEY: API_KEY, ALERT_TO, ...extra });
+const logs = [];
+const realConsole = {};
+for (const level of ['log', 'info', 'warn', 'error', 'debug']) {
+  realConsole[level] = console[level];
+  console[level] = (...args) => { logs.push(args.map(String).join(' ')); };
+}
+const sentFrom = start => structuredClone(fetches.slice(start));
+
+let mark = fetches.length;
+db = new FakeD1();
+out.alertCreated = await call(req(human()), alerting(db));
+out.alertFetches = sentFrom(mark);
+
+out.replyTo = {};
+for (const [label, email] of [['plain', 'jo.smith+quotes@example.com.au'], ['angle brackets', '<x@evil.com>'],
+                              ['comma', 'a,b@c.d'], ['semicolon', 'a;b@c.d'], ['quote', '"a"@c.d'], ['backslash', 'a\\b@c.d'],
+                              ['colon', 'a:b@c.d'], ['parentheses', 'a(b)@c.d'], ['square brackets', 'a[b]@c.d']]) {
+  mark = fetches.length;
+  db = new FakeD1();
+  const r = await call(req(human({ email })), alerting(db));
+  const sent = sentFrom(mark);
+  out.replyTo[label] = { status: r.status, fetches: sent.length, hasReplyTo: sent.length ? 'reply_to' in sent[0].body : null,
+                         replyTo: sent.length ? sent[0].body.reply_to : null, text: sent.length ? sent[0].body.text : null };
+}
+
+// Paths that must never send an alert, even with alerts configured.
+out.noAlert = {};
+async function noAlert(label, run) {
+  const start = fetches.length;
+  const r = await run();
+  out.noAlert[label] = { status: r.status, fetches: fetches.length - start, waited: r.waited };
+}
+db = new FakeD1();
+await call(req(human()), alerting(db));
+await noAlert('repeat', () => call(req(human()), alerting(db)));
+await noAlert('honeypot', () => call(req(human({ company_url: 'x' })), alerting(new FakeD1())));
+await noAlert('invalid', () => call(req(human({ email: 'bad' })), alerting(new FakeD1())));
+await noAlert('method', () => call(req(undefined, { method: 'GET' }), alerting(new FakeD1())));
+await noAlert('oversize', () => call(req(big), alerting(new FakeD1())));
+await noAlert('content type', () => call(req(human(), { type: 'text/plain' }), alerting(new FakeD1())));
+await noAlert('timing', () => call(req(human({ elapsedMs: 10 })), alerting(new FakeD1())));
+await noAlert('throttle global', () => call(req(human()), alerting(new FakeD1().seed(20))));
+await noAlert('throttle email', () => call(req(human()), alerting(new FakeD1().seed(3, { email: 'sam@example.com' }))));
+await noAlert('no binding', () => call(req(human()), { RESEND_API_KEY: API_KEY, ALERT_TO }));
+await noAlert('database error', () => call(req(human()), alerting(new FakeD1({ fail: true }))));
+
+// The visitor's response must be byte-for-byte the same whatever happens to the alert.
+const snapshot = r => ({ status: r.status, headers: r.headers, text: r.text, rejected: r.rejected });
+out.baseline = snapshot(await call(req(human()), alerting(new FakeD1())));
+out.variants = {};
+async function variant(label, env, impl, opts) {
+  const start = fetches.length;
+  const previous = fetchImpl;
+  if (impl) fetchImpl = impl;
+  const r = await call(req(human()), env, opts);
+  fetchImpl = previous;
+  out.variants[label] = { ...snapshot(r), fetches: fetches.length - start };
+}
+const aborted = [];
+await variant('no api key', { ENQUIRIES_DB: new FakeD1(), ALERT_TO });
+await variant('empty api key', alerting(new FakeD1(), { RESEND_API_KEY: '' }));
+await variant('no recipient', { ENQUIRIES_DB: new FakeD1(), RESEND_API_KEY: API_KEY });
+await variant('resend 500', alerting(new FakeD1()), async () => new Response(RESEND_REPLY, { status: 500 }));
+await variant('resend 422', alerting(new FakeD1()), async () => new Response(RESEND_REPLY, { status: 422 }));
+await variant('fetch throws', alerting(new FakeD1()), async () => { throw new TypeError('network down ' + RESEND_REPLY); });
+await variant('fetch rejects with abort', alerting(new FakeD1()), async () => { throw new DOMException('aborted', 'AbortError'); });
+await variant('no waitUntil', alerting(new FakeD1()), null, { waitUntil: false });
+// Hanging requests: shorten only the alert timer and record the delay the function asked for.
+const realSetTimeout = globalThis.setTimeout;
+const delays = [];
+globalThis.setTimeout = (fn, ms, ...rest) => { delays.push(ms); return realSetTimeout(fn, Math.min(ms, 20), ...rest); };
+await variant('hangs until aborted', alerting(new FakeD1()), (url, init) => new Promise((_, reject) => {
+  init.signal.addEventListener('abort', () => { aborted.push(true); reject(new DOMException('aborted', 'AbortError')); });
+}));
+await variant('hangs and ignores abort', alerting(new FakeD1()), () => new Promise(() => {}));
+globalThis.setTimeout = realSetTimeout;
+out.alertDelays = delays;
+out.aborted = aborted.length;
+out.timeoutConstant = mod.ALERT_TIMEOUT_MS;
+// waitUntil that throws must not change the response either.
+{
+  const start = fetches.length;
+  const r = await mod.onRequest({ request: req(human()), env: alerting(new FakeD1()), waitUntil() { throw new Error('no ' + API_KEY); } });
+  const text = await r.text();
+  await new Promise(resolve => realSetTimeout(resolve, 10));
+  out.variants['waitUntil throws'] = { status: r.status, headers: [...r.headers], text, rejected: 0, fetches: fetches.length - start };
+}
+
+// ---- Throttle ----
+out.throttle = {};
+async function throttleCase(label, db) {
+  const before = db.rows.length;
+  const r = await call(req(human()), alerting(db));
+  out.throttle[label] = { status: r.status, body: r.body, retryAfter: r.retryAfter, cache: r.cache, added: db.rows.length - before, inserts: db.inserts() };
+}
+await throttleCase('global 20 in 10 min', new FakeD1().seed(20));
+await throttleCase('global 25 in 10 min', new FakeD1().seed(25));
+await throttleCase('global 19 in 10 min', new FakeD1().seed(19));
+await throttleCase('global 25 older than 10 min', new FakeD1().seed(25, { ageMs: 11 * 60 * 1000 }));
+await throttleCase('email 3 in an hour', new FakeD1().seed(3, { email: 'sam@example.com' }));
+await throttleCase('email 2 in an hour', new FakeD1().seed(2, { email: 'sam@example.com' }));
+await throttleCase('email 3 older than an hour', new FakeD1().seed(3, { email: 'sam@example.com', ageMs: 61 * 60 * 1000 }));
+await throttleCase('other email 3 in an hour', new FakeD1().seed(3, { email: 'someone@example.com' }));
+
+// A retry of an enquiry that was already stored is confirmed even when the throttle is full.
+out.repeatWhenFull = {};
+for (const [label, seedArgs] of [['global', [25]], ['email', [5, { email: 'sam@example.com' }]]]) {
+  db = new FakeD1();
+  await call(req(human()), alerting(db));
+  db.seed(...seedArgs);
+  const before = db.rows.length;
+  const start = fetches.length;
+  const r = await call(req(human()), alerting(db));
+  out.repeatWhenFull[label] = { status: r.status, body: r.body, added: db.rows.length - before, fetches: fetches.length - start };
+}
+out.throttleConstants = mod.THROTTLE;
+
+for (const level of Object.keys(realConsole)) console[level] = realConsole[level];
+out.alertLogs = logs;
+out.apiKey = API_KEY;
+out.alertTo = ALERT_TO;
+out.resendReply = RESEND_REPLY;
 
 out.methods = {};
 for (const method of ['GET', 'PUT', 'DELETE', 'PATCH', 'OPTIONS']) {
@@ -367,7 +528,12 @@ class EnquiryFunctionTests(unittest.TestCase):
                 for value in submitted:
                     self.assertNotIn(value, call['sql'])
                 self.assertEqual(call['sql'].count('?'), len(call['args']))
-        insert = self.r['createdCalls'][0]['sql']
+        # Order for a new enquiry: idempotency lookup, throttle counts, insert.
+        sqls = [call['sql'] for call in self.r['createdCalls']]
+        self.assertEqual(len(sqls), 3)
+        self.assertTrue(sqls[0].startswith('SELECT id FROM enquiries WHERE idempotency_key'))
+        self.assertIn('COUNT(*)', sqls[1])
+        insert = sqls[2]
         self.assertIn('ON CONFLICT(idempotency_key) DO NOTHING', insert)
         self.assertIn('RETURNING id', insert)
 
@@ -404,7 +570,7 @@ class EnquiryFunctionTests(unittest.TestCase):
                 self.assertEqual(result['body'], {'ok': True})
                 self.assertEqual(result['calls'], 0)
         self.assertEqual(self.r['blankHoneypot']['status'], 201)
-        self.assertEqual(self.r['blankHoneypot']['calls'], 1)
+        self.assertEqual(self.r['blankHoneypot']['calls'], 3)  # lookup, throttle, insert
 
     def test_fast_or_missing_timing_is_an_honest_retry_not_a_fake_success(self):
         self.assertEqual(len(self.r['tooFast']), 7)
@@ -423,7 +589,7 @@ class EnquiryFunctionTests(unittest.TestCase):
     def test_timing_at_or_above_800_ms_is_stored(self):
         for ms in ('800', '1200'):
             with self.subTest(ms=ms):
-                self.assertEqual(self.r['humanTiming'][ms], {'status': 201, 'calls': 1})
+                self.assertEqual(self.r['humanTiming'][ms], {'status': 201, 'calls': 3})  # lookup, throttle, insert
 
     def test_spam_rejections_log_a_fixed_string_without_request_data(self):
         warnings = self.r['spamWarnings']
@@ -454,8 +620,9 @@ class EnquiryFunctionTests(unittest.TestCase):
         # Built scope: budget and user-agent data are not stored (docs/ENQUIRIES.md, "Differences from the task spec").
         result = self.r['budgetIgnored']
         self.assertEqual(result['status'], 201)
-        self.assertNotIn('budget', result['calls'][0]['sql'])
-        self.assertNotIn('user_agent', result['calls'][0]['sql'])
+        insert = next(call['sql'] for call in result['calls'] if call['sql'].startswith('INSERT'))
+        self.assertNotIn('budget', insert)
+        self.assertNotIn('user_agent', insert)
         self.assertNotIn('A$5,000+', json.dumps(result['calls']))
         self.assertNotIn('budget', result['rows'][0])
         contact = (ROOT / 'pages' / 'contact.html').read_text()
@@ -472,19 +639,205 @@ class EnquiryFunctionTests(unittest.TestCase):
     def test_recorded_sql_runs_against_the_real_migration(self):
         db = sqlite3.connect(':memory:')
         db.executescript(MIGRATION.read_text())
+        db.executescript(THROTTLE_MIGRATION.read_text())
         ids = []
         for call in self.r['allCalls']:
             row = db.execute(call['sql'], call['args']).fetchone()
             ids.append(row[0] if row else None)
-        # insert -> id 1; repeat insert -> no row; lookup -> id 1
-        self.assertEqual(ids, [1, None, 1])
+        # lookup -> none; throttle counts -> 0 recent; insert -> id 1; repeat lookup -> id 1 (no second insert)
+        self.assertEqual(ids, [None, 0, 1, 1])
         self.assertEqual(db.execute('SELECT COUNT(*) FROM enquiries').fetchone()[0], 1)
         self.assertEqual(db.execute('SELECT status, budget FROM enquiries').fetchone(), ('new', None))
         with self.assertRaises(sqlite3.IntegrityError):
             db.execute("UPDATE enquiries SET status = 'spam'")
 
 
+RESEND_URL = 'https://api.resend.com/emails'
+
+
+class EnquiryAlertTests(unittest.TestCase):
+    """Task 30: one plain-text Resend alert per new enquiry, sent after the response and never affecting it."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.r = server_results()
+
+    def test_new_enquiry_sends_exactly_one_alert(self):
+        self.assertEqual(self.r['fetchesWithoutSecrets'], 0)
+        created = self.r['alertCreated']
+        self.assertEqual(created['status'], 201)
+        self.assertEqual(created['waited'], 1)
+        self.assertEqual(created['rejected'], 0)
+        fetches = self.r['alertFetches']
+        self.assertEqual(len(fetches), 1)
+        sent = fetches[0]
+        self.assertEqual(sent['url'], RESEND_URL)
+        self.assertEqual(sent['method'], 'POST')
+        self.assertTrue(sent['signal'])
+        self.assertEqual(sent['headers'], {'authorization': f"Bearer {self.r['apiKey']}", 'content-type': 'application/json'})
+        body = sent['body']
+        self.assertEqual(set(body), {'from', 'to', 'reply_to', 'subject', 'text'})
+        self.assertNotIn('html', body)
+        self.assertEqual(body['from'], 'Cendavo enquiries <onboarding@resend.dev>')
+        self.assertEqual(body['to'], [self.r['alertTo']])
+        self.assertEqual(body['reply_to'], 'sam@example.com')
+        self.assertEqual(body['subject'], 'New enquiry: Sam Example (website-redesign)')
+        text = body['text']
+        for value in ('Sam Example', 'sam@example.com', '+61 (2) 5550-0000', 'Example Cleaning Co', 'https://example.com.au/',
+                      'website-redesign', VALID['message'], 'Enquiry id: 1', 'typed by the visitor and is unverified'):
+            with self.subTest(value=value):
+                self.assertIn(value, text)
+        self.assertRegex(text, r'Received \(UTC\): \d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z')
+        self.assertNotIn(KEY, text)
+        self.assertNotIn(self.r['apiKey'], json.dumps(body))
+
+    def test_reply_to_is_only_set_for_plain_addresses(self):
+        results = self.r['replyTo']
+        plain = results.pop('plain')
+        self.assertEqual(plain['status'], 201)
+        self.assertTrue(plain['hasReplyTo'])
+        self.assertEqual(plain['replyTo'], 'jo.smith+quotes@example.com.au')
+        self.assertEqual(len(results), 8)
+        for label, result in results.items():
+            with self.subTest(case=label):
+                # The address is still valid for storage and still in the body, just never used as a header.
+                self.assertEqual(result['status'], 201)
+                self.assertEqual(result['fetches'], 1)
+                self.assertFalse(result['hasReplyTo'])
+                self.assertIn('Email: ', result['text'])
+        self.assertIn('Email: <x@evil.com>', results['angle brackets']['text'])
+
+    def test_no_alert_unless_a_new_row_was_inserted(self):
+        expected = {'repeat': 200, 'honeypot': 200, 'invalid': 400, 'method': 405, 'oversize': 413, 'content type': 415,
+                    'timing': 429, 'throttle global': 429, 'throttle email': 429, 'no binding': 503, 'database error': 503}
+        self.assertEqual(set(self.r['noAlert']), set(expected))
+        for label, status in expected.items():
+            with self.subTest(case=label):
+                self.assertEqual(self.r['noAlert'][label]['status'], status)
+                self.assertEqual(self.r['noAlert'][label]['fetches'], 0)
+                self.assertEqual(self.r['noAlert'][label]['waited'], 0)
+
+    def test_response_is_identical_whatever_happens_to_the_alert(self):
+        baseline = self.r['baseline']
+        self.assertEqual(baseline['status'], 201)
+        self.assertEqual(json.loads(baseline['text']), {'ok': True, 'id': 1})
+        expected_fetches = {'no api key': 0, 'empty api key': 0, 'no recipient': 0, 'resend 500': 1, 'resend 422': 1,
+                            'fetch throws': 1, 'fetch rejects with abort': 1, 'no waitUntil': 1, 'waitUntil throws': 1,
+                            'hangs until aborted': 1, 'hangs and ignores abort': 1}
+        self.assertEqual(set(self.r['variants']), set(expected_fetches))
+        for label, count in expected_fetches.items():
+            with self.subTest(case=label):
+                result = dict(self.r['variants'][label])
+                self.assertEqual(result.pop('fetches'), count)
+                self.assertEqual(result, baseline)
+
+    def test_hanging_alert_is_aborted_after_five_seconds(self):
+        self.assertEqual(self.r['timeoutConstant'], 5000)
+        self.assertEqual(self.r['alertDelays'], [5000, 5000])
+        self.assertEqual(self.r['aborted'], 1)
+
+    def test_alert_failures_log_one_fixed_string_without_secrets_or_visitor_data(self):
+        logs = self.r['alertLogs']
+        self.assertEqual(set(logs), {'enquiry: alert email failed', 'enquiry: throttled', 'enquiry: spam rejected (honeypot)',
+                                     'enquiry: spam rejected (timing)', 'enquiry: database write failed Error'})
+        # resend 500, resend 422, fetch throws, abort rejection, two hanging requests.
+        self.assertEqual(logs.count('enquiry: alert email failed'), 6)
+        joined = '\n'.join(logs)
+        for secret in (self.r['apiKey'], self.r['alertTo'], self.r['resendReply'], 'invalid key', 'Sam Example', 'sam@example.com',
+                       VALID['message'], 'network down'):
+            with self.subTest(secret=secret):
+                self.assertNotIn(secret, joined)
+
+    def test_source_calls_only_the_fixed_resend_url_and_keeps_the_key_server_side(self):
+        source = FUNCTION.read_text()
+        self.assertEqual(re.findall(r'\bfetch\(\s*([^,\s)]+)', source), ['RESEND_URL'])
+        self.assertIn(f"const RESEND_URL = '{RESEND_URL}';", source)
+        self.assertEqual(re.findall(r'https?://[^\s\'"`]+', source), [RESEND_URL])
+        self.assertNotIn("'html'", source)
+        self.assertNotIn('html:', source)
+        self.assertIn('context.waitUntil(task)', source)
+        for line in source.splitlines():
+            if 'RESEND_API_KEY' in line and not line.strip().startswith('//'):
+                with self.subTest(line=line.strip()):
+                    self.assertNotIn('json(', line)
+                    self.assertNotIn('console', line)
+        # The browser script is unchanged in scope: same-origin only, nothing about alerts.
+        client = CLIENT.read_text()
+        for token in ('resend', 'RESEND', 'ALERT_TO'):
+            self.assertNotIn(token, client)
+
+
+class EnquiryThrottleTests(unittest.TestCase):
+    """Task 30: 20 enquiries per 10 minutes overall and 3 per email address per hour, refused with the honest retry."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.r = server_results()
+
+    def test_limits(self):
+        self.assertEqual(self.r['throttleConstants'], {'globalLimit': 20, 'globalWindowMs': 600000, 'emailLimit': 3, 'emailWindowMs': 3600000})
+
+    def test_full_throttle_is_an_honest_retry_and_stores_nothing(self):
+        retry_message = self.r['tooFast']['799 ms']['body']['message']
+        for label in ('global 20 in 10 min', 'global 25 in 10 min', 'email 3 in an hour'):
+            with self.subTest(case=label):
+                result = self.r['throttle'][label]
+                self.assertEqual(result['status'], 429)
+                self.assertEqual(result['body'], {'ok': False, 'retry': True, 'message': retry_message})
+                self.assertTrue(result['retryAfter'])
+                self.assertEqual(result['cache'], 'no-store')
+                self.assertEqual(result['added'], 0)
+                self.assertEqual(result['inserts'], 0)
+
+    def test_below_the_limits_or_outside_the_window_is_stored(self):
+        for label in ('global 19 in 10 min', 'global 25 older than 10 min', 'email 2 in an hour', 'email 3 older than an hour',
+                      'other email 3 in an hour'):
+            with self.subTest(case=label):
+                result = self.r['throttle'][label]
+                self.assertEqual(result['status'], 201)
+                self.assertEqual(result['added'], 1)
+
+    def test_repeat_of_a_stored_enquiry_is_confirmed_even_when_throttled(self):
+        for label in ('global', 'email'):
+            with self.subTest(limit=label):
+                result = self.r['repeatWhenFull'][label]
+                self.assertEqual(result['status'], 200)
+                self.assertEqual(result['body'], {'ok': True, 'id': 1})
+                self.assertEqual(result['added'], 0)
+                self.assertEqual(result['fetches'], 0)
+
+    def test_throttle_queries_use_the_new_indexes(self):
+        db = sqlite3.connect(':memory:')
+        db.executescript(MIGRATION.read_text())
+        db.executescript(THROTTLE_MIGRATION.read_text())
+        throttle = next(call for call in self.r['allCalls'] if 'COUNT(*)' in call['sql'])
+        self.assertEqual(len(throttle['args']), 3)
+        self.assertEqual(throttle['args'][1], 'sam@example.com')
+        for cutoff in (throttle['args'][0], throttle['args'][2]):
+            self.assertRegex(cutoff, r'^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z$')
+        plan = ' | '.join(row[3] for row in db.execute('EXPLAIN QUERY PLAN ' + throttle['sql'], throttle['args']))
+        self.assertIn('USING COVERING INDEX enquiries_created (created_at>?)', plan)
+        self.assertIn('USING COVERING INDEX enquiries_email_created (email=? AND created_at>?)', plan)
+        self.assertNotIn('SCAN enquiries', plan)
+
+
 class MigrationTests(unittest.TestCase):
+    def test_throttle_migration_adds_indexes_only_and_is_idempotent(self):
+        sql = THROTTLE_MIGRATION.read_text()
+        self.assertIn('CREATE INDEX IF NOT EXISTS enquiries_created ON enquiries (created_at);', sql)
+        self.assertIn('CREATE INDEX IF NOT EXISTS enquiries_email_created ON enquiries (email, created_at);', sql)
+        db = sqlite3.connect(':memory:')
+        db.executescript(MIGRATION.read_text())
+        before = [row[1] for row in db.execute('PRAGMA table_info(enquiries)')]
+        db.executescript(sql)
+        db.executescript(sql)  # idempotent re-run
+        after = [row[1] for row in db.execute('PRAGMA table_info(enquiries)')]
+        self.assertEqual(before, after)
+        for column in after:
+            self.assertNotRegex(column, r'ip|user_agent|agent')
+        indexes = {row[0] for row in db.execute("SELECT name FROM sqlite_master WHERE type = 'index' AND name NOT LIKE 'sqlite_%'")}
+        self.assertEqual(indexes, {'enquiries_status_created', 'enquiries_created', 'enquiries_email_created'})
+
     def test_schema_constraints_and_no_tracking_columns(self):
         sql = MIGRATION.read_text()
         self.assertRegex(sql, r'idempotency_key TEXT NOT NULL UNIQUE')

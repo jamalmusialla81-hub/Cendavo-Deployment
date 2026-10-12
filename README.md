@@ -12,7 +12,7 @@ Pages are written in `pages/` and built by `scripts/build_site.py` into `dist/`,
 
 ## Enquiries
 
-The contact form (`assets/enquiry.js`) posts to the Cloudflare Pages Function `functions/api/enquiry.js`. The function validates each enquiry on the server and stores it in Cloudflare D1 through the binding `ENQUIRIES_DB`; the schema is in `migrations/0001_enquiries.sql`. No one is notified when an enquiry arrives. Owner setup, read queries and limits are in [docs/ENQUIRIES.md](docs/ENQUIRIES.md).
+The contact form (`assets/enquiry.js`) posts to the Cloudflare Pages Function `functions/api/enquiry.js`. The function validates each enquiry on the server and stores it in Cloudflare D1 through the binding `ENQUIRIES_DB`; the schema is in `migrations/0001_enquiries.sql`, with throttle indexes in `migrations/0002_enquiry_throttle.sql`. When the `RESEND_API_KEY` and `ALERT_TO` secrets are set, each new enquiry also emails the owner a plain-text alert through Resend; a built-in throttle limits floods (20 enquiries per 10 minutes, 3 per email address per hour). Owner setup, read queries and limits are in [docs/ENQUIRIES.md](docs/ENQUIRIES.md).
 
 ## Assets
 
