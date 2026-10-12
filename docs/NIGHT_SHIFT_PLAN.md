@@ -233,3 +233,6 @@ Owner: "clean like a white website… light colours… cool UI… make it INSANE
 
 ## Task 35 — finish Task 34 (OWNER-MANDATED 2026-10-12; profile `site`)
 Task 34's builder was cut off by an API stream failure about halfway. Its partial work is saved as `docs/design/daylight/task34-partial.patch` (apply with `git apply --binary docs/design/daylight/task34-partial.patch`; at the time it left 59 failures and 20 errors in the suite). Apply it first, then FINISH the full Task 34 scope above: every inner page in Daylight, videos built in, clean motion, contact/demo contracts unchanged, budgets, all tests green. Do not redo work the patch already contains. Work in small verified batches; run the focused test modules, not the whole suite, between edits. **Never `cd` in Bash.**
+
+## Task 36 — land Task 35 (OWNER-MANDATED 2026-10-12; profile `site`)
+Task 35 completed the Task 34 scope but its change exceeded the old review size limit (now raised to 700000). Its full work is saved as `docs/design/daylight/task35-complete.patch`; the supervisor verified it applies cleanly and the whole suite passes (410 tests OK). Apply it with `git apply --binary docs/design/daylight/task35-complete.patch`, run the full suite and `python3 scripts/build_site.py`, and fix only genuine problems you find. Do not add features or restyle. **Never `cd` in Bash.**
