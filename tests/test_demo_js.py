@@ -26,6 +26,8 @@ function element(name, parts) {
     classList: classList(), textContent: '', open: false, tagName: 'DIV',
     style: { props: {}, setProperty(key, value) { this.props[key] = value; } },
     setAttribute(key, value) { this.attrs[key] = String(value); },
+    getAttribute(key) { return key in this.attrs ? this.attrs[key] : null; },
+    removeAttribute(key) { delete this.attrs[key]; },
     addEventListener(type, fn) { (this.listeners[type] = this.listeners[type] || []).push(fn); },
     removeEventListener(type, fn) { this.listeners[type] = (this.listeners[type] || []).filter(f => f !== fn); },
     querySelectorAll(selector) { return el.parts[selector] || []; },
@@ -116,8 +118,8 @@ function makeWindow(env, extra) {
 }
 """
 
-# Runs assets/home.js against the stub DOM: without GSAP (it must still work and end the intro) and with the recording
-# GSAP stub in several situations (first visit, skipped intro, late scripts, no intro, reduced motion, small screens).
+# Runs assets/home.js against the stub DOM (Daylight, Task 33): without GSAP (everything stays in its final state) and with
+# the recording GSAP stub (hero opening and stage choreography, the Pause motion button, reduced motion, small screens).
 HOME_SCRIPT = HARNESS + r"""
 const source = fs.readFileSync(process.argv[1], 'utf8');
 function run(env) {
@@ -126,69 +128,83 @@ function run(env) {
   before.dataset.compareSet = '0'; after.dataset.compareSet = '100'; controls.hidden = true;
   controls.parts = { 'input[type="range"]': [range], '[data-compare-set]': [before, after] };
   figure.parts = { '[data-compare-controls]': [controls] };
-  const intro = element('intro', { '.intro-mark path': many('arc', 3), '.intro-word > span': many('word', 1) });
-  const photo = element('photo', { img: many('img', 1) });
-  // Classes motion-boot.js would have set: .ph-wait (openings held by CSS) and, on a first visit, .ns-intro.
-  const root = element('html'); root.classList = classList(['js'].concat(env.introClass || env.wait ? ['motion'] : [], env.introClass ? ['ns-intro'] : [], env.wait ? ['ph-wait'] : []));
-  const parts = { '[data-compare]': [figure], '.intro': env.noPanel ? [] : [intro], '.hero-h .ln > span': many('line', 4), '.hero-photo': [photo],
-    '[data-hero-fade]': many('fade', 2), '.hero-device': many('device', 1) };
+  // The stage as the HTML ships it: its final state (booked, 10:30 picked, Desktop checked, score 100).
+  const book = element('book'); book.classList = classList(['booked']);
+  const slot = element('slot'); slot.classList = classList(['on']);
+  const dev = element('dev'); dev.classList = classList(['is-desktop']);
+  const count = element('count'); count.textContent = '100';
+  // reel.js (loaded first) has already set aria-pressed: "true" when Save-Data or reduced motion holds the motion.
+  const toggle = element('toggle'); toggle.attrs['aria-pressed'] = env.held ? 'true' : 'false';
+  // The class motion-boot.js would have set: .ph-wait (openings held by CSS) unless its failsafe already removed it.
+  const root = element('html'); root.classList = classList(['js'].concat(env.reduce ? [] : ['motion'], env.wait ? ['ph-wait'] : []));
+  const parts = { '[data-compare]': [figure], '.hero-h .ln > span': many('line', 4), '[data-hero-fade]': many('fade', 2), '.stage': [element('stage')],
+    '.rig-plinth': [element('plinth')], '.hd-laptop, .hd-phone': many('device', 2), '.frag': many('card', 4), '.frag-book': [book],
+    '.slot-pick': [slot], '.cursor': [element('cursor')], '.frag-dev': [dev], '.ring-fg': [element('ring')], '[data-count]': [count],
+    '.hero': [element('hero')], '.rig-devices': [element('devices')], '.rig-cards': [element('cards')], '[data-motion-toggle]': [toggle] };
   const doc = { documentElement: root, querySelector: s => (parts[s] || [])[0] || null, querySelectorAll: s => parts[s] || [] };
-  const { win, listeners, store } = makeWindow(env);
+  const { win } = makeWindow(env);
   let log = null;
   if (env.gsap) { const stub = makeGsap(env); win.gsap = stub.gsap; win.ScrollTrigger = stub.ScrollTrigger; log = stub.log; }
   vm.runInNewContext(source, { window: win, document: doc });
   const snap = () => ({ pos: figure.style.props['--pos'], before: before.attrs['aria-pressed'], after: after.attrs['aria-pressed'], text: range.attrs['aria-valuetext'] });
-  const out = { shown: controls.hidden === false, initial: snap(), classes: Array.from(root.classList.set).sort(), flag: store['cendavo-intro'] || null };
-  out.skipListeners = Object.fromEntries(['keydown', 'pointerdown', 'wheel', 'touchstart'].map(t => [t, (listeners[t] || []).map(l => Boolean(l.options && l.options.passive))]));
+  const stage = () => ({ booked: book.classList.contains('booked'), picked: slot.classList.contains('on'), desktop: dev.classList.contains('is-desktop'), count: count.textContent });
+  const out = { shown: controls.hidden === false, initial: snap(), classes: Array.from(root.classList.set).sort(), stage: stage() };
   if (log) {
-    const [first] = log.timelines;
-    const introTl = log.timelines.find(tl => tl.vars.onComplete);
     const hero = log.timelines.find(tl => tl.vars.paused);
     out.queries = log.queries;
     out.plugins = log.plugins;
-    out.introEnd = introTl ? introTl.duration() : null;
-    out.heroAt = introTl ? introTl.callbacks.map(c => c.at) : [];
     out.heroEnd = hero ? hero.duration() : null;
     out.heroPlayed = hero ? hero.played.slice() : null;
-    out.heroPhotoClip = hero ? hero.tweens.filter(t => t.names[0] === 'photo' && ((t.from && 'clipPath' in t.from) || 'clipPath' in t.vars)).map(t => t.from.clipPath) : null;
-    out.heroPhotoScale = hero ? hero.tweens.filter(t => t.names[0].startsWith('img') && t.from && t.from.scale === 1.08 && t.vars.scale === 1).length : null;
-    out.heroOpacityOnly = hero ? hero.tweens.every(t => !('autoAlpha' in t.vars) && !('visibility' in t.vars)) : null;
-    out.openingKinds = [hero, introTl].filter(Boolean).flatMap(tl => tl.tweens.map(t => t.kind));
-    out.introWipeAt = introTl ? introTl.tweens.find(t => t.names[0] === 'intro').at : null;
-    // Task 27: the start and end states of the percentage tweens that take over CSS translateY(%) holds.
+    out.openingKinds = hero ? hero.tweens.map(t => t.kind) : [];
+    out.openingNames = hero ? hero.tweens.map(t => t.names[0]) : [];
+    out.callbacks = hero ? hero.callbacks.map(c => c.at) : [];
     const shape = t => ({ kind: t.kind, from: t.from || null, yPercent: t.vars.yPercent, y: t.vars.y, clearProps: t.vars.clearProps || null });
     out.heroLines = hero ? hero.tweens.filter(t => (t.names[0] || '').startsWith('line')).map(shape) : null;
-    out.introWord = introTl ? introTl.tweens.filter(t => (t.names[0] || '').startsWith('word')).map(shape) : null;
+    out.cursor = hero ? hero.tweens.filter(t => t.names[0] === 'cursor').map(t => ({ from: t.from || null, xPercent: t.vars.xPercent, yPercent: t.vars.yPercent, clearProps: t.vars.clearProps || null })) : null;
+    // Eases: the timeline default and every tween's own ease must be one of home.js's two curves (functions).
+    out.defaultEase = hero ? typeof hero.vars.defaults.ease : null;
+    out.tweenEases = hero ? Array.from(new Set(hero.tweens.map(t => typeof t.vars.ease))) : [];
+    if (hero) {
+      const OUT = hero.vars.defaults.ease, IO = hero.tweens.find(t => t.names[0] === 'plinth').vars.ease;
+      const xs = [0, 0.1, 0.25, 0.5, 0.75, 0.9, 1];
+      out.curves = { out: xs.map(OUT), io: xs.map(IO) };
+    }
     out.autoAlpha = log.varsSeen.some(v => v && ('autoAlpha' in v || 'visibility' in v));
     out.snap = log.varsSeen.some(v => v && v.scrollTrigger && 'snap' in v.scrollTrigger);
-    // Night Shift Task 28: no pinned or scroll-driven project sequence on the homepage any more.
-    out.pins = log.timelines.filter(tl => tl.vars.scrollTrigger && tl.vars.scrollTrigger.pin).length;
+    out.pins = log.varsSeen.filter(v => v && v.scrollTrigger && v.scrollTrigger.pin).length;
     out.scrollTimelines = log.timelines.filter(tl => tl.vars.scrollTrigger).length;
-    out.scrollTweens = log.varsSeen.filter(v => v && v.scrollTrigger).length;
-    if (env.skipWith) {
-      let prevented = false;
-      const event = { type: env.skipWith, key: 'a', preventDefault() { prevented = true; } };
-      (listeners[env.skipWith] || []).slice().forEach(l => l.fn(event));
-      out.afterSkip = { prevented, classes: Array.from(root.classList.set).sort(), flag: store['cendavo-intro'] || null,
-        introProgress: introTl ? introTl.progressed : null, heroProgress: hero ? hero.progressed : null,
-        listenersLeft: ['keydown', 'pointerdown', 'wheel', 'touchstart'].reduce((n, t) => n + (listeners[t] || []).length, 0) };
+    out.scrubs = log.tweens.filter(t => t.vars && t.vars.scrollTrigger && t.vars.scrollTrigger.scrub)
+      .map(t => ({ names: t.names, props: Object.keys(t.vars).filter(k => k !== 'scrollTrigger' && k !== 'ease').sort(), y: t.vars.y, ease: t.vars.ease }));
+    out.notOnce = log.creates.filter(c => !c.once).length;
+    if (hero && env.press) {
+      toggle.attrs['aria-pressed'] = 'true';  // reel.js flips it first (it is loaded first)
+      (toggle.listeners.click || []).forEach(fn => fn({ type: 'click' }));
+      out.afterPress = { progressed: hero.progressed.slice(), stage: stage() };
+      toggle.attrs['aria-pressed'] = 'false';
+      const before = hero.progressed.length;
+      (toggle.listeners.click || []).forEach(fn => fn({ type: 'click' }));
+      out.resumeProgressCalls = hero.progressed.length - before;  // pressing again (play) never replays the choreography
+    } else if (hero) {
+      out.atStart = stage();
+      out.progressedAtStart = hero.progressed.slice();
+      hero.progress(1);  // the timeline reaches its end: every call fires
+      out.atEnd = stage();
     }
   }
   range.value = '0'; range.listeners.input[0](); out.input = snap();
   after.listeners.click[0](); out.click = { ...snap(), value: String(range.value) };
-  out.tweensTo = log ? log.tweens.filter(t => t.kind === 'to').length : 0;
+  out.glides = log ? log.tweens.filter(t => t.kind === 'to' && t.vars && 'v' in t.vars).length : 0;
   return out;
 }
 const desktop = { width: 1440, height: 900, fine: true, reduce: false };
 console.log(JSON.stringify({
-  plain: run({ ...desktop, introClass: true, wait: true }),
-  first: run({ ...desktop, gsap: true, introClass: true, wait: true, now: 120, skipWith: 'keydown' }),
-  pointer: run({ ...desktop, gsap: true, introClass: true, wait: true, now: 120, skipWith: 'pointerdown' }),
-  late: run({ ...desktop, gsap: true, introClass: true, wait: true, now: 1500 }),
-  noIntro: run({ ...desktop, gsap: true, introClass: false, wait: true }),
-  released: run({ ...desktop, gsap: true, introClass: false, wait: false }),
-  reduced: run({ ...desktop, gsap: true, introClass: true, reduce: true }),
-  phone: run({ width: 390, height: 844, fine: false, reduce: false, gsap: true, introClass: false, wait: true }),
+  plain: run({ ...desktop, wait: true }),
+  first: run({ ...desktop, gsap: true, wait: true }),
+  released: run({ ...desktop, gsap: true, wait: false }),
+  held: run({ ...desktop, gsap: true, wait: true, held: true }),
+  press: run({ ...desktop, gsap: true, wait: true, press: true }),
+  reduced: run({ ...desktop, gsap: true, reduce: true }),
+  phone: run({ width: 390, height: 844, fine: false, reduce: false, gsap: true, wait: true }),
 }));
 """
 
@@ -200,14 +216,10 @@ const source = fs.readFileSync(process.argv[1], 'utf8');
 const WIDE = { src: '/assets/video/cendavo-showreel-1600.mp4', poster: '/assets/video/cendavo-showreel-poster-1600.jpg' };
 const NARROW = { src: '/assets/video/cendavo-showreel-vertical-720.mp4', poster: '/assets/video/cendavo-showreel-vertical-poster-720.jpg' };
 const settle = () => new Promise(resolve => setImmediate(resolve));
-function makeReel(env, name, narrow) {
-  const src = element('source'); src.attrs.src = narrow ? WIDE.src : '/assets/video/' + name + '.mp4';
-  const video = element('video', { source: [src] });
-  video.attrs = { controls: '', poster: narrow ? WIDE.poster : '/assets/video/' + name + '.jpg', muted: '' };
-  video.dataset = narrow ? { narrowSrc: NARROW.src, narrowPoster: NARROW.poster } : {};
+function makeVideo(env, name, src) {
+  const video = element(name, { source: [src || element('source')] });
   Object.assign(video, { paused: true, muted: false, plays: 0, pauses: 0, loads: 0 });
   const fire = type => (video.listeners[type] || []).forEach(fn => fn({ type }));
-  video.removeAttribute = key => { delete video.attrs[key]; };
   video.load = () => { video.loads++; };
   video.play = () => {
     video.plays++;
@@ -217,6 +229,18 @@ function makeReel(env, name, narrow) {
     return Promise.resolve();
   };
   video.pause = () => { video.pauses++; if (!video.paused) { video.paused = true; fire('pause'); } };
+  return video;
+}
+function makeDoc(parts, root, env) {
+  return { documentElement: root, readyState: env.complete ? 'complete' : 'interactive', hidden: false, listeners: {},
+    addEventListener(type, fn) { (this.listeners[type] = this.listeners[type] || []).push(fn); },
+    querySelector: s => (parts[s] || [])[0] || null, querySelectorAll: s => parts[s] || [] };
+}
+function makeReel(env, name, narrow) {
+  const src = element('source'); src.attrs.src = narrow ? WIDE.src : '/assets/video/' + name + '.mp4';
+  const video = makeVideo(env, 'video', src);
+  video.attrs = { controls: '', poster: narrow ? WIDE.poster : '/assets/video/' + name + '.jpg', muted: '' };
+  video.dataset = narrow ? { narrowSrc: NARROW.src, narrowPoster: NARROW.poster } : {};
   const toggle = element('toggle'); toggle.hidden = true; toggle.textContent = 'Play ' + name; toggle.attrs.type = 'button';
   const reel = element('reel', { video: [video], '[data-reel-toggle]': [toggle] });
   return { reel, video, toggle, src };
@@ -227,7 +251,7 @@ async function run(env) {
   const { video, toggle, src } = reels[0];
   const root = element('html'); root.classList = classList(['js']);
   const parts = { '[data-reel]': reels.map(r => r.reel) };
-  const doc = { documentElement: root, querySelector: s => (parts[s] || [])[0] || null, querySelectorAll: s => parts[s] || [] };
+  const doc = makeDoc(parts, root, env);
   const observers = [];
   class FakeObserver { constructor(callback, options) { this.callback = callback; this.options = options; this.targets = []; observers.push(this); } observe(target) { this.targets.push(target); } }
   const { win } = makeWindow(env, {
@@ -271,6 +295,52 @@ async function run(env) {
   out.steps.push(['out of view', await view(false)]);
   return out;
 }
+// Daylight (Task 33): the homepage's two hero loops, the showreel with chapters and the Pause motion button on one page.
+async function runHero(env) {
+  const reel = makeReel(env, 'showreel', Boolean(env.narrow));
+  reel.video.id = 'reel-video';
+  // As in pages/index.html: the sources carry data-src only, and the laptop plays only above 640px (data-loop="wide").
+  const loopSource = name => { const s = element('source'); s.dataset.src = '/assets/video/loop-hb-' + name + '.mp4'; return s; };
+  const laptop = makeVideo(env, 'laptop', loopSource('desktop')), phone = makeVideo(env, 'phone', loopSource('phone'));
+  laptop.dataset.loop = 'wide'; phone.dataset.loop = '';
+  const motion = element('motion'); motion.hidden = true; motion.attrs['aria-pressed'] = 'false';
+  const buttons = [0, 6.5, 8].map((t, i) => { const b = element('chapter' + i); b.dataset.t = String(t); return b; });
+  const list = element('chapters', { 'button[data-t]': buttons }); list.hidden = true;
+  const root = element('html'); root.classList = classList(['js']);
+  const parts = { '[data-reel]': [reel.reel], 'video[data-loop]': [laptop, phone], '[data-motion-toggle]': [motion], '[data-chapters="reel-video"]': [list] };
+  const doc = makeDoc(parts, root, env);
+  const observers = [], idle = [];
+  class FakeObserver { constructor(callback) { this.callback = callback; this.targets = []; observers.push(this); } observe(target) { this.targets.push(target); } }
+  const { win, listeners } = makeWindow(env, { IntersectionObserver: FakeObserver, requestIdleCallback: fn => idle.push(fn),
+    navigator: env.saveData ? { connection: { saveData: true } } : { connection: {} } });
+  let error = null;
+  try { vm.runInNewContext(source, { window: win, document: doc, setImmediate }); } catch (e) { error = String(e); }
+  const videos = [laptop, phone, reel.video];
+  const view = async (list, on) => { for (const v of list) observers.filter(o => o.targets.includes(v)).forEach(o => o.callback([{ isIntersecting: on, target: v }])); await settle(); };
+  const out = { error, motionHidden: motion.hidden, pressed: motion.attrs['aria-pressed'], chaptersHidden: list.hidden,
+    muted: videos.map(v => v.muted), observed: videos.map(v => observers.filter(o => o.targets.includes(v)).length),
+    loadListeners: (listeners.load || []).length, steps: [] };
+  const step = name => out.steps.push([name, videos.map(v => !v.paused), motion.attrs['aria-pressed']]);
+  const press = async () => { (motion.listeners.click || []).forEach(fn => fn({ type: 'click' })); await settle(); };
+  await view(videos, true); step('in view');
+  (listeners.load || []).forEach(l => l.fn({ type: 'load' })); await settle(); step('loaded');
+  idle.splice(0).forEach(fn => fn()); await settle(); step('idle');
+  doc.hidden = true; (doc.listeners.visibilitychange || []).forEach(fn => fn()); await settle(); step('tab hidden');
+  doc.hidden = false; (doc.listeners.visibilitychange || []).forEach(fn => fn()); await settle(); step('tab visible');
+  await press(); step('pause motion');
+  await view(videos, false); await view(videos, true); step('back in view, paused');
+  await press(); step('play motion');
+  await view([laptop, phone], false); step('hero out of view');
+  // A chapter seeks the showreel (before its metadata loads the browser keeps the time as the start position) and plays it.
+  (buttons[1].listeners.click || []).forEach(fn => fn({ type: 'click' })); await settle();
+  out.chapter = { time: reel.video.currentTime === undefined ? null : reel.video.currentTime, playing: !reel.video.paused, current: buttons.map(b => b.attrs['aria-current'] || null) };
+  reel.video.currentTime = 8.4; (reel.video.listeners.timeupdate || []).forEach(fn => fn({ type: 'timeupdate' }));
+  out.afterTimeupdate = buttons.map(b => b.attrs['aria-current'] || null);
+  // After every step above (including Pause motion released): which loop ever asked for its file, loaded or played.
+  out.loops = [laptop, phone].map(v => ({ src: v.parts.source[0].attrs.src || null, loads: v.loads, plays: v.plays,
+    observed: observers.filter(o => o.targets.includes(v)).length }));
+  return out;
+}
 (async () => {
   const desktop = { width: 1440, height: 900, fine: true, reduce: false };
   const phone = { width: 390, height: 844, fine: false, reduce: false };
@@ -281,6 +351,9 @@ async function run(env) {
     clips: { ...phone, names: clips }, clipsReduced: { ...desktop, reduce: true, names: clips }, clipsSaveData: { ...phone, saveData: true, names: clips } };
   const out = {};
   for (const [name, env] of Object.entries(cases)) out[name] = await run(env);
+  const heroes = { heroDesktop: desktop, heroComplete: { ...desktop, complete: true }, heroReduced: { ...desktop, reduce: true },
+    heroSaveData: { ...phone, saveData: true }, heroPhone: { ...phone, narrow: true } };
+  for (const [name, env] of Object.entries(heroes)) out[name] = await runHero(env);
   console.log(JSON.stringify(out));
 })();
 """
@@ -301,8 +374,8 @@ function run(env) {
   range.setAttribute = (key, v) => { attrWrites.push(key); range.attrs[key] = String(v); };
   const pressed = [];
   [before, after].forEach(b => { b.setAttribute = (key, v) => { pressed.push(key); b.attrs[key] = String(v); }; });
-  const video = element('video'), cap = element('cap'), toggle = element('toggle');
-  const reel = element('reel', { video: [video], '.reel-cap, [data-reel-toggle]': [cap, toggle] });
+  const video = element('video'), cap = element('cap'), toggle = element('toggle'), frame = element('frame');
+  const reel = element('reel', { video: [video], '.reel-frame': [frame], '.reel-cap, [data-reel-toggle]': [cap, toggle] });
   reel.getBoundingClientRect = () => ({ left: 0, top: env.reelTop === undefined ? 2000 : env.reelTop, width: 1200, height: 675 });
   const root = element('html'); root.classList = classList(['js', 'motion']);
   const parts = { '[data-compare]': [figure], '[data-reel]': [reel] };
@@ -769,117 +842,129 @@ class DemoScriptTests(unittest.TestCase):
         self.assertEqual(plain['initial'], {'pos': '50%', 'before': 'false', 'after': 'false', 'text': '50 of 100 showing the redesign'})
         self.assertEqual(plain['input'], {'pos': '0%', 'before': 'true', 'after': 'false', 'text': 'Before only'})
         self.assertEqual(plain['click'], {'pos': '100%', 'before': 'false', 'after': 'true', 'text': 'After only', 'value': '100'})
-        # Without GSAP the intro ends at once and is remembered for the session; no skip listeners are left behind.
-        self.assertNotIn('ns-intro', plain['classes'])
-        self.assertNotIn('ph-wait', plain['classes'])  # Task 23: without GSAP the CSS hold on the hero is released at once
-        self.assertEqual(plain['flag'], '1')
-        self.assertEqual(plain['skipListeners'], {'keydown': [], 'pointerdown': [], 'wheel': [], 'touchstart': []})
+        # Without GSAP the CSS hold on the hero is released at once and the stage keeps its final, static state.
+        self.assertNotIn('ph-wait', plain['classes'])
+        self.assertEqual(plain['stage'], {'booked': True, 'picked': True, 'desktop': True, 'count': '100'})
         # With GSAP the buttons glide via a tween but end in the same state.
-        for name in ('first', 'noIntro', 'reduced', 'phone'):
+        for name in ('first', 'released', 'reduced', 'phone'):
             with self.subTest(case=name):
                 self.assertEqual(r[name]['click'], plain['click'])
                 self.assertFalse(r[name]['autoAlpha'])
                 self.assertFalse(r[name]['snap'])
-        self.assertEqual(r['noIntro']['tweensTo'], 1)
-        self.assertEqual(r['reduced']['tweensTo'], 0)  # reduced motion: the divider jumps
+        self.assertEqual(r['first']['glides'], 1)
+        self.assertEqual(r['reduced']['glides'], 0)  # reduced motion: the divider jumps
         self.assertEqual(r['first']['plugins'], 1)
-        # Every motion query sits behind the reduced-motion guard (or is the reduced-motion branch itself).
-        queries = r['first']['queries']
-        self.assertIn('(prefers-reduced-motion: no-preference)', queries)
-        for query in queries:
+        # Every motion query sits behind the reduced-motion guard.
+        for query in r['first']['queries']:
             with self.subTest(query=query):
                 self.assertTrue(all('prefers-reduced-motion' in part for part in query.split(', ')))
-        # Reduced motion: nothing is animated, the intro ends and nothing is pinned.
+        # Reduced motion: nothing is animated, nothing is pinned or scrubbed, the stage stays final.
         reduced = r['reduced']
         self.assertIsNone(reduced['heroEnd'])
-        self.assertIsNone(reduced['introEnd'])
-        self.assertNotIn('ns-intro', reduced['classes'])
-        self.assertEqual(reduced['pins'], 0)
+        self.assertEqual((reduced['pins'], reduced['scrubs']), (0, []))
+        self.assertEqual(reduced['stage'], plain['stage'])
 
-    def test_home_intro_and_hero_stay_within_their_time_limits(self):
+    def test_home_hero_plays_once_within_five_seconds(self):
+        # Daylight (Task 33): the opening and the stage choreography are one timeline that plays once, at load, and is
+        # over by 5 s (WCAG 2.2.2: the loops that keep moving have the Pause motion button). It only plays while CSS still
+        # holds the hero; after the failsafe has let go nothing is hidden again.
         r = self.node_json(HOME_SCRIPT, HOME)
-        first = r['first']
-        self.assertIsNotNone(first['introEnd'])
-        # Night Shift Task 23: a shorter intro, so the headline reads by about 1.7 s.
-        self.assertLessEqual(first['introEnd'], 1.4)
-        self.assertLessEqual(first['introWipeAt'], 0.8)
-        self.assertLessEqual(first['heroAt'][0], 1.0)
-        self.assertLessEqual(first['heroEnd'], 1.2)
-        self.assertTrue(first['heroOpacityOnly'])
-        # The hero starts while the panel is still wiping away, before the intro ends.
-        self.assertEqual(len(first['heroAt']), 1)
-        self.assertLess(first['heroAt'][0], first['introEnd'])
-        self.assertEqual(first['heroPlayed'], [])
-        # No intro: the hero plays at once (and still within 1.2 s).
-        for name in ('noIntro', 'late'):
+        for name in ('first', 'phone'):
             with self.subTest(case=name):
-                self.assertEqual(r[name]['heroPlayed'], [0])
-                self.assertLessEqual(r[name]['heroEnd'], 1.2)
-                self.assertIsNone(r[name]['introEnd'])
-                self.assertNotIn('ns-intro', r[name]['classes'])
-        # Scripts that arrive late skip the intro instead of starting one the 2.5 s failsafe would cut off.
-        self.assertEqual(r['late']['skipListeners'], {'keydown': [], 'pointerdown': [], 'wheel': [], 'touchstart': []})
-
-    def test_home_hero_takes_over_the_css_hold_without_a_flash(self):
-        # Night Shift Task 23: the hero and intro use fromTo (start states applied at once, matching the CSS held under
-        # .ph-wait), then home.js removes .ph-wait. If the 2.5 s failsafe already removed it, the hero is not hidden again.
-        r = self.node_json(HOME_SCRIPT, HOME)
-        for name in ('first', 'late', 'noIntro', 'phone'):
-            with self.subTest(case=name):
-                self.assertNotIn('ph-wait', r[name]['classes'])
-                self.assertTrue(r[name]['openingKinds'])
-                self.assertNotIn('from', r[name]['openingKinds'])
+                result = r[name]
+                self.assertEqual(result['heroPlayed'], [0])
+                self.assertGreater(result['heroEnd'], 3)
+                self.assertLessEqual(result['heroEnd'], 5)
+                self.assertNotIn('ph-wait', result['classes'])
+                self.assertEqual(result['notOnce'], 0)  # the comparison's one sweep trigger
         released = r['released']
         self.assertIsNone(released['heroEnd'])
         self.assertIsNone(released['heroPlayed'])
         self.assertNotIn('ph-wait', released['classes'])
+        self.assertEqual(released['stage'], {'booked': True, 'picked': True, 'desktop': True, 'count': '100'})
 
-    def test_home_hero_photo_paints_under_the_first_visit_intro(self):
-        # Night Shift Task 26: with the intro the photo is never clipped (it paints beneath the panel and stays the LCP
-        # element) and only settles in scale; without the intro, or when scripts arrive late, it still wipes in.
+    def test_home_hero_takes_over_the_css_hold_without_a_flash(self):
+        # Night Shift Task 23: fromTo applies the start states at once (matching the CSS held under .ph-wait), then home.js
+        # removes .ph-wait. The stage pieces animate transform, opacity and clip-path only (plus the ring's dash offset).
+        r = self.node_json(HOME_SCRIPT, HOME)
+        for name in ('first', 'phone'):
+            with self.subTest(case=name):
+                kinds, names = r[name]['openingKinds'], r[name]['openingNames']
+                self.assertTrue(kinds)
+                self.assertNotIn('from', kinds)
+                self.assertEqual(names[:5], ['line0', 'fade0', 'stage', 'plinth', 'device0'])
+                self.assertIn('card0', names)
+                self.assertIn('ring', names)
+
+    def test_home_stage_starts_unbooked_and_ends_in_the_static_state(self):
+        # The choreography starts from the "before" state (set while the stage is still held hidden) and finishes in
+        # exactly the state the static page shows: Desktop checked at 2.2 s, 10:30 picked at 3.6 s, booked at 4.5 s.
         r = self.node_json(HOME_SCRIPT, HOME)
         first = r['first']
-        self.assertEqual(first['heroPhotoClip'], [])
-        self.assertEqual(first['heroPhotoScale'], 1)
-        self.assertEqual(first['heroAt'], [0.95])
-        self.assertLessEqual(first['introEnd'], 1.4)
-        self.assertLessEqual(first['heroEnd'], 1.2)
-        for name in ('noIntro', 'late', 'phone'):
-            with self.subTest(case=name):
-                self.assertEqual(r[name]['heroPhotoClip'], ['inset(0 0 0 100%)'])
-                self.assertEqual(r[name]['heroPhotoScale'], 1)
-                self.assertEqual(r[name]['heroPlayed'], [0])
-        # Late scripts: the intro class goes in the same synchronous run, so the CSS no-intro clip and the JS clip agree.
-        self.assertNotIn('ns-intro', r['late']['classes'])
-        self.assertNotIn('ph-wait', r['late']['classes'])
+        self.assertEqual(first['atStart'], {'booked': False, 'picked': False, 'desktop': False, 'count': '100'})
+        self.assertEqual(first['progressedAtStart'], [])
+        self.assertEqual(first['callbacks'], [2.2, 3.6, 4.5])
+        self.assertEqual(first['atEnd'], {'booked': True, 'picked': True, 'desktop': True, 'count': '100'})
+        # The cursor arrives from off the card, visits the slot and comes to rest where CSS draws it (transform cleared).
+        cursor = first['cursor']
+        self.assertEqual(cursor[0]['from'], {'xPercent': 160, 'yPercent': 220, 'opacity': 0})
+        self.assertEqual((cursor[-1]['xPercent'], cursor[-1]['yPercent']), (0, 0))
+        self.assertIn('transform', cursor[-1]['clearProps'])
 
-    def test_home_intro_is_skipped_by_any_input_without_swallowing_it(self):
+    def test_home_motion_uses_exactly_the_two_css_curves(self):
+        # Daylight motion rules: entrances on cubic-bezier(.2,.8,.2,1), changes of state on cubic-bezier(.7,0,.2,1). home.js
+        # solves them like CSS does; compare against an independent solver.
+        def css_bezier(x1, y1, x2, y2, x):
+            at = lambda t, a, b: 3 * a * t * (1 - t) ** 2 + 3 * b * t * t * (1 - t) + t ** 3
+            low, high = 0.0, 1.0
+            for _ in range(60):
+                mid = (low + high) / 2
+                if at(mid, x1, x2) < x:
+                    low = mid
+                else:
+                    high = mid
+            return at((low + high) / 2, y1, y2)
         r = self.node_json(HOME_SCRIPT, HOME)
         first = r['first']
-        # One passive listener per kind of input while the intro runs.
-        self.assertEqual(first['skipListeners'], {'keydown': [True], 'pointerdown': [True], 'wheel': [True], 'touchstart': [True]})
-        self.assertIn('ns-intro', first['classes'])
-        for name in ('first', 'pointer'):
-            with self.subTest(case=name):
-                after = r[name]['afterSkip']
-                self.assertFalse(after['prevented'])  # the key or click still reaches the page
-                self.assertNotIn('ns-intro', after['classes'])
-                self.assertEqual(after['flag'], '1')
-                self.assertIn(1, after['introProgress'])
-                self.assertIn(1, after['heroProgress'])  # the hero jumps to its final state
-                self.assertEqual(after['listenersLeft'], 0)
+        self.assertEqual(first['defaultEase'], 'function')
+        self.assertTrue(set(first['tweenEases']) <= {'function', 'undefined'})  # undefined: the timeline default (OUT)
+        xs = [0, 0.1, 0.25, 0.5, 0.75, 0.9, 1]
+        for name, curve in (('out', (0.2, 0.8, 0.2, 1)), ('io', (0.7, 0, 0.2, 1))):
+            for x, y in zip(xs, first['curves'][name]):
+                with self.subTest(curve=name, x=x):
+                    self.assertAlmostEqual(y, css_bezier(*curve, x), places=4)
 
-    def test_home_has_no_pinned_or_scroll_driven_project_sequence(self):
-        # Night Shift Task 28 (owner): the pinned concept-project sequence, its counter and its bone exit layer are gone. The
-        # three projects are plain cards, so home.js creates no pin and no scroll-linked timeline on any screen.
+    def test_pause_motion_jumps_the_choreography_to_its_end(self):
+        # The Pause motion button (owned by reel.js, which flips aria-pressed first) also ends the stage choreography at
+        # once in its final state; pressing it again never replays it. With Save-Data the button starts pressed, so the
+        # choreography is skipped straight to its end.
         r = self.node_json(HOME_SCRIPT, HOME)
-        for name in ('first', 'pointer', 'late', 'noIntro', 'released', 'reduced', 'phone'):
+        press = r['press']['afterPress']
+        self.assertIn(1, press['progressed'])
+        self.assertEqual(press['stage'], {'booked': True, 'picked': True, 'desktop': True, 'count': '100'})
+        self.assertEqual(r['press']['resumeProgressCalls'], 0)
+        held = r['held']
+        self.assertEqual(held['heroPlayed'], [])
+        self.assertEqual(held['progressedAtStart'], [1])
+        self.assertEqual(held['atStart'], {'booked': True, 'picked': True, 'desktop': True, 'count': '100'})
+        self.assertNotIn('ph-wait', held['classes'])
+
+    def test_home_has_no_pin_and_only_two_transform_scrubs(self):
+        # Daylight (Task 33): no pinned sequence and no scroll-linked timeline. The only scrubbed motion is the hero's two
+        # depth layers drifting up (y only, 8-40 px), never with reduced motion.
+        r = self.node_json(HOME_SCRIPT, HOME)
+        for name in ('first', 'released', 'held', 'phone'):
             with self.subTest(case=name):
                 self.assertEqual(r[name]['pins'], 0)
                 self.assertEqual(r[name]['scrollTimelines'], 0)
-                self.assertEqual(r[name]['scrollTweens'], 0)
+                scrubs = r[name]['scrubs']
+                self.assertEqual([s['names'] for s in scrubs], [['devices'], ['cards']])
+                for scrub in scrubs:
+                    self.assertEqual(scrub['props'], ['y'])
+                    self.assertEqual(scrub['ease'], 'none')
+                    self.assertTrue(8 <= abs(scrub['y']) <= 40)
         js = HOME.read_text(encoding='utf-8')
-        for gone in ('pin:', 'PIN_', 'STACK_QUERY', 'work-exit', 'work-count', 'is-pinned', '[data-work]', '.proj'):
+        for gone in ('pin:', 'PIN_', 'STACK_QUERY', 'work-exit', 'work-count', 'is-pinned', '[data-work]', '.proj', "--w'", "--sw'"):
             with self.subTest(gone=gone):
                 self.assertNotIn(gone, js)
 
@@ -901,8 +986,8 @@ class DemoScriptTests(unittest.TestCase):
         # (b) JS removes the native controls and shows a type="button" toggle whose label follows the real playback state.
         r = self.node_json(REEL_SCRIPT, REEL)
         for name, result in r.items():
-            if 'multi' in result:
-                continue  # the clip cases are checked in test_every_reel_on_a_page_plays_and_pauses_on_its_own
+            if 'multi' in result or name.startswith('hero'):
+                continue  # clips: test_every_reel_on_a_page_plays_and_pauses_on_its_own; the homepage: the hero loop tests
             with self.subTest(case=name):
                 self.assertIsNone(result['error'])
                 self.assertFalse(result['controls'])
@@ -961,6 +1046,84 @@ class DemoScriptTests(unittest.TestCase):
         for needle in ('video.play(', 'video.pause(', 'IntersectionObserver', "removeAttribute('controls')"):
             self.assertNotIn(needle, home)
 
+    def test_hero_loops_start_only_after_load_and_idle_and_follow_the_tab(self):
+        # Daylight (Task 33): the hero's laptop and phone loops share reel.js with the showreel. They are muted, observed and
+        # start only once the page has loaded and gone idle (so they never compete with first paint), pause with the tab
+        # hidden and resume when it is back. The showreel needs no load wait. Order: laptop, phone, showreel.
+        r = self.node_json(REEL_SCRIPT, REEL)
+        hero = r['heroDesktop']
+        self.assertIsNone(hero['error'])
+        self.assertEqual(hero['muted'], [True, True, True])
+        self.assertEqual(hero['observed'], [1, 1, 1])
+        self.assertEqual(hero['loadListeners'], 1)
+        self.assertFalse(hero['motionHidden'])
+        self.assertEqual(hero['pressed'], 'false')
+        steps = [(name, playing) for name, playing, _ in hero['steps']]
+        self.assertEqual(steps[:5], [('in view', [False, False, True]), ('loaded', [False, False, True]), ('idle', [True, True, True]),
+                                     ('tab hidden', [False, False, False]), ('tab visible', [True, True, True])])
+        # Already loaded when the script runs: no wait, no load listener.
+        complete = r['heroComplete']
+        self.assertEqual(complete['loadListeners'], 0)
+        self.assertEqual(complete['steps'][0][1], [True, True, True])
+
+    def test_pause_motion_holds_every_video_until_pressed_again(self):
+        r = self.node_json(REEL_SCRIPT, REEL)
+        steps = {name: (playing, pressed) for name, playing, pressed in r['heroDesktop']['steps']}
+        self.assertEqual(steps['pause motion'], ([False, False, False], 'true'))
+        self.assertEqual(steps['back in view, paused'], ([False, False, False], 'true'))  # coming back into view does not resume
+        self.assertEqual(steps['play motion'], ([True, True, True], 'false'))
+        self.assertEqual(steps['hero out of view'], ([False, False, True], 'false'))  # still only plays in view
+        # Reduced motion or Save-Data: the button starts pressed (motion paused) and nothing plays by itself, even after
+        # load; pressing it plays what is in view.
+        # (heroSaveData runs at phone width, so its laptop never plays: see the narrow-width test below.)
+        for name, released in (('heroReduced', [True, True, True]), ('heroSaveData', [False, True, True])):
+            with self.subTest(case=name):
+                result = dict((n, (p, a)) for n, p, a in r[name]['steps'])
+                self.assertEqual(r[name]['pressed'], 'true')
+                for step in ('in view', 'loaded', 'idle', 'tab visible'):
+                    self.assertEqual(result[step], ([False, False, False], 'true'), step)
+                self.assertEqual(result['pause motion'], (released, 'false'))
+
+    def test_hero_loop_files_are_requested_only_on_first_play(self):
+        # Daylight (Task 33): the hero sources ship as data-src. reel.js sets src and calls load() once, right before the
+        # first play(); without a play (reduced motion, Save-Data, never in view) no file is ever requested.
+        r = self.node_json(REEL_SCRIPT, REEL)
+        for name in ('heroDesktop', 'heroComplete'):
+            with self.subTest(case=name):
+                for loop, file in zip(r[name]['loops'], ('loop-hb-desktop', 'loop-hb-phone')):
+                    self.assertEqual(loop['src'], f'/assets/video/{file}.mp4')
+                    self.assertEqual(loop['loads'], 1)  # once, however often it is paused and resumed
+                    self.assertGreaterEqual(loop['plays'], 2)
+
+    def test_phones_never_play_or_load_the_laptop_loop(self):
+        # Strategist brief 33a item 6: at 640px and below only the phone loop plays (about half the hero video data). The
+        # laptop video is never observed, played or loaded, and its source never gets a src, even after Pause motion is
+        # released; it keeps its CSS poster. Above 640px both play (heroDesktop, 1440px).
+        r = self.node_json(REEL_SCRIPT, REEL)
+        for name in ('heroPhone', 'heroSaveData'):
+            with self.subTest(case=name):
+                laptop, phone = r[name]['loops']
+                self.assertIsNone(r[name]['error'])
+                self.assertEqual(laptop, {'src': None, 'loads': 0, 'plays': 0, 'observed': 0})
+                self.assertEqual((phone['src'], phone['loads'], phone['observed']), ('/assets/video/loop-hb-phone.mp4', 1, 1))
+                self.assertGreaterEqual(phone['plays'], 1)
+                self.assertFalse(r[name]['motionHidden'])  # the phone loop still has its Pause motion button
+                self.assertTrue(all(not playing[0] for _, playing, _ in r[name]['steps']))
+        steps = {name: playing for name, playing, _ in r['heroPhone']['steps']}
+        self.assertEqual(steps['idle'], [False, True, True])
+        self.assertEqual(steps['play motion'], [False, True, True])
+        self.assertEqual(r['heroDesktop']['loops'][0]['observed'], 1)
+
+    def test_showreel_chapters_seek_play_and_mark_the_current_one(self):
+        r = self.node_json(REEL_SCRIPT, REEL)
+        hero = r['heroDesktop']
+        self.assertFalse(hero['chaptersHidden'])
+        self.assertEqual(hero['chapter'], {'time': 6.5, 'playing': True, 'current': [None, 'true', None]})
+        self.assertEqual(hero['afterTimeupdate'], [None, None, 'true'])
+        # The phone's vertical cut has its own timing, so the chapter list stays hidden there.
+        self.assertTrue(r['heroPhone']['chaptersHidden'])
+        self.assertIsNone(r['heroPhone']['error'])
+
     def test_every_reel_on_a_page_plays_and_pauses_on_its_own(self):
         # Task 29: Services has two clips. Each gets its own observer and button (named from its markup), plays only while it
         # is in view, and a press of Pause on one never touches the other.
@@ -996,7 +1159,8 @@ class DemoScriptTests(unittest.TestCase):
                     self.assertEqual((states[0]['playing'], states[0]['plays']), (False, 0), step)
 
     def test_demo_sweep_runs_once_and_moves_only_the_divider(self):
-        # Task 29: the first time the comparison is well in view, the divider sweeps 50 -> 82 -> 18 -> 50 in 1.6 s, once.
+        # Task 29: the first time the comparison is well in view, the divider sweeps 50 -> 82 -> 18 -> 50, once. Daylight
+        # (Task 33): in 1.5 s (0.4 + 0.7 + 0.4, the plan's durations) on the state-change curve.
         # Only the visual --pos changes: the range value, its aria-valuetext and the buttons' aria-pressed are never
         # written, so assistive technology hears nothing extra.
         r = self.node_json(SWEEP_SCRIPT, HOME)
@@ -1006,7 +1170,7 @@ class DemoScriptTests(unittest.TestCase):
                 self.assertEqual(result['trigger'], {'start': 'top 65%', 'once': True})
                 self.assertTrue(result['started'])
                 self.assertEqual(result['positions'], ['82%', '18%', '50%'])
-                self.assertAlmostEqual(result['duration'], 1.6)
+                self.assertAlmostEqual(result['duration'], 1.5)
                 self.assertEqual((result['sweepValueWrites'], result['sweepAttrWrites'], result['sweepPressedWrites']), (0, [], 0))
                 self.assertEqual((result['finalPos'], result['value']), ('50%', '50'))
                 self.assertEqual(result['stopListeners'], 3)  # pointerdown, keydown, touchstart while it runs ...
@@ -1044,26 +1208,24 @@ class DemoScriptTests(unittest.TestCase):
         self.assertFalse(touched['started'])
         self.assertEqual((touched['finalPos'], touched['value']), ('30%', '30'))
 
-    def test_showreel_entrance_is_scrubbed_unpinned_and_only_below_the_fold(self):
-        # Task 29: the video opens from an inset window and settles from a 1.08 zoom as the frame scrolls in (scrubbed, no
-        # pin, clip-path and transform only); the caption and Pause button then rise once. Never under reduced motion, and
-        # not when the frame is already on screen (it would jump).
+    def test_showreel_entrance_plays_once_unpinned_and_only_below_the_fold(self):
+        # Daylight (Task 33): the frame opens once from a slightly inset window as it scrolls in (no scrub: the plan allows
+        # scrubbing only in the hero; no pin; clip-path only), then the caption and Pause button rise once. Never under
+        # reduced motion, and not when the frame is already on screen (it would jump).
         r = self.node_json(SWEEP_SCRIPT, HOME)
         for name in ('complete', 'phone'):
             with self.subTest(case=name):
-                video, after = r[name]['entrance']
-                self.assertEqual(video['names'], ['video'])
-                self.assertEqual(video['from'], {'clipPath': 'inset(9% 11% 9% 11%)', 'scale': 1.08})
-                self.assertEqual((video['to']['clipPath'], video['to']['scale']), ('inset(0% 0% 0% 0%)', 1))
-                self.assertGreater(video['trigger']['scrub'], 0)
-                self.assertFalse(video['trigger']['pin'])
+                frame, after = r[name]['entrance']
+                self.assertEqual(frame['names'], ['frame'])
+                self.assertEqual(frame['from'], {'clipPath': 'inset(4% 4% 4% 4% round 18px)'})
+                self.assertEqual(frame['to']['clipPath'], 'inset(0% 0% 0% 0% round 18px)')
+                self.assertEqual(frame['to']['duration'], 1)
                 self.assertEqual(after['names'], ['cap', 'toggle'])
                 self.assertEqual(after['from'], {'opacity': 0, 'y': 14})
-                self.assertTrue(after['trigger']['once'])
-                self.assertFalse(after['trigger']['pin'])
                 self.assertIn('opacity', after['to']['clearProps'])
-                for tween in (video, after):
-                    self.assertTrue(set(tween['from']) <= {'clipPath', 'scale', 'opacity', 'y'})
+                for tween in (frame, after):
+                    self.assertEqual(tween['trigger'], {'scrub': None, 'once': True, 'pin': False})
+                    self.assertTrue(set(tween['from']) <= {'clipPath', 'opacity', 'y'})
         for name in ('onScreen', 'reduced'):
             with self.subTest(case=name):
                 self.assertEqual(r[name]['entrance'], [])
@@ -1118,34 +1280,27 @@ class DemoScriptTests(unittest.TestCase):
                 self.assertIsNone(r[name]['error'])
                 self.assertEqual(r[name]['ring'], [])
 
-    def test_motion_boot_only_starts_the_intro_on_a_first_plain_visit(self):
+    def test_motion_boot_holds_openings_with_a_failsafe_and_no_intro(self):
+        # Daylight (Task 33): no first-visit intro. On every motion page (with or without data-intro, a hash or a previous
+        # visit) the boot sets the opening hold and a single failsafe timer of at most 2.5 s drops it; nothing is stored.
         r = self.node_json(BOOT_SCRIPT, BOOT)
         for name, result in r.items():
             with self.subTest(case=name):
                 self.assertIsNone(result['error'])
                 self.assertIn('js', result['classes'])
-        first = r['first']
-        self.assertEqual(first['classes'], ['js', 'motion', 'ns-intro', 'ph-wait'])
-        self.assertEqual(len(first['timers']), 2)
-        for delay in first['timers']:
-            self.assertLessEqual(delay, 2500)
-        self.assertEqual(first['afterTimers'], ['js', 'motion'])  # the failsafes remove the panel and the opening hold
-        self.assertEqual(first['flag'], '1')
-        # Reduced motion or no matchMedia: nothing is held hidden and no timer is needed.
-        for name in ('reduced', 'noMatchMedia'):
-            with self.subTest(case=name):
-                self.assertEqual(r[name]['classes'], ['js'])
-                self.assertEqual(r[name]['timers'], [])
-        # No intro: the opening hold is still set, with its own failsafe.
-        for name in ('hash', 'seen', 'throws', 'inner'):
+                self.assertNotIn('ns-intro', result['classes'])
+                self.assertEqual(result['flag'], '1' if name == 'seen' else None)  # only the value the case stored itself
+        for name in ('first', 'hash', 'seen', 'throws', 'inner'):
             with self.subTest(case=name):
                 self.assertEqual(r[name]['classes'], ['js', 'motion', 'ph-wait'])
                 self.assertEqual(len(r[name]['timers']), 1)
                 self.assertLessEqual(r[name]['timers'][0], 2500)
                 self.assertEqual(r[name]['afterTimers'], ['js', 'motion'])
-        for name in ('reduced', 'hash', 'inner'):
+        # Reduced motion or no matchMedia: nothing is held hidden and no timer is needed.
+        for name in ('reduced', 'noMatchMedia'):
             with self.subTest(case=name):
-                self.assertIsNone(r[name]['flag'])
+                self.assertEqual(r[name]['classes'], ['js'])
+                self.assertEqual(r[name]['timers'], [])
 
     def test_motion_js_keeps_services_working_and_clamps_the_magnetic_pull(self):
         r = self.node_json(MOTION_SCRIPT, MOTION)
@@ -1205,7 +1360,7 @@ class DemoScriptTests(unittest.TestCase):
         # that y, so the homepage H1 stayed below its mask. Every such tween pins y to 0 at both ends; the headlines also
         # clear the transform once they land.
         home = self.node_json(HOME_SCRIPT, HOME)
-        for name in ('first', 'noIntro', 'late', 'phone'):
+        for name in ('first', 'phone'):
             with self.subTest(case=name):
                 lines = home[name]['heroLines']
                 self.assertEqual(len(lines), 1)
@@ -1213,10 +1368,6 @@ class DemoScriptTests(unittest.TestCase):
                 self.assertEqual(lines[0]['from'], {'yPercent': 108, 'y': 0})
                 self.assertEqual((lines[0]['yPercent'], lines[0]['y']), (0, 0))
                 self.assertIn('transform', lines[0]['clearProps'].split(','))
-        word = home['first']['introWord']
-        self.assertEqual(len(word), 1)
-        self.assertEqual(word[0]['from'], {'yPercent': 110, 'y': 0})
-        self.assertEqual((word[0]['yPercent'], word[0]['y']), (0, 0))
         motion = self.node_json(MOTION_SCRIPT, MOTION)
         for name in ('desktop', 'touch'):
             with self.subTest(case=name):
@@ -1235,7 +1386,7 @@ class DemoScriptTests(unittest.TestCase):
         for css in sorted(assets.glob('*.css')):
             for rule in re.findall(r'[^{}]*\.ph-wait[^{}]*\{[^}]*\}', css.read_text(encoding='utf-8')):
                 holds += [(css.name, rule.strip(), n) for n in re.findall(r'translateY\((-?\d+(?:\.\d+)?)%\)', rule)]
-        self.assertGreaterEqual(len(holds), 3)  # hero lines, intro word, inner-page lines
+        self.assertGreaterEqual(len(holds), 2)  # hero lines and inner-page lines (Daylight, Task 33, removed the intro word)
         for name, rule, n in holds:
             with self.subTest(css=name, rule=rule):
                 pattern = r'fromTo\([^;]*?\{\s*yPercent:\s*%s,\s*y:\s*0\s*\}' % re.escape(n)

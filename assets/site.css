@@ -1,6 +1,7 @@
-/* Cendavo "Night Shift" design system. Order: fonts, tokens, base, chrome, components, homepage, mockups, inner pages, utilities, responsive, motion.
+/* Cendavo "Daylight" design system (Task 33). Order: fonts, tokens, base, chrome, components, inner pages, utilities, responsive, motion.
    Fonts are self-hosted WOFF2 (OFL, see /assets/fonts/), so the site makes no third-party requests (CSP font-src 'self').
-   Photography carries the colour; UI stays ink, bone and one amber accent. Motion lives only in the guarded block at the end. */
+   Paper, ink and one amber; photography brings the colour. Motion lives only in the guarded blocks at the end: two curves
+   (--ease-out for entrances, --ease-io between states) and four durations. */
 @font-face{font-family:"Archivo";src:url("/assets/fonts/archivo-var-latin.woff2") format("woff2");font-weight:100 900;font-stretch:62% 125%;font-display:swap}
 @font-face{font-family:"Atkinson Hyperlegible";src:url("/assets/fonts/atkinson-hyperlegible-regular-latin.woff2") format("woff2");font-weight:400;font-style:normal;font-display:swap}
 @font-face{font-family:"Atkinson Hyperlegible";src:url("/assets/fonts/atkinson-hyperlegible-bold-latin.woff2") format("woff2");font-weight:700;font-style:normal;font-display:swap}
@@ -8,12 +9,14 @@
 @font-face{font-family:"Atkinson Hyperlegible";src:url("/assets/fonts/archivo-var-latin.woff2") format("woff2");font-weight:400;font-style:normal;unicode-range:U+0030-0039;font-display:swap}
 @font-face{font-family:"Atkinson Hyperlegible";src:url("/assets/fonts/archivo-var-latin.woff2") format("woff2");font-weight:700;font-style:normal;unicode-range:U+0030-0039;font-display:swap}
 :root{
---ink:#0E0E0D;--ink-2:#171716;--bone:#EDEAE3;--bone-2:#E3DFD6;--paper:#F7F5F0;--stone:#A8A49B;--ink-soft:#4F4C46;--amber:#D9A441;--amber-hover:#E6B65A;--success:#1E6B47;--danger:#A3341F;
---line:rgba(237,234,227,.14);--line-dark:rgba(14,14,13,.16);
+--paper:#FFFFFF;--warm:#F6F5F1;--warm-2:#EEECE5;--ink:#0E0E0D;--ink-2:#2A2926;--mute:#605D57;--amber:#D9A441;--amber-ink:#8C5A1C;--ok:#1E6B47;--danger:#A3341F;
+/* Night Shift surfaces, used only inside the inner pages' dark <main> (pages.css) until Task 34 */
+--bone:#EDEAE3;--bone-2:#E3DFD6;--stone:#A8A49B;--ink-soft:#4F4C46;--amber-hover:#E6B65A;
+--line:rgba(237,234,227,.14);--line-dark:rgba(14,14,13,.14);
 --space-1:4px;--space-2:8px;--space-3:12px;--space-4:16px;--space-5:20px;--space-6:24px;--space-8:32px;--space-10:40px;--space-12:48px;--space-16:64px;--space-20:80px;--space-24:96px;--space-32:128px;
 --radius-sm:2px;--radius-md:4px;--radius-lg:6px;--radius-pill:999px;
---shadow-1:0 1px 2px rgba(14,14,13,.08);--shadow-2:0 40px 70px -40px rgba(14,14,13,.55);
---dur-1:120ms;--dur-2:200ms;--dur-3:400ms;--ease:cubic-bezier(.16,1,.3,1);
+--shadow-1:0 1px 2px rgba(14,14,13,.08);--shadow-2:0 40px 70px -40px rgba(14,14,13,.55);--shadow-lift:0 0 0 1px rgba(14,14,13,.06),0 6px 14px -6px rgba(58,40,12,.16),0 22px 48px -18px rgba(14,14,13,.22);
+--ease-out:cubic-bezier(.2,.8,.2,1);--ease-io:cubic-bezier(.7,0,.2,1);--dur-1:200ms;--dur-2:400ms;--dur-3:700ms;--dur-4:1000ms;
 --font-display:"Archivo","Helvetica Neue",Arial,sans-serif;
 --font-text:"Atkinson Hyperlegible","Helvetica Neue",Arial,sans-serif;
 --text-display:clamp(3rem,7.3vw,7.1rem);--text-h2:clamp(2.1rem,4.4vw,4.25rem);--text-h3:clamp(1.25rem,1rem + .8vw,1.75rem);--text-body:clamp(1.0625rem,.35vw + .98rem,1.1875rem);--text-small:.9375rem;
@@ -21,7 +24,7 @@
 }
 *,*::before,*::after{box-sizing:border-box}
 html{scroll-padding-top:90px;-webkit-text-size-adjust:100%;text-size-adjust:100%}
-body{margin:0;background:var(--ink);color:var(--bone);font:400 var(--text-body)/1.55 var(--font-text);-webkit-font-smoothing:antialiased;overflow-x:clip}
+body{margin:0;background:var(--paper);color:var(--ink);font:400 var(--text-body)/1.55 var(--font-text);-webkit-font-smoothing:antialiased;overflow-x:clip}
 a{color:inherit}
 button,input,select,textarea{font:inherit;color:inherit}
 input,select,textarea{color-scheme:light}
@@ -47,45 +50,46 @@ p{margin-bottom:var(--space-4);max-width:var(--measure)}
 .eyebrow.light,.page-hero .eyebrow{color:var(--stone)}
 
 /* Header and navigation */
-.site-header{position:sticky;top:0;z-index:50;background:var(--ink);border-bottom:1px solid var(--line)}
+.site-header{position:sticky;top:0;z-index:50;background:rgba(255,255,255,.92);-webkit-backdrop-filter:saturate(1.6) blur(16px);backdrop-filter:saturate(1.6) blur(16px);border-bottom:1px solid var(--line-dark)}
 .nav{min-height:76px;display:flex;align-items:center;gap:var(--space-6)}
-.brand{display:inline-flex;align-items:center;gap:12px;min-height:44px;margin-right:auto;color:var(--bone);font:650 15px/1 var(--font-display);font-stretch:118%;letter-spacing:.2em;text-decoration:none}
+.brand{display:inline-flex;align-items:center;gap:12px;min-height:44px;margin-right:auto;color:var(--ink);font:650 15px/1 var(--font-display);font-stretch:118%;letter-spacing:.2em;text-decoration:none}
 .mark{width:30px;height:30px;fill:currentColor}
 .mark path:first-child{fill:var(--amber)}
-.nav-links{display:flex;align-items:center;gap:clamp(12px,2vw,32px)}
+.nav-links{display:flex;align-items:center;gap:clamp(12px,2vw,32px);color:var(--ink-2)}
 .nav-links a,.footer-links a,.ulink{position:relative;display:inline-flex;align-items:center;min-height:44px;text-decoration:none}
 .nav-links a::after,.footer-links a::after,.ulink::after{content:"";position:absolute;left:0;right:0;bottom:8px;height:1px;background:currentColor;transform:scaleX(0);transform-origin:0 50%}
 .nav-links a:hover::after,.nav-links a[aria-current]::after,.footer-links a:hover::after,.footer-links a[aria-current]::after,.ulink:hover::after,.ulink:focus-visible::after,.ulink.strong::after{transform:scaleX(1)}
 .ulink.strong{font:620 1rem/1.2 var(--font-display)}
 /* The public email address (footer, Contact): a plain underlined link that may wrap on the narrowest phones. */
 .mail{text-decoration-thickness:1px;text-underline-offset:.2em;overflow-wrap:anywhere}
-.menu{display:none;align-items:center;justify-content:center;min-height:48px;min-width:48px;border:1px solid var(--line);border-radius:var(--radius-sm);background:transparent;color:var(--bone)}
+.menu{display:none;align-items:center;justify-content:center;min-height:48px;min-width:48px;border:1px solid var(--line-dark);border-radius:var(--radius-pill);background:transparent;color:var(--ink)}
 .menu span{display:block;width:22px;height:12px;border-block:1.5px solid currentColor;font-size:0}
 
-/* Buttons: primary amber (default), outline, dark (on light surfaces); sizes small and large */
-.button{display:inline-flex;align-items:center;justify-content:center;gap:12px;min-height:52px;padding:0 22px;border:1px solid transparent;border-radius:var(--radius-sm);background:var(--amber);color:var(--ink);font:620 1rem/1.1 var(--font-display);text-align:center;text-decoration:none}
+/* Buttons (pills): amber (default; on ink surfaces), outline, dark (ink, on paper); sizes small and large. The header's
+   consultation button is the dark one. */
+.button{display:inline-flex;align-items:center;justify-content:center;gap:12px;min-height:52px;padding:0 24px;border:1px solid transparent;border-radius:var(--radius-pill);background:var(--amber);color:var(--ink);font:620 1rem/1.1 var(--font-display);text-align:center;text-decoration:none}
 .button:hover{background:var(--amber-hover)}
 .button.go::after{content:"";flex:none;width:8px;height:8px;margin-left:2px;border-top:1.7px solid;border-right:1.7px solid;transform:rotate(45deg)}
 .button.outline{background:transparent;border-color:currentColor;color:inherit}
 .button.outline:hover{background:rgba(237,234,227,.1)}
 .bone .button.outline:hover,.section .button.outline:hover{background:rgba(14,14,13,.06)}
-.button.dark{background:var(--ink);color:var(--bone)}
-.button.dark:hover{background:#2A2926}
+.button.dark,.site-header .button{background:var(--ink);color:#fff}
+.button.dark:hover,.site-header .button:hover{background:var(--ink-2)}
 .button.small{min-height:48px;padding:0 18px;font-size:.95rem}
 .button.large{min-height:60px;padding:0 28px;font-size:1.0625rem}
 .button[disabled]{opacity:.75;cursor:progress}
 
 /* Footer */
-.footer{border-top:1px solid var(--line);padding-top:clamp(56px,7vw,96px)}
+.footer{border-top:1px solid var(--line-dark);padding-top:clamp(56px,7vw,96px)}
 .footer-row{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:flex-start;gap:var(--space-10)}
-.footer p{margin:var(--space-4) 0 0;color:var(--stone);font-size:1rem}
+.footer p{margin:var(--space-4) 0 0;color:var(--mute);font-size:1rem}
 .footer-links{display:flex;flex-wrap:wrap;gap:0 var(--space-6)}
-.footer-bottom{display:flex;flex-wrap:wrap;justify-content:space-between;gap:8px 32px;margin-top:var(--space-12);padding:28px 0 36px;border-top:1px solid var(--line);color:var(--stone);font-size:.9rem}
+.footer-bottom{display:flex;flex-wrap:wrap;justify-content:space-between;gap:8px 32px;margin-top:var(--space-12);padding:28px 0 36px;border-top:1px solid var(--line-dark);color:var(--mute);font-size:.9rem}
 .footer-bottom p{margin:0;font-size:inherit}
-/* Signature: decorative wordmark (aria-hidden in the markup), in the already-loaded Archivo at its widest. The frame is
-   shorter than the line, so the bottom of the letters is cropped by the page edge; overflow:hidden also stops it ever
+/* Signature: the light oversized wordmark (aria-hidden in the markup), in the already-loaded Archivo at its widest, warm
+   grey on paper. The frame is shorter than the line, so the page edge crops the letters; overflow:hidden also stops it ever
    widening the page on narrow screens. */
-.footer-sign{overflow:hidden;height:.6em;font:800 clamp(3.5rem,15.5vw,24rem)/.8 var(--font-display);font-stretch:125%;letter-spacing:-.02em;text-align:center;white-space:nowrap;color:#262521;user-select:none}
+.footer-sign{overflow:hidden;height:.6em;font:800 clamp(3.5rem,15.5vw,24rem)/.8 var(--font-display);font-stretch:125%;letter-spacing:-.02em;text-align:center;white-space:nowrap;color:#ECE9E1;user-select:none}
 .footer-word{display:block}
 
 /* FAQ (native details) */
@@ -137,7 +141,7 @@ p{margin-bottom:var(--space-4);max-width:var(--measure)}
 .field-error{margin:0;color:var(--danger);font-weight:700;font-size:.875rem}
 .field-error:empty{display:none}
 .field [aria-invalid="true"]{border-color:var(--danger);border-width:2px}
-.status{min-height:24px;margin:var(--space-3) 0 0;color:var(--success);font-weight:700}
+.status{min-height:24px;margin:var(--space-3) 0 0;color:var(--ok);font-weight:700}
 .status[data-tone="error"]{color:var(--danger)}
 
 /* Demonstration project (demo page) */
@@ -155,7 +159,7 @@ p{margin-bottom:var(--space-4);max-width:var(--measure)}
 .data-table{border-collapse:collapse;width:100%;font-size:.875rem}
 .data-table th{text-align:left;color:var(--ink-soft);font-size:.75rem;text-transform:uppercase;letter-spacing:.08em}
 .data-table th,.data-table td{padding:var(--space-4);border-bottom:1px solid var(--line-dark);white-space:nowrap}
-.pill{display:inline-block;padding:4px 10px;border-radius:var(--radius-pill);background:#E1EDE5;color:var(--success);font-weight:700}
+.pill{display:inline-block;padding:4px 10px;border-radius:var(--radius-pill);background:#E1EDE5;color:var(--ok);font-weight:700}
 .pill.open{background:#F3E6CC;color:#6E4A10}
 .pill.done{background:var(--bone-2);color:var(--ink-soft);text-decoration:line-through}
 tr.selected{background:#F3EBD8;outline:2px solid var(--ink);outline-offset:-2px}
@@ -166,12 +170,13 @@ td.actions{display:flex;gap:6px;flex-wrap:wrap;margin:0}
 .demo-box{padding:var(--space-5);border-radius:var(--radius-md);background:var(--bone)}
 .empty{padding:var(--space-5);color:var(--ink-soft);text-align:center}
 
-/* Focus, skip link and utilities. Bone ring on dark surfaces; ink ring on light ones (amber on bone is below 3:1). */
-:focus-visible{outline:2px solid var(--bone);outline-offset:3px}
+/* Focus, skip link and utilities. Ink ring on paper and warm surfaces (the default); bone ring on ink surfaces (the inner
+   pages' <main> in pages.css, the homepage closing band in home.css). Amber is below 3:1 on paper, so it is never a ring. */
+:focus-visible{outline:2px solid var(--ink);outline-offset:3px}
 .bone :focus-visible,.section :focus-visible{outline-color:var(--ink)}
 .demo-side :focus-visible,.price.featured :focus-visible{outline-color:var(--bone)}
 main:focus{outline:none;box-shadow:none}
-.skip-link{position:absolute;left:12px;top:-100px;z-index:100;padding:12px 18px;border-radius:var(--radius-sm);background:var(--bone);color:var(--ink);font-weight:700}
+.skip-link{position:absolute;left:12px;top:-100px;z-index:100;padding:12px 18px;border-radius:var(--radius-sm);background:var(--ink);color:#fff;font-weight:700}
 .skip-link:focus{top:12px}
 .sr-only{position:absolute;width:1px;height:1px;margin:-1px;padding:0;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
 .hp{position:absolute;left:-10000px;top:auto;width:1px;height:1px;overflow:hidden}
@@ -189,8 +194,8 @@ main:focus{outline:none;box-shadow:none}
 .nav>.button{order:4;margin-bottom:var(--space-4)}
 .js .menu{display:inline-flex}
 .js .nav-links{display:none}
-.js .nav-links.open{display:flex;flex-direction:column;align-items:stretch;gap:0;padding-top:var(--space-2);border-top:1px solid var(--line)}
-.js .nav-links.open a{min-height:56px;border-bottom:1px solid var(--line);font:760 clamp(1.75rem,7vw,2.5rem)/1.05 var(--font-display);font-stretch:88%;letter-spacing:-.015em}
+.js .nav-links.open{display:flex;flex-direction:column;align-items:stretch;gap:0;padding-top:var(--space-2);border-top:1px solid var(--line-dark);color:var(--ink)}
+.js .nav-links.open a{min-height:56px;border-bottom:1px solid var(--line-dark);font:760 clamp(1.75rem,7vw,2.5rem)/1.05 var(--font-display);font-stretch:88%;letter-spacing:-.015em}
 .js .nav-links.open a::after{display:none}
 .js .nav>.button{order:0;margin-bottom:0}
 .js .menu[aria-expanded="true"]~.button{order:4;margin-bottom:var(--space-4)}
@@ -206,8 +211,8 @@ main:focus{outline:none;box-shadow:none}
 .demo-main,.demo-side,.price{padding:var(--space-5)}
 }
 
-/* Motion: only for people who have not asked for reduced motion; transform only. GSAP (home, work, services, pricing) uses its own matchMedia guard. */
-@media(prefers-reduced-motion:no-preference){html{scroll-behavior:smooth}.nav-links a::after,.footer-links a::after,.ulink::after,.button.go::after{transition:transform 450ms var(--ease)}.button.go:hover::after,.button.go:focus-visible::after{transform:translateX(2px) rotate(45deg)}}
+/* Motion: only for people who have not asked for reduced motion; transform only, hover feedback within 200 ms. GSAP pages use their own matchMedia guard. */
+@media(prefers-reduced-motion:no-preference){html{scroll-behavior:smooth}.nav-links a::after,.footer-links a::after,.ulink::after,.button.go::after{transition:transform var(--dur-1) var(--ease-out)}.button.go:hover::after,.button.go:focus-visible::after{transform:translateX(2px) rotate(45deg)}}
 
 @media(prefers-reduced-motion:no-preference){
 /* Page transitions (Night Shift Task 29): cross-document View Transitions, only for people who have not asked for reduced
@@ -223,12 +228,12 @@ main h1{view-transition-name:page-title}
 @keyframes vt-out{to{transform:translateY(-4%)}}
 @keyframes vt-in{from{clip-path:inset(100% 0 0 0)}to{clip-path:inset(0 0 0 0)}}
 .cursor-ring{position:fixed;top:0;left:0;z-index:200;width:0;height:0;pointer-events:none;mix-blend-mode:difference}
-.cursor-ring span{position:absolute;top:-18px;left:-18px;width:36px;height:36px;border:1.5px solid #fff;border-radius:50%;pointer-events:none;transition:transform 250ms var(--ease)}
+.cursor-ring span{position:absolute;top:-18px;left:-18px;width:36px;height:36px;border:1.5px solid #fff;border-radius:50%;pointer-events:none;transition:transform var(--dur-1) var(--ease-out)}
 .cursor-ring.is-link span{transform:scale(1.6)}
-/* Project cards on / and /work/: one soft light sweeps across the photo on hover or keyboard focus. It snaps back unseen
-   (no transition on the way out), so it never runs in reverse. */
-.motion :is(.teaser-img,.wk-tile-img){position:relative}
-.motion :is(.teaser-img,.wk-tile-img)::after{content:"";position:absolute;inset:0;background:linear-gradient(105deg,transparent 30%,rgba(242,239,232,.16) 50%,transparent 70%);transform:translateX(-101%);pointer-events:none}
-.motion :is(.teaser-card:hover,.teaser-card:focus-within,.wk-tile a:hover,.wk-tile a:focus-visible) :is(.teaser-img,.wk-tile-img)::after{transform:translateX(101%);transition:transform 900ms var(--ease)}
+/* Work index tiles (/work/ only until Task 34; the Daylight homepage cards use a 200 ms push-in instead): one soft light
+   sweeps across the photo on hover or keyboard focus. It snaps back unseen (no transition on the way out). */
+.motion .wk-tile-img{position:relative}
+.motion .wk-tile-img::after{content:"";position:absolute;inset:0;background:linear-gradient(105deg,transparent 30%,rgba(242,239,232,.16) 50%,transparent 70%);transform:translateX(-101%);pointer-events:none}
+.motion :is(.wk-tile a:hover,.wk-tile a:focus-visible) .wk-tile-img::after{transform:translateX(101%);transition:transform var(--dur-3) var(--ease-out)}
 }
 @media(prefers-reduced-motion:reduce){::view-transition-group(*),::view-transition-old(*),::view-transition-new(*){animation:none!important}}

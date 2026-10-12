@@ -1,9 +1,9 @@
-/* Cendavo inner pages (work, services, pricing, about, contact, demo, and the 404 page). Loaded after site.css on every page except the homepage.
-   Nothing is hidden by CSS except the page openings' start states, and only while motion-boot.js holds .ph-wait (see the
-   guarded block at the end). On Work, Services, Pricing and About, motion.js adds GSAP reveals through data attributes in the
-   page markup; Contact and Demo stay static. The only CSS movement
-   is the hover/focus feedback in the guarded block at the end. Tokens, buttons, form fields, FAQ and focus rings come from site.css;
-   the device and quote mockups on Work and Pricing come from kit.css. */
+/* Cendavo inner pages (Work, Services, Pricing, About, Contact, Demo, 404); loaded after site.css everywhere but /. Nothing
+   is hidden by CSS except the openings' start states while motion-boot.js holds .ph-wait (guarded block at the end).
+   Daylight (Task 33): until Task 34 restyles them, inner pages keep their Night Shift surface inside <main>, between the
+   light header and footer, so every bone and stone text colour below still sits on ink. */
+main{background:var(--ink);color:var(--bone)}
+main :focus-visible{outline-color:var(--bone)}
 
 /* Shared */
 .pg-h{font-size:clamp(2.75rem,7vw,7rem);font-weight:800;font-stretch:84%;line-height:.93;letter-spacing:-.025em;max-width:16ch}
@@ -176,7 +176,7 @@
 .wk-h{max-width:20ch;font-size:clamp(2.6rem,6.6vw,6.6rem)}
 .wk-hero-sub{grid-column:8/-1;margin-top:clamp(20px,2vw,32px)}
 .wk-clip{grid-column:1/span 6;grid-row:2;margin-top:clamp(20px,2vw,32px)}
-/* The index row is a .wrap, so it keeps the standard side gutter: only list styling and vertical spacing are set here. */
+/* The index row is a .wrap: it keeps the side gutter. */
 .wk-index{list-style:none;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:24px;margin-block:clamp(40px,4vw,64px) 0;padding-block:0}
 .wk-tile a{display:grid;grid-template-rows:minmax(0,1fr) auto auto;height:100%;text-decoration:none}
 .wk-tile-img{display:block;aspect-ratio:3/4;overflow:hidden;background:var(--ink-2)}
@@ -394,7 +394,7 @@
 .gl-cover-media{margin:36px calc(-1 * var(--gut)) 0}
 .fc-head{display:block}
 .fc-head .cs-facts{margin-top:clamp(28px,3vw,44px)}
-/* Key screens: the laptop takes the full row, the two phones share the next one; nothing is positioned absolutely. */
+/* Key screens: laptop on one row, the two phones on the next. */
 .stage-hb,.stage-fc{grid-template-columns:repeat(2,minmax(0,1fr));row-gap:40px;align-items:start}
 .stage-hb .scr-laptop,.stage-fc .scr-laptop{grid-column:1/-1}
 .stage-hb .phone,.stage-fc .phone{--pw:min(220px,calc(50vw - var(--gut) - 10px))}
@@ -424,6 +424,6 @@
 .ph-wait :is(.wk-hero,.sv-hero,.pr-hero,.ab-hero) .ln>span{transform:translateY(108%)}
 .ph-wait :is(.wk-hero-sub,.sv-hero .pg-sub,.sv-chapters,.pr-hero .pg-sub,.pr-hero .btn-row){opacity:0;transform:translateY(18px)}
 .ph-wait :is(.sv-hero-media,.ab-photo){clip-path:inset(0 0 0 100%)}
-.wk-tile-img img{transition:transform 900ms var(--ease)}
+.wk-tile-img img{transition:transform 700ms var(--ease-out)}
 .wk-tile a:hover .wk-tile-img img,.wk-tile a:focus-visible .wk-tile-img img{transform:scale(1.1)}
 }

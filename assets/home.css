@@ -1,103 +1,155 @@
-/* Cendavo homepage: hero, showreel, concept-project cards, before/after comparison and sections.
-   Loaded only on / (like home.js), so inner pages do not download it. Tokens come from site.css; the hero phone mockup
-   comes from kit.css. "How it works" and the trades row live on /services/ and /about/ (styled in pages.css). */
-.actions{display:flex;flex-wrap:wrap;gap:12px;margin-top:32px}
-/* Homepage: hero */
-.hero{position:relative;isolation:isolate;min-height:max(calc(100svh - 77px),640px);display:flex;align-items:flex-end}
-.hero-photo{position:absolute;inset:0 0 0 36%;z-index:-1;overflow:hidden}
-.hero-photo img,.band-media img{width:100%;height:100%;object-fit:cover}
-.hero-photo img{object-position:22% 50%}
-.hero-photo::after{content:"";position:absolute;inset:0;background:linear-gradient(90deg,var(--ink) 0%,rgba(14,14,13,.72) 14%,rgba(14,14,13,0) 42%),linear-gradient(0deg,rgba(14,14,13,.55) 0%,rgba(14,14,13,0) 30%)}
-.hero-in{padding-block:clamp(48px,8vh,96px) clamp(56px,10vh,120px)}
-.hero-copy{max-width:760px}
-.hero-h{margin:0;font-size:var(--text-display);font-weight:800;font-stretch:84%;line-height:.93;letter-spacing:-.025em}
-.ln{display:block;overflow:hidden;padding-bottom:.06em;margin-bottom:-.06em}
-.ln>span{display:block}
-.hero-sub{margin:28px 0 0;max-width:34ch;color:var(--stone);font-size:clamp(1.0625rem,.5vw + .95rem,1.25rem)}
-.hero-device{position:absolute;z-index:3;right:clamp(24px,7vw,120px);bottom:clamp(-96px,-6vw,-48px);display:flex;align-items:flex-end;gap:22px}
-.hero-device .phone{--pw:clamp(200px,16vw,248px)}
-.hero-cap{margin:0 0 120px;font:600 .9rem/1.35 var(--font-display);font-stretch:104%;text-align:right}
-.hero-cap span{display:block;color:var(--stone);font:400 .82rem/1.4 var(--font-text)}
+/* Cendavo homepage, Daylight (Task 33): hero with the device stage, chaptered showreel, uneven concept cards, before/after,
+   What we do with still illustrations, and the one ink section (the closing band). Loaded only on /, like home.js. Tokens,
+   buttons and focus rings come from site.css; the "after" mini-site in the comparison comes from kit.css.
+   Nothing is hidden outside the guarded block at the end, and there only while motion-boot.js holds .ph-wait. */
+.band-warm{background:var(--warm)}
+.actions{display:flex;flex-wrap:wrap;gap:10px;margin-top:32px}
+.hero .button.outline{border-color:rgba(14,14,13,.2)}
+.hero .button.outline:hover{border-color:var(--ink);background:var(--warm)}
 
-/* Homepage: sections */
-.ba-grid{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));column-gap:var(--col-gap)}
-/* Showreel: one self-hosted, silent video. The frame's shape is set here per screen size (16:9 above 640px, 9:16 at and below,
-   matching home.js's query), so swapping to the vertical cut never shifts the layout, and its height is capped by the
-   viewport. Without JS the video keeps its native controls; with JS a Pause/Play button replaces them (WCAG 2.2.2). */
-.reel{padding-block:var(--section) 0}
-.reel-head{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));column-gap:var(--col-gap);align-items:end;margin-bottom:clamp(32px,4vw,56px)}
-.reel-head h2{grid-column:1/span 7;margin:0;font-size:clamp(2.25rem,4.4vw,4.25rem)}
-.reel-head p{grid-column:9/-1;margin:0;color:var(--stone)}
-.reel-fig{margin:0}
-.reel-frame{position:relative;width:min(100%,calc(62svh * 16 / 9));aspect-ratio:16/9;margin-inline:auto;overflow:hidden;background:var(--ink-2)}
+/* Hero. The stage is drawn in em: 1em is 1/76 of its width (1/62 on phones), so it scales as one piece and its
+   aspect-ratio reserves the space before anything loads (no layout shift). */
+.hero{overflow-x:clip}
+.hero-in{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));column-gap:24px;align-items:center;min-height:min(calc(100svh - 77px),880px);padding-block:clamp(24px,4vh,48px) clamp(48px,7vh,88px)}
+.hero-copy{grid-column:1/8;grid-row:1;position:relative;z-index:2}
+.hero-h{margin:0;font-size:clamp(3rem,1rem + 7vw,8.8rem);font-weight:820;font-stretch:84%;line-height:.88;letter-spacing:-.035em}
+.ln{display:block;overflow:hidden;padding:0 .08em .06em 0;margin-bottom:-.06em}
+.ln>span{display:block}
+.hero-sub{margin:clamp(28px,4vh,44px) 0 0;max-width:30rem;color:var(--ink-2);font-size:1.1875rem;line-height:1.5}
+.stage{grid-column:7/13;grid-row:1;container-type:inline-size;display:grid;grid-template-columns:1fr auto;align-items:center;gap:12px 16px}
+.rig{grid-column:1/-1;position:relative;margin:0;aspect-ratio:76/62;font-size:calc(100cqw / 76)}
+.rig-plinth{position:absolute;left:9em;right:0;top:5em;bottom:5em;border-radius:3.2em;background:linear-gradient(160deg,var(--warm),#F1EFE9);box-shadow:inset 0 0 0 1px rgba(14,14,13,.04)}
+.rig-devices,.rig-cards{position:absolute;inset:0}
+.hd-laptop{position:absolute;left:10em;top:10em;width:58em}
+.hd-phone{position:absolute;left:5em;top:21em;width:16.5em}
+.hd-body{transform:perspective(180em) rotateY(-14deg) rotateX(4deg);transform-origin:50% 100%}
+.hd-lid{padding:1.3em 1.3em 1.6em;border-radius:2.2em 2.2em .8em .8em;background:linear-gradient(160deg,#1B1B1A,#0B0B0A 60%);box-shadow:0 0 0 .12em #3A3936 inset,0 3em 5em -2em rgba(14,14,13,.38)}
+.hd-bar{display:flex;align-items:center;gap:.5em;height:2.4em;padding:0 1em;border-radius:.5em .5em 0 0;background:#F4F3EF}
+.hd-bar i{width:.75em;height:.75em;border-radius:50%;background:#DCD9D2}
+.hd-bar span{margin-left:1.4em;padding:.3em 1.2em;border-radius:999px;background:#fff;font:500 1.05em/1 var(--font-text);color:var(--mute)}
+.hd-base{height:2em;margin:0 -5em;border-radius:.3em .3em 2.6em 2.6em;background:linear-gradient(180deg,#F2F1EE 0%,#D9D7D1 45%,#BDBAB3 100%);box-shadow:0 1.8em 2.6em -1em rgba(14,14,13,.35)}
+.hd-bezel{position:relative;padding:.75em;border-radius:3em;background:linear-gradient(150deg,#262624,#0C0C0B);box-shadow:0 0 0 .15em #4A4844 inset,0 2.4em 4em -1.6em rgba(14,14,13,.45);transform:perspective(180em) rotateY(-10deg) rotateZ(-2.5deg)}
+/* Posters: the AVIF first, the JPEG for browsers without image-set() types. The video has no poster attribute (that would
+   download a second, JPEG poster); until it plays it is transparent over this frame. */
+.hd-shot{position:relative;overflow:hidden;background:#fff 50% 0/cover no-repeat}
+.hd-shot-desktop{aspect-ratio:1280/800;border-radius:0 0 .5em .5em;background-image:url("/assets/video/loop-hb-desktop-poster.jpg");background-image:image-set(url("/assets/video/loop-hb-desktop-poster.avif") type("image/avif"),url("/assets/video/loop-hb-desktop-poster.jpg") type("image/jpeg"))}
+.hd-shot-phone{aspect-ratio:780/1688;border-radius:2.3em;background-image:url("/assets/video/loop-hb-phone-poster.jpg");background-image:image-set(url("/assets/video/loop-hb-phone-poster.avif") type("image/avif"),url("/assets/video/loop-hb-phone-poster.jpg") type("image/jpeg"))}
+.hd-video{display:block;width:100%;height:100%;object-fit:cover}
+.hd-island{position:absolute;top:1.45em;left:50%;width:5em;height:1.4em;margin-left:-2.5em;border-radius:1em;background:#000}
+/* Illustrative interface cards (aria-hidden; the figure's label describes them). Their static state is the end of the
+   choreography: the time is booked, Desktop is checked and the score is drawn. */
+.frag{--fs:1.3;position:absolute;left:calc(var(--x) / var(--fs) * 1em);top:calc(var(--y) / var(--fs) * 1em);display:flex;align-items:center;gap:.9em;padding:1em 1.2em;font-size:calc(var(--fs) * 1em);line-height:1.2;background:rgba(255,255,255,.96);border-radius:1.1em;box-shadow:var(--shadow-lift)}
+.frag-t{display:flex;flex-direction:column;gap:.25em;white-space:nowrap}
+.frag-t b{font:700 1em/1.1 var(--font-display);font-stretch:96%}
+.frag-t small{font-size:.82em;color:var(--mute)}
+.tag{padding:.3em .6em;border-radius:999px;background:var(--warm);font:600 .72em/1 var(--font-display);color:var(--amber-ink)}
+.frag-speed{--x:0;--y:6}
+.ring{width:3.6em;height:3.6em;transform:rotate(-90deg)}
+.ring circle{fill:none;stroke-width:4}
+.ring-bg{stroke:rgba(14,14,13,.08)}
+.ring-fg{stroke:var(--ok);stroke-linecap:round;stroke-dasharray:100 100;stroke-dashoffset:0}
+.ring-num{position:absolute;left:1.2em;width:3.6em;text-align:center;font:760 1.05em/1 var(--font-display);font-variant-numeric:tabular-nums}
+.frag-enq{--x:50;--y:2}
+.ava{display:grid;place-items:center;width:2.5em;height:2.5em;border-radius:50%;background:var(--amber);font:760 1em/1 var(--font-display)}
+.when{align-self:flex-start;font-size:.78em;color:var(--mute)}
+.frag-book{--x:47;--y:35;width:21em;flex-direction:column;align-items:stretch;gap:.7em;padding:1.1em}
+.book-top{display:flex;align-items:center;justify-content:space-between}
+.book-title{font:740 1.05em/1.1 var(--font-display);font-stretch:94%}
+.frag-book:not(.booked) :is(.bt-b,.bb-b),.frag-book.booked :is(.bt-a,.bb-a){display:none}
+.book-day{margin:0;font-size:.82em;color:var(--mute)}
+.slots{display:grid;grid-template-columns:repeat(4,1fr);gap:.4em}
+.slots span{display:grid;place-items:center;height:2.2em;border-radius:.6em;box-shadow:0 0 0 1px rgba(14,14,13,.16) inset;font:600 .85em/1 var(--font-display);font-variant-numeric:tabular-nums}
+.slots .slot-pick.on{background:var(--ink);color:#fff;box-shadow:none}
+.book-btn{display:grid;place-items:center;height:2.6em;border-radius:999px;background:var(--amber);font:680 .9em/1 var(--font-display)}
+.frag-book.booked .book-btn{background:var(--ok);color:#fff}
+.bb-b{display:inline-flex;align-items:center;gap:.4em}
+.frag svg:not(.ring):not(.cursor){width:1.1em;height:1.1em;fill:none;stroke:currentColor;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round}
+.cursor{position:absolute;left:58%;bottom:-.4em;width:2.4em;height:2.4em;filter:drop-shadow(0 .2em .3em rgba(14,14,13,.3))}
+.cursor path{fill:var(--ink);stroke:#fff;stroke-width:1.4;stroke-linejoin:round}
+.frag-dev{--x:1;--y:56.5;gap:0;padding:.35em;background:rgba(246,245,241,.96)}
+.dev{position:relative;z-index:1;display:inline-flex;align-items:center;justify-content:center;gap:.4em;width:6.6em;height:2.3em;font:640 .9em/1 var(--font-display);color:var(--mute)}
+.dev svg{color:var(--ok)}
+.dev-thumb{position:absolute;left:.35em;top:.35em;width:calc(50% - .35em);height:calc(100% - .7em);border-radius:999px;background:#fff;box-shadow:0 0 0 1px rgba(14,14,13,.06),0 2px 6px -2px rgba(14,14,13,.18)}
+.frag-dev.is-desktop .dev-thumb{transform:translateX(100%)}
+.frag-dev:not(.is-desktop) .dev-m,.frag-dev.is-desktop .dev-d{color:var(--ink)}
+.hero-cap{grid-column:1;justify-self:end;display:flex;flex-wrap:wrap;align-items:baseline;gap:2px 12px;margin:0;font:640 .95rem/1.3 var(--font-display)}
+.hero-cap span{font:400 .82rem/1.4 var(--font-text);color:var(--mute)}
+.motion-btn{grid-column:2;display:inline-flex;align-items:center;gap:8px;min-height:44px;padding:0 16px;border:1px solid rgba(14,14,13,.2);border-radius:var(--radius-pill);background:#fff;font:600 .875rem/1 var(--font-display);color:var(--ink-2)}
+.motion-btn::before{content:"";width:8px;height:10px;border-inline:2.5px solid currentColor}
+.motion-btn[aria-pressed="true"]::before{width:0;height:0;border:5px solid transparent;border-left:8px solid currentColor;border-right:0}
+.motion-btn:hover{border-color:var(--ink)}
+
+/* Showreel with chapters (reel.js reveals the chapter buttons, swaps the native controls for one Pause/Play button and,
+   on a phone, the vertical cut). The frame's shape is set per screen size, so the swap never shifts the layout. */
+.reel{padding-block:var(--section)}
+.reel-grid{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));column-gap:var(--col-gap);align-items:start}
+.reel-head{grid-column:1/span 4}
+.reel-head h2{margin:0 0 20px;font-size:clamp(2.25rem,1.2rem + 3vw,4.25rem);font-weight:780;font-stretch:86%;letter-spacing:-.03em}
+.reel-head p{margin:0;color:var(--ink-2);font-size:1rem}
+.chapters{list-style:none;margin:28px 0 0;padding:0;border-top:1px solid var(--line-dark)}
+.chapters button{display:grid;grid-template-columns:3.4em 1fr;align-items:center;width:100%;min-height:46px;padding:0 4px;border:0;border-bottom:1px solid var(--line-dark);background:none;color:var(--mute);text-align:left;font:560 1rem/1.2 var(--font-display)}
+.chapters button:hover,.chapters button[aria-current="true"]{color:var(--ink)}
+.chapters button[aria-current="true"]{font-weight:740;box-shadow:inset 0 -2px var(--amber)}
+.ch-t{font:500 .8125rem/1 var(--font-text);font-variant-numeric:tabular-nums}
+.reel-fig{grid-column:5/-1;margin:0}
+.reel-frame{position:relative;width:min(100%,calc(62svh * 16 / 9));aspect-ratio:16/9;margin-inline:auto;overflow:hidden;border-radius:18px;background:var(--ink);box-shadow:0 0 0 1px rgba(14,14,13,.08),0 30px 60px -30px rgba(14,14,13,.45)}
 .reel-video{display:block;width:100%;height:100%;object-fit:cover}
-.reel-toggle{position:absolute;left:16px;bottom:16px;min-height:44px;padding:0 18px;border:1px solid var(--line);border-radius:var(--radius-sm);background:var(--ink);color:var(--bone);font:600 1rem/1 var(--font-display);cursor:pointer}
+.reel-toggle{position:absolute;left:16px;bottom:16px;min-height:44px;padding:0 18px;border:1px solid rgba(255,255,255,.2);border-radius:var(--radius-pill);background:var(--ink);color:var(--bone);font:600 1rem/1 var(--font-display);cursor:pointer}
 .reel-toggle:hover{background:var(--ink-2)}
 .reel-toggle:focus-visible{outline:2px solid var(--bone);outline-offset:3px;box-shadow:0 0 0 6px var(--ink)}
-.reel-cap{width:min(100%,calc(62svh * 16 / 9));margin:14px auto 0;color:var(--stone);font-size:.92rem}
-/* Concept projects: three compact cards, each linking to its section on /work/. The title link covers the whole card. */
+.reel-cap{width:min(100%,calc(62svh * 16 / 9));margin:14px auto 0;color:var(--mute);font-size:.92rem}
+
+/* Concept projects: three cards of uneven size (a wide lead card, two tall ones, the last set lower). The title link
+   covers the whole card. */
+.work{padding-block:var(--section)}
 .work-head{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));align-items:end;gap:32px;padding-bottom:clamp(40px,4vw,64px)}
-.work-head h2{margin:0;font-size:clamp(2.75rem,6.2vw,6rem)}
+.work-head h2{margin:0;font-size:clamp(2.75rem,1rem + 5.4vw,6.6rem);font-weight:780;font-stretch:78%;letter-spacing:-.03em}
 .work-head div{justify-self:end;max-width:42ch}
-.work-head p{margin:0 0 8px;color:var(--stone)}
-.work{padding-block:var(--section);background:var(--ink)}
-.teaser{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:clamp(16px,2vw,28px)}
-.teaser-card{position:relative}
-.teaser-img{margin:0;aspect-ratio:3/2;overflow:hidden;background:var(--ink-2)}
+.work-head p{margin:0 0 8px;color:var(--ink-2)}
+.work-head .ulink+.ulink{margin-left:28px}
+.teaser{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:40px var(--col-gap);align-items:start}
+.teaser-card{position:relative;grid-column:span 3}
+.teaser-card:first-child{grid-column:1/span 6}
+.teaser-card:last-child{margin-top:72px}
+.teaser-img{margin:0;aspect-ratio:3/4;overflow:hidden;border-radius:14px;background:var(--warm-2)}
+.teaser-card:first-child .teaser-img{aspect-ratio:16/11;border-radius:18px}
 .teaser-img img{width:100%;height:100%;object-fit:cover}
-.teaser-card h3{margin:20px 0 0;font-weight:760;font-stretch:88%;font-size:clamp(1.5rem,2vw,2rem);line-height:1;letter-spacing:-.015em}
+.teaser-card h3{margin:20px 0 0;font-weight:760;font-stretch:88%;font-size:clamp(1.4rem,1rem + 1vw,2rem);line-height:1;letter-spacing:-.02em}
+.teaser-card:first-child h3{font-size:clamp(1.7rem,1rem + 1.8vw,2.8rem)}
 .teaser-card h3 a{text-decoration:none}
 .teaser-card h3 a::after{content:"";position:absolute;inset:0}
 .teaser-card h3 a:hover{text-decoration:underline;text-decoration-thickness:2px;text-underline-offset:.12em}
-.teaser-label{margin:10px 0 0;color:var(--stone);font-size:.9rem}
-.teaser-line{margin:12px 0 0;max-width:42ch;color:#D6D2CA}
-.work-head .ulink+.ulink{margin-left:28px}
+.teaser-label{margin:10px 0 0;color:var(--amber-ink);font-size:.9rem;font-weight:700}
+.teaser-line{margin:12px 0 0;max-width:46ch;color:var(--ink-2);font-size:1rem}
+
+/* Before/after section */
 .ba{padding-block:var(--section)}
-.ba-grid{align-items:center}
+.ba-grid{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));column-gap:var(--col-gap);align-items:center}
 .ba-copy{grid-column:1/span 4}
-.services{padding-block:var(--section)}
-.services-head{display:flex;justify-content:space-between;align-items:flex-end;gap:24px;margin-bottom:clamp(40px,5vw,72px)}
-.services-head h2{margin:0}
-.svc-grid{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));column-gap:var(--col-gap);align-items:start}
-.svc-list{grid-column:1/span 7;grid-row:1;list-style:none;margin:0;padding:0;border-top:1px solid var(--line)}
-.svc{padding:clamp(24px,3vw,40px) 0;border-bottom:1px solid var(--line)}
-.svc h3{margin:0 0 12px;font-weight:760;font-stretch:88%;font-size:clamp(2.1rem,5.4vw,5rem);line-height:.95;letter-spacing:-.022em}
-.svc p{margin:0;color:var(--stone);max-width:46ch}
-/* One decorative photo panel beside the rows (aria-hidden). The photos are stacked; the one on top shows. Without JS that is the
-   first; motion.js marks the active row's photo .is-active. The swap needs no motion: with GSAP it is a clip-path wipe (.is-wipe),
-   without it an opacity crossfade, both only inside the reduced-motion guard at the end of this file. */
-.svc-panel{grid-column:8/-1;grid-row:1;position:sticky;top:12vh;aspect-ratio:4/5;overflow:hidden;background:var(--ink-2)}
-.svc-photo{position:absolute;inset:0}
-.svc-photo img{width:100%;height:100%;object-fit:cover}
-.svc-panel:not(.is-live) .svc-photo:first-child,.svc-photo.is-active{z-index:1}
-.band{position:relative;isolation:isolate;overflow:hidden;padding-block:clamp(96px,12vw,176px)}
-.band-media{position:absolute;inset:0;z-index:-1}
-.band-media img{object-position:50% 40%}
-.band-media::after{content:"";position:absolute;inset:0;background:linear-gradient(90deg,rgba(14,14,13,.86) 0%,rgba(14,14,13,.6) 55%,rgba(14,14,13,.35) 100%)}
-.band h2{max-width:12ch;margin:0;font-size:clamp(3rem,7.4vw,7.4rem);font-weight:800;font-stretch:84%;line-height:.93;letter-spacing:-.025em}
-.band p{margin:28px 0 36px;max-width:40ch;color:#D6D2CA;font-size:clamp(1.0625rem,.5vw + .95rem,1.25rem)}
+.ba-copy h2{font-size:clamp(2.1rem,1.2rem + 2.6vw,3.75rem);font-weight:780;font-stretch:86%;letter-spacing:-.03em}
+.ba-copy p{color:var(--ink-2);font-size:1rem;max-width:40ch}
 
 /* Before/after comparison (fictional business illustration) */
 .compare{--pos:50%;grid-column:6/-1}
-.compare-frame{border-radius:var(--radius-lg);overflow:hidden;background:#1A1A19;box-shadow:var(--shadow-2),0 0 0 1px rgba(14,14,13,.12)}
-.browser-bar{display:flex;align-items:center;gap:14px;height:38px;padding:0 10px;background:#E2DED6;border-bottom:1px solid var(--line-dark)}
-.browser-url{flex:0 1 340px;min-width:0;margin:0 auto;padding:2px 12px;border-radius:3px;background:#F2EFE9;color:#5E5A53;font-size:12px;text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.compare-tag{flex:none;padding:3px 9px;border-radius:var(--radius-sm);background:var(--ink);color:var(--bone);font:650 12px/1.3 var(--font-display)}
+.compare-frame{border-radius:14px;overflow:hidden;background:#fff;box-shadow:var(--shadow-lift)}
+.browser-bar{display:flex;align-items:center;gap:14px;height:38px;padding:0 10px;background:#F4F3EF;border-bottom:1px solid var(--line-dark)}
+.browser-url{flex:0 1 340px;min-width:0;margin:0 auto;padding:2px 12px;border-radius:3px;background:#fff;color:var(--mute);font-size:12px;text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.compare-tag{flex:none;padding:3px 9px;border-radius:var(--radius-pill);background:var(--ink);color:#fff;font:650 12px/1.3 var(--font-display)}
 .compare-stage{position:relative;isolation:isolate;aspect-ratio:16/10;overflow:hidden;container-type:inline-size}
 .mock{position:absolute;inset:0}
 .mock-before{background:#BDBDBD}
 .mock-after{clip-path:inset(0 calc(100% - var(--pos)) 0 0)}
-.compare-seam{position:absolute;z-index:2;top:0;bottom:0;left:var(--pos);width:2px;margin-left:-1px;background:var(--bone);box-shadow:0 0 0 1px rgba(0,0,0,.25);pointer-events:none}
-.compare-seam::after{content:"";position:absolute;top:50%;left:50%;width:36px;height:36px;margin:-18px 0 0 -18px;border-radius:var(--radius-sm);background:linear-gradient(90deg,transparent 14px,var(--ink) 14px 16px,transparent 16px 20px,var(--ink) 20px 22px,transparent 22px) var(--bone);box-shadow:0 6px 18px rgba(0,0,0,.35)}
+.compare-seam{position:absolute;z-index:2;top:0;bottom:0;left:var(--pos);width:2px;margin-left:-1px;background:#fff;box-shadow:0 0 0 1px rgba(0,0,0,.25);pointer-events:none}
+.compare-seam::after{content:"";position:absolute;top:50%;left:50%;width:36px;height:36px;margin:-18px 0 0 -18px;border-radius:50%;background:linear-gradient(90deg,transparent 14px,var(--ink) 14px 16px,transparent 16px 20px,var(--ink) 20px 22px,transparent 22px) #fff;box-shadow:0 6px 18px rgba(0,0,0,.35)}
 .compare-controls{display:flex;flex-wrap:wrap;align-items:end;justify-content:space-between;gap:12px 20px;margin-top:18px}
 .compare-label{flex:1 1 220px;display:grid;gap:4px;font:600 1rem/1.3 var(--font-display)}
 .compare-label input{width:100%;min-height:44px;margin:0;accent-color:var(--ink)}
-.compare-buttons{display:inline-flex;border:1px solid var(--ink);border-radius:var(--radius-sm)}
+.compare-buttons{display:inline-flex;overflow:hidden;border:1px solid var(--ink);border-radius:var(--radius-pill)}
 .compare-button{min-height:46px;min-width:96px;padding:0 18px;border:0;background:transparent;font:600 1rem/1 var(--font-display)}
 .compare-button+.compare-button{border-left:1px solid var(--ink)}
 .compare-button:hover{background:rgba(14,14,13,.06)}
-.compare-button[aria-pressed="true"]{background:var(--ink);color:var(--bone)}
-.compare figcaption{margin-top:14px;max-width:70ch;color:var(--ink-soft);font-size:.92rem}
+.compare-button[aria-pressed="true"]{background:var(--ink);color:#fff}
+.compare figcaption{margin-top:14px;max-width:70ch;color:var(--mute);font-size:.92rem}
 
 /* The dated "before" site */
 .old{display:flex;flex-direction:column;background:#BDBDBD;color:#111;font-family:"Times New Roman",Times,serif}
@@ -133,51 +185,94 @@
 .old-title{font-size:1.9em}
 }
 
-/* First-visit intro (homepage). Never shown by default and never catches clicks; it only appears while motion-boot.js has set
-   the intro class on <html>, inside the reduced-motion guard at the end of this file. Decorative and aria-hidden. */
-.intro{display:none;pointer-events:none}
-.intro-lockup{display:flex;flex-direction:column;align-items:center;gap:26px}
-.intro-mark{width:clamp(72px,9vw,112px);height:auto;fill:var(--bone);overflow:visible}
-.intro-mark path:first-child{fill:var(--amber)}
-.intro-word{display:block;overflow:hidden;padding-left:.32em;font:650 clamp(18px,2vw,24px)/1.2 var(--font-display);font-stretch:118%;letter-spacing:.32em}
-.intro-word>span{display:block}
-.intro-hint{position:absolute;right:var(--gut);bottom:28px;color:var(--stone);font-size:.9rem}
 
-/* Services rows: each heading links to its section on the Services page. */
-.svc h3 a{text-decoration:none}
-.svc h3 a:hover{text-decoration:underline;text-decoration-thickness:2px;text-underline-offset:.12em}
+/* What we do: three columns, each with a still illustration (aria-hidden) above its heading. Its text is drawn in cqw so
+   it scales with the column. */
+.services{padding-block:var(--section)}
+.services-head{display:flex;justify-content:space-between;align-items:flex-end;gap:24px;margin-bottom:clamp(32px,4vw,56px)}
+.services-head h2{margin:0;font-size:clamp(2.75rem,1rem + 5.4vw,6.6rem);font-weight:780;font-stretch:78%;letter-spacing:-.03em}
+.svc-list{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:var(--col-gap);list-style:none;margin:0;padding:0}
+.svc-row{padding-top:22px;border-top:1px solid var(--ink)}
+.svc-row h3{margin:26px 0 12px;font-size:clamp(2rem,1rem + 2.2vw,3rem);font-weight:780;font-stretch:86%;line-height:.95;letter-spacing:-.03em}
+.svc-row h3 a{text-decoration:none}
+.svc-row h3 a:hover{text-decoration:underline;text-decoration-thickness:2px;text-underline-offset:.12em}
+.svc-row p{margin:0;color:var(--ink-2);max-width:40ch}
+.vig{position:relative;aspect-ratio:4/3.3;overflow:hidden;border-radius:18px;background:var(--warm);container-type:inline-size}
+.vig-tag{position:absolute;left:4cqw;bottom:4cqw;z-index:2;padding:.5em .85em;border-radius:999px;background:rgba(255,255,255,.94);font:600 max(11px,1.7cqw)/1 var(--font-display);color:var(--amber-ink)}
+.vb-win,.log{position:absolute;left:7%;right:7%;top:8%;bottom:-2%;overflow:hidden;border-radius:2.4cqw 2.4cqw 0 0;background:#fff;box-shadow:var(--shadow-lift)}
+.vb-win{background:#F7F5EF}
+.vb-bar{display:flex;gap:1cqw;align-items:center;height:5.6cqw;padding:0 2.6cqw;background:#F4F3EF;border-bottom:1px solid var(--line-dark)}
+.vb-bar i{width:1.6cqw;height:1.6cqw;border-radius:50%;background:#D6D3CC}
+.vb-page{padding:3cqw 4cqw}
+.vb-nav{display:flex;align-items:center;justify-content:space-between;height:5cqw}
+.vb-nav b{font:600 3.2cqw/1 Georgia,serif;color:#1F3B2C}
+.vb-nav em{padding:1.2cqw 2.2cqw;border-radius:99px;background:#24412F;color:#fff;font:600 2cqw/1 var(--font-text);font-style:normal}
+.vb-h{margin-top:3cqw;max-width:62cqw;font:400 6.6cqw/1.08 Georgia,"Times New Roman",serif;color:#1D2A22}
+.vb-p{margin:2cqw 0 0;font-size:2.5cqw;color:#4A5049}
+.vb-btn{display:inline-grid;place-items:center;height:6.4cqw;margin-top:2.4cqw;padding:0 3cqw;border-radius:99px;background:#24412F;color:#fff;font:600 2.3cqw/1 var(--font-text)}
+.vb-page img{width:100%;height:30cqw;margin-top:3cqw;object-fit:cover;border-radius:.8cqw}
+.vr-old{position:absolute;left:6%;top:9%;width:54%;padding:3cqw;background:#FFFFE0;border:.7cqw outset #CCC;font:2.6cqw/1.3 "Times New Roman",serif;color:#000;transform:rotate(-4deg)}
+.vr-old b{display:block;font:bold 4cqw/1.1 "Comic Sans MS",cursive;color:#C00;text-align:center}
+.vr-marq{display:block;margin:1.2cqw 0;background:#00F;color:#FF0;font:bold 2.4cqw/1.6 Arial,sans-serif;text-align:center}
+.vr-old p{margin:0 0 1.4cqw;font-size:inherit}
+.vr-old u{color:#00E}
+.vr-new{position:absolute;right:5%;top:30%;width:66%;height:58%;display:grid;grid-template-columns:1.1fr 1fr;overflow:hidden;border-radius:2cqw;background:#141312;color:#fff;box-shadow:var(--shadow-lift)}
+.vr-new img{grid-column:2;grid-row:1;width:100%;height:100%;object-fit:cover}
+.vr-copy{grid-column:1;grid-row:1;display:flex;flex-direction:column;justify-content:flex-end;gap:2cqw;padding:3.4cqw}
+.vr-copy small{display:flex;align-items:center;gap:1cqw;font-size:2cqw;color:rgba(255,255,255,.82)}
+.vr-copy small i{width:1.4cqw;height:1.4cqw;border-radius:50%;background:#4EC27F}
+.vr-copy b{font:800 5.4cqw/.95 var(--font-display);font-stretch:68%;text-transform:uppercase}
+.vr-btn{display:grid;place-items:center;height:6.4cqw;border-radius:.8cqw;background:#A3341F;font:650 2.2cqw/1 var(--font-display)}
+.log{padding:4cqw 4.4cqw}
+.log-head{display:flex;align-items:center;justify-content:space-between;padding-bottom:3cqw;border-bottom:1px solid var(--line-dark);font-size:2.3cqw;color:var(--mute)}
+.log-head b{font:740 3.6cqw/1 var(--font-display);color:var(--ink)}
+.log-list{list-style:none;margin:0;padding:0}
+.log-list li{display:grid;grid-template-columns:5.4cqw 1fr auto;align-items:center;gap:2cqw;height:10cqw;border-bottom:1px solid var(--line-dark);font:500 2.9cqw/1.2 var(--font-text)}
+.log-list span+span{font-size:2.3cqw;color:var(--mute)}
+.log-list svg{width:5cqw;height:5cqw;padding:1cqw;border-radius:50%;background:rgba(30,107,71,.1);fill:none;stroke:var(--ok);stroke-width:2.4;stroke-linecap:round;stroke-linejoin:round}
+
+/* Closing call to action: the one ink section, with its own white focus ring. */
+.band{position:relative;isolation:isolate;overflow:hidden;padding-block:clamp(88px,10vw,144px);background:var(--ink);color:#fff}
+.band-media{position:absolute;inset:0;z-index:-1;opacity:.34}
+.band-media img{width:100%;height:100%;object-fit:cover;object-position:50% 40%}
+.band-media::after{content:"";position:absolute;inset:0;background:linear-gradient(180deg,var(--ink) 0%,rgba(14,14,13,.55) 40%,rgba(14,14,13,.7) 70%,var(--ink) 100%)}
+.band h2{max-width:14ch;margin:0;font-size:clamp(3rem,1rem + 6vw,8rem);font-weight:820;font-stretch:84%;line-height:.92;letter-spacing:-.035em}
+.band-foot{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:24px 48px;margin-top:clamp(36px,5vw,64px);padding-top:28px;border-top:1px solid rgba(255,255,255,.18)}
+.band-foot p{margin:0;max-width:42ch;color:rgba(255,255,255,.82)}
+.band :focus-visible{outline-color:#fff}
 
 /* Responsive */
-@media(max-width:900px){
-.hero{display:block;min-height:0}
-.hero-photo{position:relative;inset:auto;height:58svh;min-height:340px;max-height:560px;z-index:0}
-.hero-photo img{object-position:30% 50%}
-.hero-photo::after{background:linear-gradient(0deg,var(--ink) 0%,rgba(14,14,13,0) 38%)}
-.hero-in{position:relative;z-index:1;padding-block:8px 72px}
-.hero-h{font-size:clamp(2.6rem,11.6vw,5rem)}
-.hero-device{right:var(--gut);top:calc(min(max(58svh,340px),560px) - 268px);bottom:auto}
-.hero-device .phone{--pw:112px}
-.hero-cap{display:none}
+@media(max-width:1023px){
+.hero-in{grid-template-columns:minmax(0,1fr);min-height:0;padding-block:36px 64px}
+.hero-copy,.stage{grid-column:1;grid-row:auto}
+.stage{margin-top:28px}
+.hero-h{font-size:clamp(2.6rem,12.6vw,8rem)}
+}
+@media(max-width:960px){
+.reel-head,.reel-fig{grid-column:1/-1}
+.reel-fig{margin-top:32px}
 .ba-copy,.compare{grid-column:1/-1;grid-row:auto}
 .compare{margin-top:40px}
-.svc-list,.svc-panel{grid-column:1/-1;grid-row:auto}
-.svc-panel{position:relative;top:auto;aspect-ratio:16/10;margin-bottom:clamp(32px,6vw,48px)}
 }
 @media(max-width:860px){
 .work-head{grid-template-columns:1fr}
 .work-head div{justify-self:start}
-.reel-head h2,.reel-head p{grid-column:1/-1}
-.reel-head p{margin-top:16px}
 .teaser{grid-template-columns:1fr;row-gap:40px}
-.teaser-img{aspect-ratio:16/9}
+.teaser-card,.teaser-card:first-child{grid-column:auto}
+.teaser-card:last-child{margin-top:0}
+.teaser-img,.teaser-card:first-child .teaser-img{aspect-ratio:4/3}
+.svc-list{grid-template-columns:1fr;gap:44px}
 }
 @media(max-width:640px){
-/* Phones: the headline, sub and calls to action sit over the darkened photo so the H1 and primary CTA are above the fold. */
-.hero{display:flex;flex-direction:column;justify-content:flex-end;min-height:calc(100vh - 77px);min-height:calc(100svh - 77px)}
-.hero-photo{position:absolute;inset:0;height:auto;min-height:0;max-height:none;z-index:-1}
-.hero-photo::after{background:linear-gradient(0deg,rgba(14,14,13,.92) 0%,rgba(14,14,13,.86) 60%,rgba(14,14,13,.3) 100%)}
-.hero-in{padding-block:48px 40px}
-.hero-device{display:none}
+.rig{aspect-ratio:62/66;font-size:calc(100cqw / 62)}
+.rig-plinth{left:-2em;right:-2em;top:8em;bottom:6em;border-radius:3em}
+.hd-laptop{left:4em;top:12em;width:56em}
+.hd-phone{left:auto;right:1em;top:30em;width:17em}
+.frag{--fs:1.75}
+.frag-speed{--x:0;--y:0}
+.frag-enq{--x:28;--y:5}
+.frag-book{--fs:1.6;--x:0;--y:42}
+.frag-dev{display:none}
 .actions .button,.band .button{width:100%}
 .compare-stage{aspect-ratio:4/5}
 /* Phones: the vertical cut in a 9:16 frame, capped so it never fills more than about three quarters of the screen. */
@@ -187,27 +282,15 @@
 .work-head .ulink+.ulink{margin-left:0}
 }
 
-/* Motion: only for people who have not asked for reduced motion. Transitions on transform and opacity only.
-   The intro panel shows only on a first visit per session; clicks pass through it. */
+/* Motion: only for people who have not asked for reduced motion; only transform moves.
+   Hero start states, only while motion-boot.js holds .ph-wait: home.js takes them over with GSAP fromTo and removes the
+   class (its 2.5 s timer removes it whatever happens), so nothing paints, vanishes and replays. */
 @media(prefers-reduced-motion:no-preference){
-.ns-intro .intro{position:fixed;inset:0;z-index:120;display:grid;place-items:center;background:var(--ink);color:var(--bone)}
-/* Services panel crossfade: the incoming photo fades in on top; the outgoing one waits under it, then fades out. */
-.svc-panel.is-live .svc-photo{opacity:0;transition:opacity 500ms var(--ease) 500ms}
-.svc-panel.is-live .svc-photo.is-active{opacity:1;transition-delay:0s}
-/* With GSAP (.is-wipe): no crossfade; the incoming photo wipes up over the outgoing one, which waits beneath it. */
-.svc-panel.is-wipe .svc-photo{opacity:1}
-.svc-panel.is-wipe .svc-photo.is-prev{z-index:1}
-.svc-panel.is-wipe .svc-photo.is-active{z-index:2}
-/* Hero start states, only while motion-boot.js holds .ph-wait: home.js takes them over with GSAP and removes the class (a
-   2.5 s timer removes it whatever happens), so the hero never paints, vanishes and replays on a repeat visit. */
 .ph-wait .hero-h .ln>span{transform:translateY(108%)}
-/* Not under the first-visit intro (Task 26): there the photo paints beneath the opaque panel, keeping first-visit LCP fast. */
-.ph-wait:not(.ns-intro) .hero-photo{clip-path:inset(0 0 0 100%)}
 .ph-wait :is(.hero-sub,.hero .actions){opacity:0;transform:translateY(18px)}
-.ph-wait .hero-device{opacity:0;transform:translateY(70px)}
-.ph-wait .intro-mark path{opacity:0}
-.ph-wait .intro-word>span{transform:translateY(110%)}
-/* Project cards (Task 29): the photo pushes in on hover or keyboard focus; the light sweep is in site.css, the tilt in details.js. */
-.motion .teaser-img img{transition:transform 700ms var(--ease)}
-.motion .teaser-card:is(:hover,:focus-within) .teaser-img img{transform:scale(1.06)}
+.ph-wait .stage{opacity:0}
+.dev-thumb{transition:transform var(--dur-2) var(--ease-io)}
+/* Concept cards: the photo pushes in a little on hover or keyboard focus, within 200 ms. */
+.motion .teaser-img img{transition:transform var(--dur-1) var(--ease-out)}
+.motion .teaser-card:is(:hover,:focus-within) .teaser-img img{transform:scale(1.03)}
 }

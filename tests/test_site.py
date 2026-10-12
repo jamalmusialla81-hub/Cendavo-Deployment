@@ -370,11 +370,15 @@ KIT_ROUTES = ['index.html', 'work/index.html', 'services/index.html', 'pricing/i
 # Pages with GSAP motion (Night Shift Task 10; About added in Task 15). Contact (the enquiry form) and Demo (the browser app) stay static.
 MOTION_ROUTES = ['index.html', 'work/index.html', 'services/index.html', 'pricing/index.html', 'about/index.html']
 STATIC_ROUTES = ['contact/index.html', 'demo/index.html']
-# Night Shift Task 29: <video> elements per built page (the showreel on /, social clips on /services/ and /work/).
-VIDEOS_PER_ROUTE = {'index.html': 1, 'services/index.html': 2, 'work/index.html': 1}
+# Night Shift Task 29: <video> elements per built page (the showreel on /, social clips on /services/ and /work/). Daylight
+# (Task 33) adds the homepage hero's two device loops (laptop and phone).
+VIDEOS_PER_ROUTE = {'index.html': 3, 'services/index.html': 2, 'work/index.html': 1}
 MOTION_HOOKS = ('data-ph', 'data-reveal', 'data-parallax', 'data-devices', 'data-rise', 'data-work', 'data-intro')
-# Hooks for reel.js (Task 28 showreel, Task 29 clips); playback, not motion, so they may appear wherever a video is.
-REEL_HOOKS = ('data-reel', 'data-reel-toggle')
+# Hooks for reel.js (Task 28 showreel, Task 29 clips; Task 33 hero loops, Pause motion and showreel chapters); playback,
+# not motion, so they may appear wherever a video is.
+REEL_HOOKS = ('data-reel', 'data-reel-toggle', 'data-loop', 'data-motion-toggle', 'data-chapters')
+# Daylight (Task 33): the homepage loads GSAP, ScrollTrigger and motion.js but not details.js (no card tilt or cursor ring).
+HOME_GSAP_TAGS = GSAP_TAGS[:3]
 # Network, storage and markup-injection APIs no motion script may use; autoAlpha (visibility:hidden), snap (scroll
 # hijacking) and preventDefault (swallowing a visitor's key or click) are banned too.
 MOTION_SCRIPT_BANS = ('fetch(', 'XMLHttpRequest', 'innerHTML', 'http', 'localStorage', 'autoAlpha', 'snap', 'preventDefault',
@@ -397,13 +401,18 @@ class DesignSystemTests(unittest.TestCase):
         cls.tokens = dict(re.findall(r'(--[\w-]+):([^;]+)', root))
 
     def test_palette_tokens_match_art_direction(self):
-        # Night Shift palette (docs/design/night-shift/NIGHT_SHIFT.md); success/danger darkened for AA on bone.
-        palette = {'--ink': '#0E0E0D', '--ink-2': '#171716', '--bone': '#EDEAE3', '--bone-2': '#E3DFD6',
-                   '--paper': '#F7F5F0', '--stone': '#A8A49B', '--ink-soft': '#4F4C46', '--amber': '#D9A441',
-                   '--amber-hover': '#E6B65A', '--success': '#1E6B47', '--danger': '#A3341F'}
+        # Daylight palette (Task 33, docs/design/daylight/prototype): paper, two warm greys, ink, one amber. Every colour
+        # token is a solid hex (the prototype's rgba --mute could not be contrast-checked). The Night Shift surfaces stay,
+        # unchanged, for the inner pages' dark <main> until Task 34.
+        palette = {'--paper': '#FFFFFF', '--warm': '#F6F5F1', '--warm-2': '#EEECE5', '--ink': '#0E0E0D', '--ink-2': '#2A2926',
+                   '--mute': '#605D57', '--amber': '#D9A441', '--amber-ink': '#8C5A1C', '--ok': '#1E6B47', '--danger': '#A3341F',
+                   '--bone': '#EDEAE3', '--bone-2': '#E3DFD6', '--stone': '#A8A49B', '--ink-soft': '#4F4C46', '--amber-hover': '#E6B65A'}
         for name, value in palette.items():
             with self.subTest(token=name):
                 self.assertEqual(self.tokens.get(name, '').strip().upper(), value)
+        self.assertNotIn('--success', self.tokens)  # renamed --ok
+        for sheet in (self.css, self.home_css, self.pages_css, self.kit_css):
+            self.assertNotIn('var(--success)', sheet)
 
     def test_scale_tokens(self):
         spaces = {k: v for k, v in self.tokens.items() if k.startswith('--space-')}
@@ -414,8 +423,16 @@ class DesignSystemTests(unittest.TestCase):
         self.assertTrue(any(k.startswith('--radius-') for k in self.tokens))
         shadows = [k for k in self.tokens if k.startswith('--shadow')]
         self.assertTrue(1 <= len(shadows) <= 3)
-        self.assertEqual([self.tokens[k] for k in ('--dur-1', '--dur-2', '--dur-3')], ['120ms', '200ms', '400ms'])
-        self.assertEqual(len([k for k in self.tokens if k.startswith('--ease')]), 1)
+        # Daylight motion rules (Task 33): two curves, (.2,.8,.2,1) for entrances and (.7,0,.2,1) between states, and
+        # four durations. No stylesheet uses any other cubic-bezier.
+        self.assertEqual([self.tokens[k] for k in ('--dur-1', '--dur-2', '--dur-3', '--dur-4')], ['200ms', '400ms', '700ms', '1000ms'])
+        self.assertEqual(len([k for k in self.tokens if k.startswith('--dur')]), 4)
+        self.assertEqual({k: v for k, v in self.tokens.items() if k.startswith('--ease')},
+                         {'--ease-out': 'cubic-bezier(.2,.8,.2,1)', '--ease-io': 'cubic-bezier(.7,0,.2,1)'})
+        for name, sheet in (('site.css', self.css), ('home.css', self.home_css), ('pages.css', self.pages_css), ('kit.css', self.kit_css)):
+            with self.subTest(css=name):
+                self.assertTrue(set(re.findall(r'cubic-bezier\([^)]*\)', sheet)) <= {'cubic-bezier(.2,.8,.2,1)', 'cubic-bezier(.7,0,.2,1)'})
+                self.assertNotIn('var(--ease)', sheet)
         for name in ('--font-display', '--font-text'):
             with self.subTest(token=name):
                 self.assertIn('sans-serif', self.tokens[name])
@@ -423,21 +440,30 @@ class DesignSystemTests(unittest.TestCase):
 
     def test_colour_pairs_meet_wcag(self):
         t = {k: v.strip() for k, v in self.tokens.items() if v.strip().startswith('#')}
-        text_pairs = [('bone', 'ink'), ('bone', 'ink-2'), ('stone', 'ink'), ('stone', 'ink-2'), ('ink', 'bone'),
-                      ('ink', 'bone-2'), ('ink', 'paper'), ('ink-soft', 'bone'), ('ink-soft', 'bone-2'), ('ink-soft', 'paper'),
-                      ('ink', 'amber'), ('ink', 'amber-hover'), ('danger', 'paper'), ('danger', 'bone'), ('danger', 'bone-2'),
-                      ('success', 'paper'), ('success', 'bone'), ('success', 'bone-2')]
+        # Daylight text on paper and the warm bands (Task 33), white on the booked green and on ink, then the Night Shift
+        # pairs the inner pages' dark <main> still uses until Task 34.
+        text_pairs = [('ink', 'paper'), ('ink', 'warm'), ('ink', 'warm-2'), ('ink-2', 'paper'), ('ink-2', 'warm'), ('ink-2', 'warm-2'),
+                      ('mute', 'paper'), ('mute', 'warm'), ('mute', 'warm-2'), ('amber-ink', 'paper'), ('amber-ink', 'warm'),
+                      ('ink', 'amber'), ('danger', 'paper'), ('danger', 'warm'), ('ok', 'paper'), ('ok', 'warm'),
+                      ('paper', 'ok'), ('paper', 'ink'), ('paper', 'ink-2'),
+                      ('bone', 'ink'), ('bone', 'ink-2'), ('stone', 'ink'), ('stone', 'ink-2'), ('ink', 'bone'), ('ink', 'bone-2'),
+                      ('ink-soft', 'bone'), ('ink-soft', 'bone-2'), ('ink-soft', 'paper'), ('ink', 'amber-hover'),
+                      ('danger', 'bone'), ('danger', 'bone-2'), ('ok', 'bone'), ('ok', 'bone-2')]
         for fg, bg in text_pairs:
             with self.subTest(pair=f'{fg}/{bg}'):
                 self.assertGreaterEqual(contrast(t[f'--{fg}'], t[f'--{bg}']), 4.5)
-        # Focus rings: bone on dark surfaces (the default), ink inside light (bone/paper) sections.
-        self.assertIn(':focus-visible{outline:2px solid var(--bone)', self.css)
+        # Focus rings: ink on paper and warm surfaces (the default); bone on the inner pages' ink <main> (with ink again in
+        # their light sections) and on the demo's ink panel; white in the homepage's ink closing band.
+        self.assertIn(':focus-visible{outline:2px solid var(--ink)', self.css)
+        self.assertIn('main :focus-visible{outline-color:var(--bone)}', self.pages_css)
         self.assertIn('.bone :focus-visible,.section :focus-visible{outline-color:var(--ink)}', self.css)
         self.assertRegex(self.css, r'\.demo-side :focus-visible[^{]*\{outline-color:var\(--bone\)\}')
-        for ring, bg in (('bone', 'ink'), ('bone', 'ink-2'), ('ink', 'bone'), ('ink', 'bone-2'), ('ink', 'paper')):
+        self.assertIn('.band :focus-visible{outline-color:#fff}', self.home_css)
+        for ring, bg in (('ink', 'paper'), ('ink', 'warm'), ('ink', 'warm-2'), ('bone', 'ink'), ('bone', 'ink-2'), ('ink', 'bone'), ('ink', 'bone-2')):
             with self.subTest(ring=f'{ring}/{bg}'):
                 self.assertGreaterEqual(contrast(t[f'--{ring}'], t[f'--{bg}']), 3)
-        self.assertLess(contrast(t['--amber'], t['--bone']), 3)  # why light sections use the ink ring, not amber
+        self.assertGreaterEqual(contrast('#FFFFFF', t['--ink']), 3)
+        self.assertLess(contrast(t['--amber'], t['--paper']), 3)  # why amber is never a focus ring
 
     def test_fonts_are_self_hosted(self):
         faces = re.findall(r'@font-face\{([^}]*)\}', self.css)
@@ -489,7 +515,7 @@ class DesignSystemTests(unittest.TestCase):
             with self.subTest(route=route):
                 html = (OUT / route).read_text()
                 self.assertIn('<html lang="en-AU">', html)
-                self.assertIn('<meta name="theme-color" content="#0E0E0D">', html)
+                self.assertIn('<meta name="theme-color" content="#FFFFFF">', html)
                 title = re.search(r'<title>(.*?)</title>', html).group(1)
                 self.assertNotIn('Product demo', title)
                 self.assertNotIn('Less admin', title)
@@ -502,20 +528,24 @@ class DesignSystemTests(unittest.TestCase):
         self.assertIn('<title>Cendavo — Website design for Sydney’s local service businesses</title>', self.home)
         self.assertRegex(self.home, r'<meta name="description" content="[^"]*websites for local service businesses in Sydney')
 
-    def test_dark_first_frame_without_changing_form_controls(self):
-        # Night Shift Task 25: the browser paints its dark canvas (not white) before site.css arrives, while
-        # native form controls on bone/paper sections keep their light rendering.
+    def test_light_first_frame_and_light_form_controls(self):
+        # Night Shift Task 25 restated for Daylight (Task 33): the browser's first frame, painted before site.css arrives,
+        # is the same white as the page (light color-scheme, white theme colour), so nothing flashes dark; native form
+        # controls render light.
         for route in self.ROUTES + ['404.html']:
             with self.subTest(route=route):
                 html = (OUT / route).read_text()
                 head = html.split('</head>', 1)[0]
-                self.assertEqual(html.count('<meta name="color-scheme" content="dark">'), 1)
-                self.assertEqual(html.count('<meta name="theme-color" content="#0E0E0D">'), 1)
-                self.assertIn('<meta name="color-scheme" content="dark">', head)
-                self.assertLess(head.index('<meta name="color-scheme" content="dark">'),
-                                head.index('<link rel="stylesheet" href="/assets/site.css">'))
+                self.assertEqual(html.count('<meta name="color-scheme" content="light">'), 1)
+                self.assertEqual(html.count('<meta name="theme-color" content="#FFFFFF">'), 1)
+                self.assertEqual(html.count('name="color-scheme"'), 1)
+                self.assertEqual(html.count('name="theme-color"'), 1)
+                for meta in ('<meta name="color-scheme" content="light">', '<meta name="theme-color" content="#FFFFFF">'):
+                    self.assertLess(head.index(meta), head.index('<link rel="stylesheet" href="/assets/site.css">'))
         self.assertIn('input,select,textarea{color-scheme:light}', self.css)
         self.assertNotRegex(self.css, r'(?:^|[;{}\s])color-scheme:dark')
+        self.assertIn('body{margin:0;background:var(--paper);color:var(--ink);', self.css)
+        self.assertEqual(self.tokens['--paper'].upper(), '#FFFFFF')
 
     def test_mobile_menu_collapses_only_with_javascript(self):
         self.assertIn("document.documentElement.classList.add('js')", (OUT / 'assets/site.js').read_text())
@@ -564,8 +594,9 @@ class DesignSystemTests(unittest.TestCase):
         # Night Shift Task 28 (owner): hero, showreel, three project cards, before/after, what we do, closing call to action.
         self.assertEqual(h2s, ['Twenty seconds of what we build', 'Concept projects', 'Same business. A very different first impression.',
                                'What we do', 'Let’s make your website as good as your work.'])
-        sections = re.findall(r'<section class="([a-z ]+)"', main)
-        self.assertEqual(sections, ['hero', 'reel', 'work', 'ba bone', 'services', 'band'])
+        sections = re.findall(r'<section class="([a-z -]+)"', main)
+        # Daylight (Task 33): the same order on paper, with warm bands behind the showreel and the comparison.
+        self.assertEqual(sections, ['hero', 'reel band-warm', 'work', 'ba band-warm', 'services', 'band'])
         # The process now lives on /services/ and the questions on /services/ and /pricing/.
         self.assertNotIn('<ol class="steps"', main)
         self.assertEqual(main.count('<details'), 0)
@@ -577,7 +608,7 @@ class DesignSystemTests(unittest.TestCase):
         band = main.split('<section class="band"', 1)[1]
         self.assertIn(cta, hero)
         self.assertIn(cta, band)
-        self.assertIn('<a class="button go" href="/contact/">Request a free consultation</a>', hero)
+        self.assertIn('<a class="button dark go" href="/contact/">Request a free consultation</a>', hero)  # ink on paper (Daylight)
         self.assertIn('<a class="button large go" href="/contact/">', band)
         work = main.split('id="work-title"', 1)[1].split('</section>', 1)[0]
         # The work section is honest that it shows concepts, and links to the working demonstration project.
@@ -597,6 +628,17 @@ class DesignSystemTests(unittest.TestCase):
             with self.subTest(banned=banned):
                 self.assertNotIn(banned, text)
         self.assertNotRegex(text, r'\d+\s*(day|week|hour)')
+        # Daylight (Task 33): the hero's page-speed card is an illustration, not a measurement. It sits in the aria-hidden
+        # card layer, says "Example", and the figure's description calls the score an example.
+        rig = re.search(r'<figure class="rig" role="img" aria-label="([^"]+)">(.*?)</figure>', self.home_main, re.S)
+        self.assertTrue(rig.group(1).startswith('Illustration:'))
+        self.assertIn('an example page speed score', rig.group(1))
+        self.assertIn('fictional concept business', rig.group(1))
+        speed = re.search(r'<div class="frag frag-speed">(.*?)</div>', rig.group(2), re.S).group(1)
+        self.assertIn('<small>Example, concept site</small>', speed)
+        self.assertRegex(rig.group(2), r'<div class="rig-cards" aria-hidden="true">\s*<div class="frag frag-speed">')
+        self.assertNotIn('Lighthouse', self.home_main)
+        self.assertIn('<span class="tag">Concept</span>', rig.group(2))
 
     def test_before_after_comparison(self):
         figure = re.search(r'<figure class="compare" data-compare>.*?</figure>', self.home_main, re.S).group(0)
@@ -679,7 +721,12 @@ class DesignSystemTests(unittest.TestCase):
         self.assertEqual(section.count('<a class="ulink strong" href="/work/">See all work</a>'), 1)
         # A row of three on wide screens, stacked at 860px and below; the title link covers the card (one tab stop each).
         base = base_rules(self.home_css)
-        self.assertIn('grid-template-columns:repeat(3,minmax(0,1fr))', rules_for(base, '.teaser')[0])
+        # Daylight (Task 33): uneven sizes on a 12-column grid: a wide lead card (6 columns) and two narrow ones (3 each),
+        # the last set lower.
+        self.assertIn('grid-template-columns:repeat(12,minmax(0,1fr))', rules_for(base, '.teaser')[0])
+        self.assertIn('grid-column:span 3', rules_for(base, '.teaser-card')[0])
+        self.assertIn('grid-column:1/span 6', rules_for(base, '.teaser-card:first-child')[0])
+        self.assertIn('margin-top:72px', rules_for(base, '.teaser-card:last-child')[0])
         self.assertIn('grid-template-columns:1fr', rules_for(media_blocks(self.home_css, 'max-width:860px'), '.teaser')[0])
         self.assertIn('position:relative', rules_for(base, '.teaser-card')[0])
         self.assertIn('position:absolute;inset:0', rules_for(base, '.teaser-card h3 a::after')[0])
@@ -701,17 +748,15 @@ class DesignSystemTests(unittest.TestCase):
         parser = ImageCollector()
         parser.feed(self.home_main)
         self.assertGreaterEqual(len(parser.images), 10)
-        hero = parser.images[0][0]
-        self.assertEqual(hero.get('fetchpriority'), 'high')
-        self.assertNotIn('loading', hero)
-        self.assertTrue(hero.get('alt'))
+        # Daylight (Task 33): the hero has no photo (the devices show video posters from CSS and the headline is the
+        # likely LCP element), so every photo on the page loads lazily and none asks for high priority.
         for index, (attrs, hidden) in enumerate(parser.images):
             with self.subTest(index=index, src=attrs.get('src')):
                 for name in ('src', 'srcset', 'sizes', 'width', 'height', 'alt'):
                     self.assertIn(name, attrs)
                 self.assertEqual(attrs.get('decoding'), 'async')
-                if index:
-                    self.assertEqual(attrs.get('loading'), 'lazy')
+                self.assertEqual(attrs.get('loading'), 'lazy')
+                self.assertNotIn('fetchpriority', attrs)
                 if not attrs['alt'].strip():
                     self.assertTrue(hidden, 'an empty alt is only allowed inside an aria-hidden mockup')
                 candidates = dict(reversed(part.split()) for part in attrs['srcset'].split(','))
@@ -731,12 +776,13 @@ class DesignSystemTests(unittest.TestCase):
         for route in self.ROUTES:
             with self.subTest(route=route):
                 html = (OUT / route).read_text()
+                gsap_tags = HOME_GSAP_TAGS if route == 'index.html' else GSAP_TAGS  # no details.js on the Daylight homepage
                 for tag in GSAP_TAGS:
-                    self.assertEqual(html.count(tag), 1 if route in MOTION_ROUTES else 0)
+                    self.assertEqual(html.count(tag), 1 if route in MOTION_ROUTES and tag in gsap_tags else 0)
                 self.assertEqual(html.count(HOME_TAG), 1 if route == 'index.html' else 0)
                 self.assertEqual(html.count(REEL_TAG), 1 if route in REEL_ROUTES else 0)
                 if route in MOTION_ROUTES:
-                    tags = GSAP_TAGS + ([REEL_TAG] if route in REEL_ROUTES else []) + ([HOME_TAG] if route == 'index.html' else [])
+                    tags = gsap_tags + ([REEL_TAG] if route in REEL_ROUTES else []) + ([HOME_TAG] if route == 'index.html' else [])
                     positions = [html.index(tag) for tag in tags]
                     self.assertEqual(positions, sorted(positions))
                     self.assertGreater(positions[0], html.index('</footer>'))
@@ -746,7 +792,8 @@ class DesignSystemTests(unittest.TestCase):
                     self.assertNotIn('motion', html.lower())
         for name in ('gsap.min.js', 'ScrollTrigger.min.js', 'LICENSE.txt'):
             self.assertTrue((OUT / 'assets/vendor/gsap' / name).is_file())
-        budgets = {'home.js': 12 * 1024, 'motion.js': 8 * 1024, 'motion-boot.js': 1024, 'details.js': 6 * 1024, 'reel.js': 3 * 1024}
+        # reel.js grew from 3 KB to 4 KB in Daylight (Task 33): hero loops, the Pause motion button and showreel chapters.
+        budgets = {'home.js': 12 * 1024, 'motion.js': 8 * 1024, 'motion-boot.js': 1024, 'details.js': 6 * 1024, 'reel.js': 4 * 1024}
         scripts = {}
         for name, budget in budgets.items():
             path = OUT / 'assets' / name
@@ -773,13 +820,11 @@ class DesignSystemTests(unittest.TestCase):
                 self.assertIn('if (!gsap || !ScrollTrigger)', scripts[name])
                 self.assertIn('gsap.matchMedia()', scripts[name])
                 self.assertIn("'(prefers-reduced-motion: no-preference)'", scripts[name])
-        # Without GSAP the intro ends at once: the class is removed before returning.
-        self.assertIn('if (!gsap || !ScrollTrigger) { endIntro(); return; }', js)
-        self.assertIn("root.classList.remove('ns-intro')", js)
-        # The intro skip listens to every kind of input, passively, and removes its listeners when the intro ends.
-        self.assertIn("const SKIP_EVENTS = ['keydown', 'pointerdown', 'wheel', 'touchstart'];", js)
-        self.assertIn('window.addEventListener(type, onSkip, { passive: true })', js)
-        self.assertIn('window.removeEventListener(type, onSkip)', js)
+        # Daylight (Task 33): there is no first-visit intro any more. Without GSAP the CSS hold is released before returning.
+        self.assertIn('if (!gsap || !ScrollTrigger) { release(); return; }', js)
+        for gone in ('ns-intro', 'SKIP_EVENTS', 'onSkip', 'sessionStorage', "'.intro"):
+            with self.subTest(gone_from_home=gone):
+                self.assertNotIn(gone, js)
         # Night Shift Task 28: no pinned project sequence any more. Task 29: the video controller moved to reel.js, shared
         # by every page with video; it needs no GSAP and observes each video's visibility instead of listening to scroll.
         reel = scripts['reel.js']
@@ -795,10 +840,11 @@ class DesignSystemTests(unittest.TestCase):
         for needle in ('window.gsap', 'gsap.', 'ScrollTrigger'):  # playback needs no GSAP (only its comment names it)
             self.assertNotIn(needle, reel)
         self.assertIn("const NARROW = '(max-width: 640px)';", reel)
-        self.assertIn('new window.IntersectionObserver(', reel)
+        self.assertIn('new win.IntersectionObserver(', reel)
         self.assertIn("video.removeAttribute('controls')", reel)
         self.assertIn('toggle.hidden = false', reel)
-        self.assertIn("document.querySelectorAll('[data-reel]').forEach(", reel)
+        self.assertIn("doc.querySelectorAll('[data-reel]').forEach(", reel)
+        self.assertIn("doc.querySelectorAll('video[data-loop]')", reel)  # Task 33: the hero loops share the controller
         # Magnetic buttons: fine pointers only, clamped to 6px or less.
         motion = scripts['motion.js']
         self.assertIn("(hover: hover) and (pointer: fine)", motion)
@@ -814,52 +860,52 @@ class DesignSystemTests(unittest.TestCase):
             with self.subTest(script=name):
                 self.assertNotRegex(scripts[name], r'(?<![-\w])(height|width|top|left|right|bottom|margin|padding)\s*:\s*[-\d\'"]')
 
-    def test_motion_boot_script_runs_first_and_opts_in_to_the_intro_only_on_home(self):
-        boot = '<script src="/assets/motion-boot.js"'
+    def test_motion_boot_script_runs_first_on_every_motion_page(self):
+        # Daylight (Task 33): the boot script no longer opts the homepage into a first-visit intro; on every motion page it
+        # sets .js/.motion and the opening hold (.ph-wait) in <head>, before first paint, with a failsafe that drops the hold
+        # within 3 s (the plan's limit) whatever happens.
+        boot = '<script src="/assets/motion-boot.js"></script>'
         for route in self.ROUTES:
             with self.subTest(route=route):
                 html = (OUT / route).read_text()
                 head = html.split('</head>', 1)[0]
-                if route in MOTION_ROUTES:
-                    self.assertEqual(html.count(boot), 1)
-                    tag = re.search(r'<script src="/assets/motion-boot\.js"[^>]*></script>', head).group(0)
-                    self.assertNotIn('defer', tag)
-                    self.assertNotIn('async', tag)
-                    self.assertEqual('data-intro' in tag, route == 'index.html')
-                else:
-                    self.assertNotIn(boot, html)
-                self.assertNotIn('data-intro', html.split('<script src="/assets/motion-boot.js"', 1)[-1] if route != 'index.html' else '')
+                self.assertEqual(head.count(boot), 1 if route in MOTION_ROUTES else 0)
+                self.assertEqual(html.count('motion-boot.js'), 1 if route in MOTION_ROUTES else 0)
+                self.assertNotIn('data-intro', html)
         js = (OUT / 'assets/motion-boot.js').read_text()
         self.assertIn("c.add('js')", js)
         self.assertIn("c.add('motion')", js)
         self.assertIn("matchMedia('(prefers-reduced-motion: reduce)').matches) return;", js)
-        self.assertIn("hasAttribute('data-intro')", js)
-        self.assertIn('w.location.hash) return;', js)
-        delay = re.search(r"setTimeout\(function \(\) \{ c\.remove\('ns-intro'\); \}, (\d+)\)", js)
+        for gone in ('ns-intro', 'data-intro', 'sessionStorage', 'cendavo-intro'):
+            self.assertNotIn(gone, js)
+        delay = re.search(r"setTimeout\(function \(\) \{ c\.remove\('ph-wait'\); \}, (\d+)\)", js)
         self.assertIsNotNone(delay)
-        self.assertLessEqual(int(delay.group(1)), 2500)
+        self.assertLessEqual(int(delay.group(1)), 3000)
 
-    def test_intro_panel_is_hidden_from_assistive_tech_and_never_blocks(self):
+    def test_homepage_has_no_intro_and_the_headline_is_plain_text(self):
+        # Daylight (Task 33) drops the first-visit intro panel. The hero headline is the full sentence as ordinary text:
+        # no aria-label replacing it and nothing in it hidden from assistive technology (the Task 23/27 regression hid it
+        # visually; this keeps it whole for everyone). Only the guarded .ph-wait hold moves its lines, and motion-boot.js
+        # drops that hold within 3 s.
         main = self.home_main
-        intro = re.search(r'<div class="intro" aria-hidden="true">.*?<span class="intro-hint">[^<]*</span></div>', main, re.S)
-        self.assertIsNotNone(intro)
-        for focusable in ('<button', '<a ', '<input', 'tabindex'):
-            with self.subTest(focusable=focusable):
-                self.assertNotIn(focusable, intro.group(0))
+        self.assertNotIn('class="intro', main)
+        for gone in ('.intro', '.ns-intro', 'intro-'):
+            self.assertNotIn(gone, self.home_css)
         hero = re.search(r'<section class="hero"[^>]*>', main).group(0)
         self.assertNotIn('aria-hidden', hero)
-        self.assertNotIn('inert', hero)
         self.assertNotIn('inert', main)
+        h1 = re.search(r'<h1([^>]*)>(.*?)</h1>', main, re.S)
+        self.assertEqual(h1.group(1), ' id="hero-title" class="hero-h"')
+        self.assertNotIn('aria-', h1.group(2))
+        self.assertEqual(re.sub(r'\s+', ' ', re.sub(r'<[^>]+>', '', h1.group(2))).strip(), 'Your work is excellent. Your website should say so.')
         unguarded, guarded = without_blocks(self.home_css, MOTION_GUARD)
-        self.assertIn('.intro{display:none;pointer-events:none}', unguarded)
-        self.assertNotIn('.ns-intro', unguarded)
-        shown = [block for block in guarded if '.ns-intro .intro{' in block]
-        self.assertEqual(len(shown), 1)
-        rule = shown[0].split('.ns-intro .intro{', 1)[1].split('}', 1)[0]
-        self.assertIn('position:fixed', rule)
-        self.assertNotIn('pointer-events:auto', rule)
-        self.assertNotIn('overflow:hidden', self.home_css.split('.ns-intro', 1)[0][-40:])
-        self.assertNotRegex(self.home_css, r'\.ns-intro[^{]*body')
+        for selectors, body in re.findall(r'([^{}]+)\{([^{}]*)\}', re.sub(r'/\*.*?\*/', '', unguarded, flags=re.S)):
+            if re.search(r'\.hero-h|\.ln\b|\.hero-copy', selectors):
+                with self.subTest(rule=selectors.strip()):
+                    self.assertNotRegex(body, r'transform|opacity|clip-path|visibility|display:none')
+        holds = [sel.strip() for sel, _ in re.findall(r'([^{}]+)\{([^{}]*)\}', re.sub(r'/\*.*?\*/', '', ''.join(guarded), flags=re.S))
+                 if re.search(r'\.hero-h|\.ln\b', sel)]
+        self.assertEqual(holds, ['.ph-wait .hero-h .ln>span'])
 
     def test_homepage_has_no_pinned_sequence_to_skip(self):
         # Night Shift Task 28 (owner: "making it all one scroll thing looks very AI"): the pinned sequence, its skip link,
@@ -929,7 +975,7 @@ class DesignSystemTests(unittest.TestCase):
                 self.assertNotIn('visibility:hidden', unguarded)
                 # Night Shift Task 23: the one exception is the page openings' start states, guarded and only while
                 # motion-boot.js holds .ph-wait. Any guarded rule that hides content (opacity:0, an off-mask transform or a
-                # closed clip-path) is either such a .ph-wait rule or the existing Services photo crossfade.
+                # closed clip-path) must be such a .ph-wait rule.
                 self.assertNotIn('.ph-wait', re.sub(r'/\*.*?\*/', '', unguarded, flags=re.S))
                 for selectors, body in re.findall(r'([^{}]+)\{([^{}]*)\}', guarded):
                     hides = re.search(r'opacity:0(?![.\d])|translateY\(1\d\d%\)|clip-path:inset\([^)]*100%', body)
@@ -937,10 +983,9 @@ class DesignSystemTests(unittest.TestCase):
                         with self.subTest(css=name, selectors=selectors.strip()[:60]):
                             # Top-level selectors only: commas inside :is(...) do not split a selector.
                             parts = [part.strip() for part in re.sub(r'\([^()]*\)', '()', selectors).split(',')]
-                            # Task 26: the one narrower hold is the homepage hero photo, clipped only without the intro.
-                            self.assertTrue(all(part.startswith('.ph-wait ') for part in parts)
-                                            or parts == ['.svc-panel.is-live .svc-photo']
-                                            or selectors.strip() == '.ph-wait:not(.ns-intro) .hero-photo', selectors)
+                            # Daylight (Task 33) removed the old exceptions (the Services photo crossfade and the hero photo
+                            # clip): every guarded rule that hides content is a .ph-wait hold.
+                            self.assertTrue(all(part.startswith('.ph-wait ') for part in parts), selectors)
 
     def test_layout_basics(self):
         for selector, css in (('.button{', self.css), ('.menu{', self.css), ('.compare-button{', self.home_css)):
@@ -1399,8 +1444,9 @@ class ImagePerformanceAndSharingTests(unittest.TestCase):
                 main = main_of(self.html[route])
                 self.assertEqual(main.count('<picture>'), len(parser.images))
                 # Task 28: the showreel's <video> has the one other kind of <source> (an mp4); Task 29 adds one per social clip
-                # (two on Services, one on Work).
-                video_sources = re.findall(r'<source src="[^"]+\.mp4" type="video/mp4">', main)
+                # (two on Services, one on Work). Daylight (Task 33): the two hero loops carry data-src until reel.js plays them.
+                video_sources = re.findall(r'<source (?:data-)?src="[^"]+\.mp4" type="video/mp4">', main)
+                self.assertEqual(main.count('<source data-src='), 2 if route == 'index.html' else 0)
                 self.assertEqual(len(video_sources), VIDEOS_PER_ROUTE.get(route, 0))
                 self.assertEqual(main.count('<source '), len(parser.images) + len(video_sources))
         self.assertGreaterEqual(total, 40)
@@ -1725,7 +1771,8 @@ class DesignCritiqueFixTests(unittest.TestCase):
         for selector in ('.cs-facts dd', '.cs-title'):
             for rule in rules_for(base, selector):
                 self.assertNotRegex(rule, r'(?<![-\w])color:')
-        self.assertRegex(self.css, r'(?:^|[}\n])body\{[^}]*;color:var\(--bone\)')
+        # Daylight (Task 33): the inner pages' <main> keeps Night Shift's bone-on-ink surface until Task 34.
+        self.assertIn('main{background:var(--ink);color:var(--bone)}', self.pages_css)
         # Wide screens: the left scrim holds its darkest value across the left half, where the 44%-wide copy sits.
         # Phones/tablets (<=860px): the copy overlaps the bottom 18vw (at most about 28%) of the photo.
         for name, css, hold in (('wide', base, 50), ('narrow', media_blocks(self.pages_css, 'max-width:860px'), 28)):
@@ -1772,32 +1819,37 @@ class DesignCritiqueFixTests(unittest.TestCase):
         self.assertIn('width:min(100%,calc(74svh * 9 / 16))', phone)
         self.assertIn('aspect-ratio:9/16', phone)
 
-    def test_mobile_hero_overlays_the_copy_on_a_darkened_photo(self):
+    def test_mobile_hero_puts_the_headline_and_buttons_first(self):
+        # Daylight (Task 33) replaces Night Shift's photo hero: below 1024px the copy (headline, line, both buttons) comes
+        # first in one column and the stage follows, so the H1 and the primary call to action lead on a phone. On phones the
+        # stage is redrawn for a narrow frame and drops the Mobile/Desktop card.
+        tablet = media_blocks(self.home_css, 'max-width:1023px')
+        self.assertIn('grid-template-columns:minmax(0,1fr)', rules_for(tablet, '.hero-in')[0])
+        self.assertIn('grid-row:auto', rules_for(tablet, '.hero-copy')[0])
+        hero = re.search(r'<section class="hero".*?</section>', self.home, re.S).group(0)
+        for part in ('<p class="hero-sub"', '<div class="actions"'):
+            self.assertLess(hero.index('<h1'), hero.index(part))
+            self.assertLess(hero.index(part), hero.index('<div class="stage">'))
         phone = media_blocks(self.home_css, 'max-width:640px')
-        hero = rules_for(phone, '.hero')[0]
-        self.assertIn('min-height:calc(100svh - 77px)', hero)
-        self.assertIn('justify-content:flex-end', hero)
-        photo = rules_for(phone, '.hero-photo')[0]
-        self.assertIn('position:absolute', photo)
-        self.assertIn('inset:0', photo)
-        self.assertIn('z-index:-1', photo)
-        scrim = rules_for(phone, '.hero-photo::after')[0]
-        alpha = float(re.search(r'linear-gradient\(0deg,rgba\(14,14,13,([\d.]+)\) 0%', scrim).group(1))
-        self.assertGreaterEqual(alpha, 0.85)
-        self.assertEqual(rules_for(phone, '.hero-device'), ['display:none'])
-        source = (Path(__file__).resolve().parents[1] / 'pages/index.html').read_text()
-        self.assertIn('<img src="/assets/images/detail-darkroom-1600.jpg" srcset="/assets/images/detail-darkroom-800.jpg 800w, '
-                      '/assets/images/detail-darkroom-1600.jpg 1600w" sizes="(max-width: 900px) 100vw, 64vw" width="1600" '
-                      'height="1067" alt="The front of a black classic sedan in a dark garage, its round headlights glowing warm '
-                      'amber" fetchpriority="high" decoding="async">', source)
+        self.assertIn('aspect-ratio:62/66', rules_for(phone, '.rig')[0])
+        self.assertEqual(rules_for(phone, '.frag-dev'), ['display:none'])
+        self.assertIn('width:100%', rules_for(phone, '.actions .button')[0])
+        self.assertNotIn('detail-darkroom', self.home)
+        self.assertNotIn('hero-photo', self.home_css)
 
     def test_services_rows_do_not_slide(self):
-        self.assertNotIn('translateX(', self.home_css)
-        self.assertNotRegex(self.home_css, r'\.svc[^{]*h3\{[^}]*transition')
-        # Night Shift Task 21: no scale on inactive rows (it misaligned their edges); the photo panel crossfades instead.
+        # Night Shift Task 17/21, restated for Daylight (Task 33): the What we do rows, their headings and their
+        # illustrations never slide, scale or animate (the illustrations are still, in their finished state).
         self.assertNotIn('scale(.94)', self.home_css)
-        _, guarded = without_blocks(self.home_css, MOTION_GUARD)
-        self.assertIn('.svc-panel.is-live .svc-photo.is-active{opacity:1;transition-delay:0s}', ''.join(guarded))
+        self.assertNotIn('svc-panel', self.home_css)
+        bare = re.sub(r'/\*.*?\*/', '', self.home_css, flags=re.S)
+        checked = 0
+        for selectors, body in re.findall(r'([^{}]+)\{([^{}]*)\}', bare):
+            if re.search(r'\.(?:svc|vig|vb-|vr-|log)', selectors):
+                checked += 1
+                with self.subTest(rule=selectors.strip()[:60]):
+                    self.assertNotRegex(body, r'transition|animation|translate|scale\(')
+        self.assertGreaterEqual(checked, 20)
 
     def test_contact_has_no_photo_sliver_and_one_line_of_expectations(self):
         # Night Shift Task 21 (second critique): the thin photo band under the steps is gone on every screen size, and
@@ -1854,9 +1906,10 @@ class RepetitionTests(unittest.TestCase):
         height = float(re.search(r'height:([\d.]+)em', rule).group(1))
         line = float(re.search(r'/([\d.]+) var\(--font-display\)', rule).group(1))
         self.assertLess(height, line)  # shorter than the line box, so the bottom of the word is cut off
-        # Low contrast on purpose: it is a texture, not text anyone needs to read.
+        # Low contrast on purpose: it is a texture, not text anyone needs to read. Daylight (Task 33): light, on the paper footer.
         colour = re.search(r'(?<![-\w])color:(#[0-9A-Fa-f]{6})', rule).group(1)
-        self.assertLess(contrast(colour, '#0E0E0D'), 1.5)
+        self.assertLess(contrast(colour, '#FFFFFF'), 1.5)
+        self.assertNotIn('background', rules_for(base_rules(self.css), '.footer')[0])  # the footer sits on the paper body
 
     def test_closing_photo_differs_per_page(self):
         # Night Shift Task 21: Services no longer opens and closes on barbershop photos.
@@ -1866,9 +1919,11 @@ class RepetitionTests(unittest.TestCase):
         for route, photo in expected.items():
             with self.subTest(route=route):
                 main = main_of(self.html[route])
-                band = re.search(r'<div class="(?:cta-)?band-media" aria-hidden="true" data-parallax>(.*?)</div>', main, re.S)
+                band = re.search(r'<div class="(?:cta-)?band-media" aria-hidden="true"( data-parallax)?>(.*?)</div>', main, re.S)
                 self.assertIsNotNone(band)
-                self.assertEqual(set(re.findall(r'/assets/images/([a-z-]+)-(?:800|1600)\.(?:jpg|avif)', band.group(1))), {photo})
+                # Daylight homepage (Task 33): no scrubbed parallax outside the hero, so its band photo is still.
+                self.assertEqual(bool(band.group(1)), route != 'index.html')
+                self.assertEqual(set(re.findall(r'/assets/images/([a-z-]+)-(?:800|1600)\.(?:jpg|avif)', band.group(2))), {photo})
                 self.assertTrue(main.rstrip().endswith('</section>'))
                 self.assertGreater(main.index(band.group(0)), main.rindex('<section'))  # it is the page's last section
         for route in ('contact/index.html', 'demo/index.html', '404.html'):
@@ -2104,56 +2159,44 @@ class SecondCritiqueFixTests(unittest.TestCase):
         cls.home = main_of((OUT / 'index.html').read_text())
         cls.services = re.search(r'<section class="services"[^>]*>(.*?)</section>', cls.home, re.S).group(1)
 
-    def test_services_have_one_decorative_photo_panel(self):
-        panels = re.findall(r'<div class="svc-panel" aria-hidden="true">.*?</div>\s*<ul class="svc-list">', self.services, re.S)
-        self.assertEqual(len(panels), 1)
-        self.assertEqual(self.home.count('class="svc-panel"'), 1)
-        parser = ImageCollector()
-        parser.feed(panels[0])
-        names = [re.search(r'/images/([a-z-]+)-(?:800|1600)\.jpg$', attrs['src']).group(1) for attrs, _ in parser.images]
-        self.assertEqual(names, ['detail-wax', 'detail-dash', 'garden-deck'])  # New website, Redesign, Care plan (Task 23)
-        self.assertEqual(panels[0].count('<div class="svc-photo"><picture><source type="image/avif" '), 3)
-        for attrs, hidden in parser.images:
-            with self.subTest(src=attrs['src']):
-                self.assertTrue(hidden)
-                self.assertEqual((attrs.get('alt'), attrs.get('loading'), attrs.get('decoding')), ('', 'lazy', 'async'))
-                self.assertTrue(attrs.get('width') and attrs.get('height'))
-        rows = re.findall(r'<li class="svc">(.*?)</li>', self.services, re.S)
+    def test_what_we_do_has_three_still_illustrations(self):
+        # Daylight (Task 33) replaces the sticky photo panel with one illustration per service, each aria-hidden above its
+        # heading: a finished concept page (New website), a dated card beside a modern one (Redesign) and an example care
+        # log (Care plan). Every tag says it is a concept or an illustration.
+        self.assertNotIn('svc-panel', self.home)
+        rows = self.services.split('<li class="svc-row">')[1:]
         self.assertEqual(len(rows), 3)
-        for row in rows:
-            with self.subTest(row=row[:40]):
-                self.assertNotIn('<img', row)
-                self.assertRegex(row, r'^<h3><a href="/services/#[a-z]+">[^<]+</a></h3><p>')
-        # garden-walk was the pricing band's photo (and the Greenline laptop mockup's); both left the homepage in Task 28.
+        photos = []
+        for row, (slug, name, tag) in zip(rows, (('new', 'New website', 'Finished page, concept'), ('redesign', 'Redesign', 'Dated to modern, concept'),
+                                                 ('care', 'Care plan', 'Illustration of a care plan log'))):
+            with self.subTest(service=name):
+                self.assertTrue(row.startswith('<div class="vig" aria-hidden="true">'))
+                vig, text = row.split('</span></div><h3>', 1)
+                self.assertTrue(vig.endswith(f'<span class="vig-tag">{tag}'))
+                self.assertRegex(text, rf'^<a href="/services/#{slug}">{name}</a></h3><p>[^<]+</p></li>')
+                parser = ImageCollector()
+                parser.feed(vig + '</span></div>')
+                for attrs, hidden in parser.images:
+                    self.assertTrue(hidden)
+                    self.assertEqual((attrs.get('alt'), attrs.get('loading'), attrs.get('decoding')), ('', 'lazy', 'async'))
+                    self.assertTrue(attrs.get('width') and attrs.get('height'))
+                    photos.append(re.search(r'/images/([a-z-]+)-800\.jpg$', attrs['src']).group(1))
+        self.assertEqual(photos, ['garden-path', 'barber-cut'])
+        self.assertIn('<b>Site care log</b><span>Example</span>', rows[2])
         self.assertNotIn('garden-walk', self.home)
-        self.assertNotIn('garden-walk', self.services)
 
-    def test_services_panel_is_sticky_and_crossfades_opacity_only(self):
+    def test_what_we_do_illustrations_are_still_and_hold_their_shape(self):
         base = base_rules(self.home_css)
-        self.assertIn('grid-column:1/span 7', rules_for(base, '.svc-list')[0])
-        panel = rules_for(base, '.svc-panel')[0]
-        for needle in ('grid-column:8/-1', 'position:sticky', 'top:12vh', 'aspect-ratio:4/5', 'overflow:hidden'):
-            self.assertIn(needle, panel)
-        self.assertIn('align-items:start', rules_for(base, '.svc-grid')[0])  # the panel must not stretch, or it cannot stick
-        self.assertIn('position:absolute;inset:0', rules_for(base, '.svc-photo')[0])
-        # Without JS (no .is-live) the first photo is on top; afterwards the active one is. No hiding outside the guard.
-        self.assertEqual(rules_for(base, '.svc-panel:not(.is-live) .svc-photo:first-child'), ['z-index:1'])
-        self.assertEqual(rules_for(base, '.svc-photo.is-active'), ['z-index:1'])
-        self.assertNotIn('scale(.94)', self.home_css)
-        unguarded, guarded = without_blocks(self.home_css, MOTION_GUARD)
-        self.assertNotIn('.svc-panel.is-live', unguarded)
-        guarded = ''.join(guarded)
-        self.assertIn('.svc-panel.is-live .svc-photo{opacity:0;transition:opacity 500ms var(--ease) 500ms}', guarded)
-        self.assertIn('.svc-panel.is-live .svc-photo.is-active{opacity:1;transition-delay:0s}', guarded)
-        for rule in rules_for(guarded, '.svc-panel.is-live .svc-photo') + rules_for(guarded, '.svc-panel.is-live .svc-photo.is-active'):
-            self.assertNotRegex(rule, r'transform|scale')
-        # Up to 900px: one photo above the list, not sticky.
-        narrow = media_blocks(self.home_css, 'max-width:900px')
-        self.assertEqual(rules_for(narrow, '.svc-list'), ['grid-column:1/-1;grid-row:auto'])
-        small_panel = rules_for(narrow, '.svc-panel')[-1]
-        self.assertIn('position:relative', small_panel)
-        self.assertIn('top:auto', small_panel)
-        self.assertLess(self.services.index('svc-panel'), self.services.index('svc-list'))  # above the list in source order
+        self.assertIn('grid-template-columns:repeat(3,minmax(0,1fr))', rules_for(base, '.svc-list')[0])
+        vig = rules_for(base, '.vig')[0]
+        for needle in ('aspect-ratio:4/3.3', 'overflow:hidden', 'container-type:inline-size'):
+            self.assertIn(needle, vig)  # the frame reserves its space; the drawing scales with it (cqw)
+        self.assertEqual(rules_for(media_blocks(self.home_css, 'max-width:860px'), '.svc-list'), ['grid-template-columns:1fr;gap:44px'])
+        # Nothing animates them: no guarded rule and no homepage script touches them.
+        guarded = ''.join(without_blocks(self.home_css, MOTION_GUARD)[1])
+        self.assertNotRegex(guarded, r'\.(?:vig|vb-|vr-|log)')
+        for name in ('home.js', 'motion.js'):
+            self.assertNotRegex((OUT / 'assets' / name).read_text(), r"'\.(?:vig|vb-|vr-|log|svc-row)")
 
     def test_home_lists_have_no_dash_bullets(self):
         self.assertFalse(rules_for(self.home_css, '.proj-points li::before'))
@@ -2323,15 +2366,14 @@ class MotionQualityTests(unittest.TestCase):
         delay = re.search(r"setTimeout\(function \(\) \{ c\.remove\('ph-wait'\); \}, (\d+)\)", self.boot)
         self.assertIsNotNone(delay)
         self.assertLessEqual(int(delay.group(1)), 2500)
-        # The hold is set before the intro checks, so pages without an intro get it too.
-        self.assertLess(self.boot.index("c.add('ph-wait')"), self.boot.index("hasAttribute('data-intro')"))
+        # Every page gets the same hold (Daylight, Task 33: no intro variant any more).
+        self.assertNotIn('data-intro', self.boot)
         # Both scripts let go: motion.js also when GSAP is missing, home.js once its hero states are applied.
         self.assertIn("const release = () => root.classList.remove('ph-wait');", self.motion)
         self.assertIn('if (!gsap || !ScrollTrigger) { release(); return; }', self.motion)
-        self.assertIn("root.classList.remove('ph-wait');", self.home_js)
         # home.js also releases the hold when GSAP is missing (motion.js leaves the homepage hero to home.js).
-        no_gsap = self.home_js.index('if (!gsap || !ScrollTrigger) { endIntro(); return; }')
-        self.assertIn("if (!gsap || !ScrollTrigger) root.classList.remove('ph-wait');", self.home_js[no_gsap - 120:no_gsap])
+        self.assertIn("const release = () => root.classList.remove('ph-wait');", self.home_js)
+        self.assertIn('if (!gsap || !ScrollTrigger) { release(); return; }', self.home_js)
 
     def test_inner_headlines_rise_through_line_masks_with_unchanged_text(self):
         for route, text in self.INNER.items():
@@ -2374,26 +2416,21 @@ class MotionQualityTests(unittest.TestCase):
                     self.assertTrue(set(classes.split()) & fade_classes, classes)
                 for classes in re.findall(r'class="([^"]+)" data-ph-media', head.group(2)):
                     self.assertIn(classes, ('sv-hero-media', 'ab-photo'))
-        # The homepage hero and intro are held the same way and opened with fromTo, never from.
+        # The homepage hero is held the same way and opened with fromTo, never from. Daylight (Task 33): the headline lines,
+        # the copy and the whole stage (devices, cards, caption, Pause motion) are held, and nothing else.
         home = self.guarded(self.home_css)
-        for rule in ('.ph-wait .hero-h .ln>span{transform:translateY(108%)}', '.ph-wait:not(.ns-intro) .hero-photo{clip-path:inset(0 0 0 100%)}',
-                     '.ph-wait :is(.hero-sub,.hero .actions){opacity:0;transform:translateY(18px)}',
-                     '.ph-wait .hero-device{opacity:0;transform:translateY(70px)}', '.ph-wait .intro-mark path{opacity:0}',
-                     '.ph-wait .intro-word>span{transform:translateY(110%)}'):
+        held = ['.ph-wait .hero-h .ln>span{transform:translateY(108%)}',
+                '.ph-wait :is(.hero-sub,.hero .actions){opacity:0;transform:translateY(18px)}', '.ph-wait .stage{opacity:0}']
+        for rule in held:
             with self.subTest(rule=rule):
                 self.assertIn(rule, home)
-        # Night Shift Task 26: under the first-visit intro the hero photo is never clip-hidden, so it paints beneath the
-        # panel and stays the first-visit LCP element. Only the no-intro hold clips it, and nothing else hides it.
         bare = re.sub(r'/\*.*?\*/', '', home, flags=re.S)
-        photo_rules = [(sel.strip(), body) for sel, body in re.findall(r'([^{}]+)\{([^{}]*)\}', bare) if '.hero-photo' in sel]
-        hiding = [sel for sel, body in photo_rules if re.search(r'clip-path|opacity:0(?![.\d])|visibility', body)]
-        self.assertEqual(hiding, ['.ph-wait:not(.ns-intro) .hero-photo'])
-        for sel, body in photo_rules:
-            if '.ns-intro' in sel and ':not(.ns-intro)' not in sel:
-                self.assertNotIn('clip-path', body, sel)
-        self.assertNotRegex(bare, r'\.ph-wait \.hero-photo\{')
-        hero = self.home_js.split('const heroTimeline', 1)[1].split("mm.add('(prefers-reduced-motion: reduce)'", 1)[0]
+        self.assertEqual([sel.strip() + '{' + body + '}' for sel, body in re.findall(r'([^{}]+)\{([^{}]*)\}', bare) if '.ph-wait' in sel], held)
+        hero = self.home_js.split('const heroTimeline', 1)[1].split('const layers', 1)[0]
         self.assertNotIn('.from(', hero)
+        for target in ("$$('.hero-h .ln > span')", "$$('[data-hero-fade]')", "$('.stage')"):
+            self.assertIn(target, hero)
+        self.assertIn('tl.fromTo(stage, { opacity: 0 }, { opacity: 1', hero)
         self.assertIn('class="hero-sub" data-hero-fade', self.home)
         self.assertIn('class="actions" data-hero-fade', self.home)
 
@@ -2419,20 +2456,22 @@ class MotionQualityTests(unittest.TestCase):
         self.assertIn("row.addEventListener('mouseenter'", self.motion)
         self.assertIn("row.addEventListener('focusin'", self.motion)
         self.assertIn("{ clipPath: 'inset(100% 0 0 0)' }, { clipPath: 'inset(0% 0 0 0)'", self.motion)
-        guarded = self.guarded(self.home_css)
-        for rule in ('.svc-panel.is-wipe .svc-photo{opacity:1}', '.svc-panel.is-wipe .svc-photo.is-prev{z-index:1}',
-                     '.svc-panel.is-wipe .svc-photo.is-active{z-index:2}'):
-            self.assertIn(rule, guarded)
-        self.assertNotIn('is-wipe', re.sub(r'/\*.*?\*/', '', base_rules(self.home_css), flags=re.S))
-        # Inactive headings: bone at DIM opacity over the ink page must still clear 3:1 (large bold text).
+        # Inactive headings: bone at DIM opacity over ink must still clear 3:1 (large bold text).
         dim = float(re.search(r'const DIM = ([\d.]+);', self.motion).group(1))
         tokens = dict(re.findall(r'(--[\w-]+):([^;]+)', re.search(r':root\{(.*?)\}', self.css, re.S).group(1)))
         bone, ink = tokens['--bone'].strip(), tokens['--ink'].strip()
-        self.assertIn('body{margin:0;background:var(--ink);color:var(--bone);', self.css)
         mix = '#' + ''.join(f'{round(dim * int(bone[i:i + 2], 16) + (1 - dim) * int(ink[i:i + 2], 16)):02X}' for i in (1, 3, 5))
         self.assertGreaterEqual(contrast(mix, ink), 3)
         self.assertLess(dim, 1)
-        self.assertIn('<div class="svc-panel" aria-hidden="true">', self.home)
+        # Daylight (Task 33) replaced the homepage's photo panel and .svc rows with still illustrations, so this motion.js
+        # code (covered in tests/test_demo_js.py) has nothing to act on today: no page carries .svc rows or the panel, and
+        # home.css no longer styles them.
+        for route in SiteBuildTests.ROUTES:
+            with self.subTest(route=route):
+                html = (OUT / route).read_text()
+                self.assertNotIn('class="svc"', html)
+                self.assertNotIn('svc-panel', html)
+        self.assertNotRegex(self.home_css, r'\.svc(?![\w-])|svc-panel|is-wipe')
 
 
 class ShowreelMarkupTests(unittest.TestCase):
@@ -2444,13 +2483,13 @@ class ShowreelMarkupTests(unittest.TestCase):
         build()
         cls.home = main_of((OUT / 'index.html').read_text())
         cls.home_css = (OUT / 'assets/home.css').read_text()
-        cls.section = re.search(r'<section class="reel"[^>]*>(.*?)</section>', cls.home, re.S)
+        cls.section = re.search(r'<section class="reel band-warm"[^>]*>(.*?)</section>', cls.home, re.S)
 
     def test_one_silent_video_with_poster_size_and_no_autoplay(self):
         self.assertIsNotNone(self.section)
-        self.assertLess(self.home.index('<section class="hero"'), self.home.index('<section class="reel"'))
-        self.assertLess(self.home.index('<section class="reel"'), self.home.index('<section class="work"'))
-        self.assertEqual(self.home.count('<video'), 1)
+        self.assertLess(self.home.index('<section class="hero"'), self.home.index('<section class="reel '))
+        self.assertLess(self.home.index('<section class="reel '), self.home.index('<section class="work"'))
+        self.assertEqual(self.section.group(1).count('<video'), 1)  # the hero's two device loops are tested in DaylightTests
         for route in SiteBuildTests.ROUTES + ['404.html']:
             with self.subTest(route=route):
                 html = (OUT / route).read_text()
@@ -2577,6 +2616,8 @@ class ViewTransitionAndDetailTests(unittest.TestCase):
             with self.subTest(script=path.name):
                 for banned in ('fontStretch', 'fontVariationSettings', 'font-stretch', 'font-variation', 'fontWeight'):
                     self.assertNotIn(banned, js)
+                # Daylight (Task 33): nor the prototype's width variables, which re-laid out the text every frame.
+                self.assertNotRegex(js, r"['\"]--s?w['\"]")
 
     def test_cursor_ring_never_hides_the_native_cursor_or_takes_clicks(self):
         for name in self.SHEETS:
@@ -2607,18 +2648,22 @@ class ViewTransitionAndDetailTests(unittest.TestCase):
         self.assertNotIn('rotation', fine[0])  # every tilt sits inside the fine-pointer, motion-allowed branch
         self.assertIn("$$('.teaser-card, .wk-tile')", fine[1])
         self.assertNotIn('focus', fine[1])  # keyboard focus gets the CSS push-in and sweep, never the tilt
-        # Push-in and sweep: guarded, scoped to .motion, transform-only, on hover and keyboard focus.
-        for name, needle in (('home.css', '.motion .teaser-card:is(:hover,:focus-within) .teaser-img img{transform:scale(1.06)}'),
-                             ('site.css', '.motion :is(.teaser-img,.wk-tile-img)::after{'),
-                             ('site.css', '.motion :is(.teaser-card:hover,.teaser-card:focus-within,.wk-tile a:hover,.wk-tile a:focus-visible) :is(.teaser-img,.wk-tile-img)::after{transform:translateX(101%);transition:transform 900ms var(--ease)}')):
+        # Push-in and sweep: guarded, scoped to .motion, transform-only, on hover and keyboard focus. Daylight (Task 33): the
+        # homepage cards get only a small push-in within 200 ms (hover rule), and the light sweep stays on /work/ tiles.
+        for name, needle in (('home.css', '.motion .teaser-card:is(:hover,:focus-within) .teaser-img img{transform:scale(1.03)}'),
+                             ('home.css', '.motion .teaser-img img{transition:transform var(--dur-1) var(--ease-out)}'),
+                             ('site.css', '.motion .wk-tile-img::after{'),
+                             ('site.css', '.motion :is(.wk-tile a:hover,.wk-tile a:focus-visible) .wk-tile-img::after{transform:translateX(101%);transition:transform var(--dur-3) var(--ease-out)}')):
             with self.subTest(css=name, rule=needle[:50]):
                 unguarded, guarded = without_blocks(self.css[name], MOTION_GUARD)
                 self.assertIn(needle, ''.join(guarded))
                 self.assertNotIn(needle, unguarded)
         guarded = ''.join(without_blocks(self.css['site.css'], MOTION_GUARD)[1])
-        sweep = re.search(r'\n\.motion :is\(\.teaser-img,\.wk-tile-img\)::after\{([^}]*)\}', guarded).group(1)
+        sweep = re.search(r'\n\.motion \.wk-tile-img::after\{([^}]*)\}', guarded).group(1)
         self.assertIn('pointer-events:none', sweep)
         self.assertNotIn('transition', sweep)  # it snaps back unseen instead of sweeping in reverse
+        self.assertNotIn('teaser', self.css['site.css'])
+        self.assertNotIn('/assets/details.js', self.html['index.html'])  # so no tilt on the homepage cards
         # The homepage cards wipe in with the shared, staggered clip-path reveal.
         home = main_of(self.html['index.html'])
         self.assertEqual(home.count('<figure class="teaser-img" data-reveal>'), 3)
@@ -2709,3 +2754,191 @@ class SocialClipTests(unittest.TestCase):
                 text = main.replace(CONCEPT_LABEL, '').replace(SHOWREEL_CAPTION, '').replace(CLIP_CAPTION, '')
                 self.assertNotIn('·', text)
                 self.assertEqual(main.count(CLIP_CAPTION), VIDEOS_PER_ROUTE.get(route, 0) if route != 'index.html' else 0)
+
+
+# Daylight (Task 33): the real hero loops are larger than the plan's 500 KB target. Their sizes are recorded here so the owner
+# can decide (re-encode, or accept them: they start only after the page has loaded and gone idle, in view, and never with
+# reduced motion or Save-Data). Any change to either file fails the test until this record is updated.
+HERO_LOOP_TARGET = 500 * 1024
+HERO_LOOP_RECORDED = {'loop-hb-desktop.mp4': 832666, 'loop-hb-phone.mp4': 889461}
+FIRST_LOAD_BUDGET = 650 * 1024
+
+
+class DaylightTests(unittest.TestCase):
+    """Daylight Task 33 (docs/NIGHT_SHIFT_PLAN.md, strategist brief 33a): the light design system and the new homepage hero
+    with the real device loops, the Pause motion button, showreel chapters, page weight and the inner pages' interim surface.
+    Playback and choreography behaviour is tested in tests/test_demo_js.py."""
+
+    @classmethod
+    def setUpClass(cls):
+        build()
+        cls.html = (OUT / 'index.html').read_text()
+        cls.home = main_of(cls.html)
+        cls.hero = re.search(r'<section class="hero".*?</section>', cls.home, re.S).group(0)
+        cls.css = {name: (OUT / 'assets' / name).read_text() for name in ('site.css', 'home.css', 'pages.css', 'kit.css')}
+
+    def test_hero_plays_exactly_two_silent_loops_inside_a_described_figure(self):
+        videos = re.findall(r'<video ([^>]*)>(.*?)</video>', self.hero, re.S)
+        self.assertEqual(len(videos), 2)
+        self.assertEqual(self.home.count('<video'), 3)  # plus the showreel
+        figure = re.search(r'<figure class="rig" role="img" aria-label="[^"]{80,}">(.*?)</figure>', self.hero, re.S)
+        self.assertIsNotNone(figure)
+        devices = re.search(r'<div class="rig-devices" aria-hidden="true">(.*?)<div class="rig-cards" aria-hidden="true">', figure.group(1), re.S)
+        self.assertIsNotNone(devices)
+        self.assertEqual(devices.group(1).count('<video'), 2)  # both videos are inside the aria-hidden device layer
+        for (tag, inner), (name, size, loop) in zip(videos, (('loop-hb-desktop', (1280, 800), 'wide'), ('loop-hb-phone', (780, 1688), ''))):
+            with self.subTest(video=name):
+                attrs = dict(re.findall(r'([a-z-]+)(?:="([^"]*)")?', tag))
+                for flag in ('muted', 'loop', 'playsinline', 'data-loop'):
+                    self.assertIn(flag, attrs)
+                self.assertEqual(attrs['data-loop'], loop)  # "wide": the laptop never plays at 640px and below (reel.js)
+                self.assertEqual(attrs['preload'], 'none')
+                for banned in ('autoplay', 'src', 'controls', 'poster'):
+                    self.assertNotIn(banned, attrs)  # the posters come from CSS (AVIF first), so no second JPEG download
+                self.assertEqual((int(attrs['width']), int(attrs['height'])), size)
+                # data-src only: reel.js sets src right before the first play, so nothing downloads before that.
+                self.assertEqual(re.findall(r'<source ([^>]*)>', inner), [f'data-src="/assets/video/{name}.mp4" type="video/mp4"'])
+                self.assertTrue((OUT / f'assets/video/{name}.mp4').is_file())
+                poster = OUT / f'assets/video/{name}-poster.jpg'
+                self.assertEqual(jpeg_size(poster), size)  # poster and video share one shape
+                self.assertTrue((OUT / f'assets/video/{name}-poster.avif').is_file())
+
+    def test_homepage_uses_only_the_harbourside_loops_and_cards_have_no_video(self):
+        # Strategist brief 33a item 7: no hero rotation between the hb/gl/fc loops and no hover-to-play loop on the concept
+        # cards (each would add about 1 MB, and touch screens cannot hover). Only the two hb loops and their posters appear.
+        page = self.html + self.css['home.css']
+        self.assertEqual(re.findall(r'loop-(?:gl|fc)-', page), [])
+        self.assertEqual(sorted(set(re.findall(r'loop-hb-(?:desktop|phone)(?:-poster)?\.(?:mp4|avif|jpg)', page))),
+                         ['loop-hb-desktop-poster.avif', 'loop-hb-desktop-poster.jpg', 'loop-hb-desktop.mp4',
+                          'loop-hb-phone-poster.avif', 'loop-hb-phone-poster.jpg', 'loop-hb-phone.mp4'])
+        cards = re.findall(r'<article class="teaser-card".*?</article>', self.home, re.S)
+        self.assertEqual(len(cards), 3)
+        for card in cards:
+            self.assertNotIn('<video', card)
+        home_js = (OUT / 'assets/home.js').read_text()
+        for needle in ('loop-', 'video', 'mouseenter', 'pointerenter'):
+            self.assertNotIn(needle, home_js)  # home.js starts no video; reel.js is the only controller
+
+    def test_hero_posters_come_from_css_as_avif_with_a_jpeg_fallback(self):
+        base = base_rules(self.css['home.css'])
+        for shot, name, ratio in (('.hd-shot-desktop', 'loop-hb-desktop', '1280/800'), ('.hd-shot-phone', 'loop-hb-phone', '780/1688')):
+            with self.subTest(shot=shot):
+                rule = rules_for(base, shot)[0]
+                self.assertIn(f'aspect-ratio:{ratio}', rule)  # the frame reserves the video's exact shape
+                jpg, avif = f'/assets/video/{name}-poster.jpg', f'/assets/video/{name}-poster.avif'
+                self.assertLess(rule.index(f'background-image:url("{jpg}")'), rule.index('image-set('))
+                self.assertIn(f'image-set(url("{avif}") type("image/avif"),url("{jpg}") type("image/jpeg"))', rule)
+                for path in (jpg, avif):
+                    self.assertTrue((OUT / path.lstrip('/')).is_file())
+        self.assertIn('object-fit:cover', rules_for(base, '.hd-video')[0])
+        self.assertIn('aspect-ratio:76/62', rules_for(base, '.rig')[0])
+
+    def test_hero_loop_files_are_within_target_or_recorded(self):
+        for name, recorded in HERO_LOOP_RECORDED.items():
+            with self.subTest(video=name):
+                size = (OUT / 'assets/video' / name).stat().st_size
+                if size > HERO_LOOP_TARGET:
+                    self.assertEqual(size, recorded, f'{name} is {size} bytes, over the 500 KB target: record it for the owner')
+
+    def test_first_load_stays_within_650_kb(self):
+        # Everything a first visit downloads before the hero videos: the HTML, linked CSS, every script (GSAP included), the
+        # fonts, eager photos (none), the hero posters (AVIF, what image-set() browsers fetch) and the showreel's poster. The
+        # hero loops start only after load and idle (reel.js), and the showreel and clips load nothing until played.
+        total = len(self.html.encode())
+        for href in re.findall(r'<link rel="stylesheet" href="(/assets/[^"]+)">', self.html):
+            total += (OUT / href.lstrip('/')).stat().st_size
+        for src in re.findall(r'<script src="(/assets/[^"]+)"', self.html):
+            total += (OUT / src.lstrip('/')).stat().st_size
+        for font in set(re.findall(r'url\("(/assets/fonts/[^"]+\.woff2)"\)', self.css['site.css'])):
+            total += (OUT / font.lstrip('/')).stat().st_size
+        parser = ImageCollector()
+        parser.feed(self.home)
+        eager = [attrs['src'] for attrs, _ in parser.images if attrs.get('loading') != 'lazy']
+        self.assertEqual(eager, [])
+        for poster in set(re.findall(r'url\("(/assets/video/[^"]+\.avif)"\)', self.css['home.css'])) | set(re.findall(r'poster="([^"]+)"', self.home)):
+            total += (OUT / poster.lstrip('/')).stat().st_size
+        self.assertLessEqual(total, FIRST_LOAD_BUDGET, f'first load is {total} bytes')
+
+    def test_pause_motion_is_a_real_toggle_button_hidden_without_js(self):
+        button = '<button class="motion-btn" type="button" data-motion-toggle aria-pressed="false" hidden>Pause motion</button>'
+        self.assertEqual(self.hero.count(button), 1)
+        self.assertEqual(self.html.count('data-motion-toggle'), 1)
+        rule = rules_for(base_rules(self.css['home.css']), '.motion-btn')[0]
+        self.assertGreaterEqual(int(re.search(r'min-height:(\d+)px', rule).group(1)), 44)
+        self.assertTrue(rules_for(base_rules(self.css['home.css']), '.motion-btn[aria-pressed="true"]::before'))  # pressed looks different
+
+    def test_showreel_chapters_are_buttons_revealed_by_script(self):
+        section = re.search(r'<section class="reel band-warm".*?</section>', self.home, re.S).group(0)
+        chapters = re.search(r'<ol class="chapters" data-chapters="reel-video" aria-label="Showreel chapters" hidden>(.*?)</ol>', section, re.S)
+        self.assertIsNotNone(chapters)
+        self.assertIn('id="reel-video"', section)
+        items = re.findall(r'<li><button type="button" data-t="([\d.]+)"><span class="ch-t">(\d:\d\d)</span>([^<]+)</button></li>', chapters.group(1))
+        self.assertEqual(len(items), 7)
+        times = [float(t) for t, _, _ in items]
+        self.assertEqual(times, sorted(times))
+        self.assertEqual(times[0], 0)
+        self.assertLess(times[-1], 20)  # the film is 20 seconds long
+        for t, label, _ in items:
+            self.assertEqual(label, f'0:{int(float(t)):02d}')
+
+    def test_every_homepage_image_and_video_reserves_its_space(self):
+        parser = ImageCollector()
+        parser.feed(self.home)
+        for attrs, _ in parser.images:
+            self.assertTrue(attrs.get('width') and attrs.get('height'), attrs.get('src'))
+        for tag in re.findall(r'<video ([^>]*)>', self.home):
+            self.assertRegex(tag, r'width="\d+" height="\d+"')
+        base = base_rules(self.css['home.css'])
+        for selector in ('.rig', '.reel-frame', '.teaser-img', '.vig', '.hd-shot-desktop', '.hd-shot-phone'):
+            with self.subTest(selector=selector):
+                self.assertIn('aspect-ratio:', rules_for(base, selector)[0])
+
+    def test_no_inline_styles_and_the_comparison_uses_set_property(self):
+        for route in SiteBuildTests.ROUTES + ['404.html']:
+            with self.subTest(route=route):
+                html = (OUT / route).read_text()
+                self.assertNotIn(' style="', html)
+                self.assertNotIn('<style', html)
+        self.assertIn("figure.style.setProperty('--pos'", (OUT / 'assets/home.js').read_text())
+        self.assertIn('.compare{--pos:50%', self.css['home.css'])
+
+    def test_home_motion_uses_the_two_curves_and_no_banned_motion(self):
+        js = (OUT / 'assets/home.js').read_text()
+        self.assertIn('const OUT = bezier(0.2, 0.8, 0.2, 1);', js)
+        self.assertIn('const IO = bezier(0.7, 0, 0.2, 1);', js)
+        for banned in ('elastic', 'bounce', 'back.', 'power', 'expo', 'sine', 'pin:', "addEventListener('scroll'", 'repeat:', 'yoyo'):
+            with self.subTest(banned=banned):
+                self.assertNotIn(banned, js)
+        self.assertEqual(set(re.findall(r"ease: '([^']+)'", js)), {'none'})  # named eases only for the scrubbed layers
+        self.assertEqual(js.count('scrub:'), 1)  # one scrub definition, used by the two hero layers
+        for name, css in self.css.items():
+            with self.subTest(css=name):
+                self.assertNotRegex(without_view_transitions(css), r'@keyframes|animation')
+
+    def test_inner_pages_keep_light_text_on_ink_and_the_homepage_never_puts_it_on_paper(self):
+        # The inner pages keep Night Shift's bone and stone text until Task 34, so their <main> keeps the ink surface; the
+        # homepage and the shared header and footer are on paper and may use those colours only on an ink background.
+        pages = self.css['pages.css']
+        self.assertIn('main{background:var(--ink);color:var(--bone)}', base_rules(pages))
+        for route in SiteBuildTests.ROUTES + ['404.html']:
+            with self.subTest(route=route):
+                html = (OUT / route).read_text()
+                self.assertEqual(html.count('<link rel="stylesheet" href="/assets/pages.css">'), 0 if route == 'index.html' else 1)
+        classes = set()
+        for attribute in re.findall(r'class="([^"]*)"', self.html):
+            classes.update(attribute.split())
+        checked = 0
+        for name in ('site.css', 'home.css', 'kit.css'):
+            css = re.sub(r'/\*.*?\*/', '', base_rules(self.css[name]), flags=re.S)
+            for selectors, body in re.findall(r'([^{}]+)\{([^{}]*)\}', css):
+                if not re.search(r'(?<![-\w])color:var\(--(?:bone|stone)\)', body):
+                    continue
+                used = [c for c in classes if re.search(rf'\.{re.escape(c)}(?![\w-])', selectors)]
+                if used:
+                    checked += 1
+                    with self.subTest(css=name, rule=selectors.strip()[:60]):
+                        self.assertRegex(body, r'background:var\(--ink(?:-2)?\)')
+        self.assertGreaterEqual(checked, 1)  # the showreel's Pause/Play button, ink behind bone
+        for rule in ('.site-header', '.footer p', '.footer-bottom', '.brand'):
+            with self.subTest(chrome=rule):
+                self.assertNotRegex(''.join(rules_for(base_rules(self.css['site.css']), rule)), r'var\(--(?:bone|stone)\)')
