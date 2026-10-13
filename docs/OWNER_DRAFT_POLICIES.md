@@ -3,7 +3,7 @@
 These are placeholder business policies written at the owner's request so the Pricing and About pages can explain the process. They are commitments to customers once published: the owner must confirm or edit each line before the site goes live. Nothing here is a price, a statistic, a testimonial or a claim about past clients.
 
 ## Process and pricing
-- Free consultation: a 20–30 minute call or video chat about the business, what customers need to find, and what the site should do. No obligation.
+- Free consultation: a 20–30 minute call or text about the business, what customers need to find, and what the site should do. No obligation.
 - Fixed quote: sent in writing after the consultation, listing pages, features and what's needed from the client. The price doesn't change unless the client asks to add something; any addition is quoted first.
 - Payment: 50% to start, 50% before launch.
 - Revisions: two rounds of revisions on the design, and one round on the built site, are included. Further changes are quoted.
