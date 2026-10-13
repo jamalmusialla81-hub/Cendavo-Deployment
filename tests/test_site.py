@@ -3098,6 +3098,93 @@ class ServicesCareBandTests(unittest.TestCase):
         self.assertNotIn('barber-tools', about)
 
 
+class ServicesBuildSequenceTests(unittest.TestCase):
+    """Night Shift Task 55 (owner): the New website vignette builds up in six steps (page plan, typography, photography,
+    service info, enquiry button, phone view) as it crosses the screen, beside a visible list of the same six steps. The
+    stylesheet only draws the finished page; scenes.js builds it up by scroll for people who accept motion (behaviour in
+    tests/test_demo_js.py, the build sequence test). Reduced motion and no-JS visitors get the finished page and the list."""
+    STEPS = ['Page plan', 'Typography', 'Photography', 'Service info', 'Enquiry button', 'Phone view']
+    LAYER_CLASSES = ('sb-wire', 'sbd-bg', 'sbd-type', 'sbd-img', 'sbd-p', 'sbd-btn', 'sb-phone', 'sbp-', 'sb-steps')
+
+    @classmethod
+    def setUpClass(cls):
+        build()
+        services = main_of((OUT / 'services/index.html').read_text())
+        cls.section = re.search(r'<section class="sec" id="new" aria-labelledby="new-title">(.*?)</section>', services, re.S).group(1)
+        cls.vig = re.search(r'<div class="vig" data-build aria-hidden="true">.*?(?=<ol class="sb-steps")', cls.section, re.S).group(0)
+        cls.css = (OUT / 'assets/services.css').read_text()
+        cls.scenes = (OUT / 'assets/scenes.js').read_text()
+
+    def test_the_six_steps_are_listed_in_order_and_readable(self):
+        steps = re.search(r'<ol class="sb-steps" data-build-steps>(.*?)</ol>', self.section, re.S)
+        self.assertIsNotNone(steps)
+        items = re.findall(r'<li><b>([^<]+)</b> ([^<]+)</li>', steps.group(1))
+        self.assertEqual([title for title, _ in items], self.STEPS)
+        self.assertEqual(steps.group(1).count('<li'), 6)
+        for _, text in items:
+            self.assertTrue(text.endswith('.'))
+        self.assertNotIn('aria-hidden', steps.group(0))  # the list carries the meaning; the vignette is decoration
+        self.assertLess(self.section.index('data-build'), self.section.index('data-build-steps'))
+
+    def test_the_vignette_has_six_steps_of_layers_and_no_new_media(self):
+        # Plan, cream page (drawn behind the rest, so it comes early in source order), type, photo, service line, button,
+        # phone: every step from 1 to 6 has a layer.
+        self.assertEqual(re.findall(r'data-step-layer="(\d)"', self.vig), ['1', '6', '2', '3', '4', '5', '6'])
+        self.assertIn('<div class="sb-phone" data-step-layer="6">', self.vig)  # the phone view: HTML and CSS only
+        self.assertRegex(self.vig, r'<span class="vig-tag">[^<]*concept</span>')
+        urls = re.findall(r'(?:src|srcset)="([^"]+)"', self.vig)
+        self.assertTrue(urls)
+        for value in urls:
+            for url in re.findall(r'/assets/\S+', value):
+                self.assertRegex(url, r'^/assets/images/garden-path-(?:800|1600)\.(?:jpg|avif)$')  # the build adds AVIF copies
+        parser = ImageCollector()
+        parser.feed(self.vig)
+        self.assertEqual(len(parser.images), 2)
+        for attrs, hidden in parser.images:
+            self.assertTrue(hidden)
+            self.assertEqual((attrs.get('alt'), attrs.get('loading'), attrs.get('decoding')), ('', 'lazy', 'async'))
+        for needle in ('<video', 'url(', '<script', '<svg'):
+            self.assertNotIn(needle, self.vig)
+
+    def test_the_stylesheet_draws_only_the_finished_page(self):
+        # No build state lives in CSS: no hook for one, and nothing in the vignette or the list is hidden, masked or moving.
+        css = re.sub(r'/\*.*?\*/', '', self.css, flags=re.S)
+        for hook in ('data-step=', 'data-step]', 'is-on'):
+            self.assertNotIn(hook, css)
+        rules = [(selector, body) for selector, body in re.findall(r'([^{}]+)\{([^{}]*)\}', css)
+                 if any(name in selector for name in self.LAYER_CLASSES)]
+        self.assertGreaterEqual(len(rules), 12)
+        for selector, body in rules:
+            with self.subTest(selector=selector.strip()):
+                for hiding in ('opacity:', 'visibility:', 'display:none', 'clip-path', 'transform', 'transition', 'animation'):
+                    self.assertNotIn(hiding, body)
+
+    def test_the_current_step_is_marked_without_colour_alone(self):
+        # Brief item 7: while the sequence runs, the step being built is aria-current="step" (set by scenes.js only), shown
+        # by an underline and a heavier number, not by colour alone. The rules only add emphasis; they hide nothing.
+        rule = re.search(r'\.sb-steps li\[aria-current="step"\] b\{([^}]*)\}', self.css)
+        self.assertIsNotNone(rule)
+        self.assertIn('text-decoration:underline', rule.group(1))
+        number = re.search(r'\.sb-steps li\[aria-current="step"\]::before\{([^}]*)\}', self.css)
+        self.assertIsNotNone(number)
+        self.assertIn('font-weight:900', number.group(1))
+        self.assertEqual(len(re.findall(r'aria-current', re.sub(r'/\*.*?\*/', '', self.css, flags=re.S))), 2)
+        self.assertNotIn('aria-current', self.section)  # the page never ships a step already marked
+
+    def test_scenes_builds_it_by_scroll_once_without_pinning(self):
+        head, branch = self.scenes.split("gsap.matchMedia().add('(prefers-reduced-motion: no-preference)', () => {", 1)
+        self.assertNotIn('data-build', head)
+        block = branch.split("later($$('[data-build]'))", 1)[1].split('later(', 1)[0]
+        self.assertIn("tl(vig, { end: 'bottom 40%', scrub: 0.5 })", block)
+        self.assertIn("t.fromTo(layer, ...up(16, 1), layer.dataset.stepLayer - 1)", block)
+        self.assertIn('once: true, ...more', self.scenes)  # every scene, this one too, plays once (Pause motion ends it)
+        for banned in ('pin', 'style', 'sb-done', 'ScrollTrigger.create'):
+            self.assertNotIn(banned, block)
+        self.assertIn("li.ariaCurrent = i === Math.floor(t.progress() * 6) ? 'step' : null;", block)
+        self.assertIn('restore.push(() => steps.forEach(li => { li.ariaCurrent = null; }));', block)
+        self.assertEqual(self.scenes.count("$$('[data-build]')"), 1)
+
+
 class MotionQualityTests(unittest.TestCase):
     """Night Shift Task 23 (docs/NIGHT_SHIFT_PLAN.md): no flash of content before page openings, line-mask openings on the
     inner motion pages, pinned projects without opacity ghosting, scroll-driven "What we do" rows and a pin release layer."""

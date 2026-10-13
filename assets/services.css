@@ -1,5 +1,5 @@
-/* Services (Daylight, Task 34): the hero with its chapter links, then New website (a page plan turning into the finished
-   page), Redesign (the before/after clip and an example redirect map), Care plan (the monthly list beside a phone playing
+/* Services (Daylight, Task 34): the hero with its chapter links, then New website (a page plan built up into the finished
+   page and its phone view, with the six steps listed), Redesign (the before/after clip and an example redirect map), Care plan (the monthly list beside a phone playing
    a concept site's loop, and the care-plan clip), How it works and the questions. Loaded only on /services/. */
 .sv-grid{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));column-gap:24px;align-items:end}
 .sv-hero-copy{grid-column:1/8}
@@ -42,15 +42,33 @@
 .w-p{left:4cqw;top:29cqw;width:46cqw;height:3cqw}
 .w-btn{left:4cqw;top:35cqw;width:24cqw;height:6.4cqw;border-radius:99px}
 .w-img{left:4cqw;right:4cqw;top:45cqw;height:30cqw}
-.sb-done{background:#F7F5EF}
+/* Task 55: the finished page is layers over the plan, one per step (type, photo, service line, button, then the cream page
+   behind them and a phone view in HTML and CSS with the same photo). This stylesheet only ever draws the finished page;
+   scenes.js builds it up by scroll for people who accept motion. Each layer covers the plan boxes under it. */
+.sbd-bg{position:absolute;inset:0;background:#F7F5EF}
+.sbd-type{position:absolute;inset:0 0 auto;height:27cqw;padding:3cqw 4cqw;background:#F7F5EF}
 .sbd-nav{display:flex;align-items:center;gap:3cqw;height:5cqw;color:#4A5049;font:500 2.3cqw/1 var(--font-text)}
 .sbd-nav b{margin-right:auto;color:#1F3B2C;font:600 3.2cqw/1 Georgia,serif}
 .sbd-nav span{display:none}
 .sbd-nav em{padding:1.2cqw 2.2cqw;border-radius:99px;background:#24412F;color:#fff;font-size:2cqw;font-style:normal}
 .sbd-h{position:absolute;left:4cqw;top:11.4cqw;width:62cqw;color:#1D2A22;font:400 6.6cqw/1.08 Georgia,"Times New Roman",serif}
-.sbd-p{position:absolute;left:4cqw;top:28.6cqw;width:70cqw;margin:0;color:#4A5049;font-size:2.5cqw}
+.sbd-p{position:absolute;left:4cqw;top:28.6cqw;width:70cqw;margin:0;background:#F7F5EF;color:#4A5049;font-size:2.5cqw}
 .sbd-btn{position:absolute;left:4cqw;top:35cqw;display:grid;place-items:center;width:26cqw;height:6.4cqw;border-radius:99px;background:#24412F;color:#fff;font:600 2.3cqw/1 var(--font-text)}
 .sbd-img{position:absolute;left:4cqw;right:4cqw;top:45cqw;width:calc(100% - 8cqw);height:30cqw;object-fit:cover;border-radius:.8cqw}
+.sb-phone{position:absolute;right:5%;top:24%;z-index:4;box-sizing:border-box;width:25cqw;aspect-ratio:9/18.5;padding:1.2cqw;border-radius:4cqw;background:#1C1F1D;box-shadow:var(--shadow-lift)}
+.sbp-scr{display:flex;flex-direction:column;gap:1.8cqw;height:100%;box-sizing:border-box;overflow:hidden;padding:3.2cqw 2.4cqw;border-radius:3cqw;background:#F7F5EF}
+.sbp-scr b{color:#1F3B2C;font:600 2.4cqw/1 Georgia,serif}
+.sbp-h{color:#1D2A22;font:400 3.4cqw/1.1 Georgia,"Times New Roman",serif}
+.sbp-scr img{width:100%;height:15cqw;object-fit:cover;border-radius:.8cqw}
+.sbp-btn{display:grid;place-items:center;height:4.6cqw;border-radius:99px;background:#24412F;color:#fff;font:600 1.8cqw/1 var(--font-text)}
+/* The six steps in words, always shown (the vignette is aria-hidden), numbered like the How it works steps. While the
+   sequence runs, scenes.js marks the step being built aria-current="step": underlined, with a heavier number. */
+.sb-steps{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px 24px;margin:24px 0 0;padding:0;list-style:none;counter-reset:sb}
+.sb-steps li{display:grid;grid-template-columns:30px minmax(0,1fr);gap:2px 8px;color:var(--ink-2);font-size:.9375rem;line-height:1.4;counter-increment:sb}
+.sb-steps li::before{content:counter(sb,decimal-leading-zero);grid-row:span 2;color:var(--amber-ink);font:700 .8125rem/1.6 var(--font-display);font-variant-numeric:tabular-nums}
+.sb-steps b{color:var(--ink);font:720 1rem/1.3 var(--font-display);font-stretch:94%}
+.sb-steps li[aria-current="step"] b{text-decoration:underline;text-decoration-color:var(--amber);text-decoration-thickness:2px;text-underline-offset:.2em}
+.sb-steps li[aria-current="step"]::before{font-weight:900;color:var(--ink)}
 .spec{margin:0;border-top:1px solid var(--ink)}
 .spec-row{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,2fr);gap:12px 24px;padding:22px 0;border-bottom:1px solid var(--line-2)}
 .spec dt{font:720 1.0625rem/1.3 var(--font-display);font-stretch:94%}
@@ -136,4 +154,5 @@
 @media(max-width:420px){
 .redir li{grid-template-columns:minmax(0,1fr) 20px minmax(0,1fr)}
 .redir .ok{display:none}
+.sb-steps{grid-template-columns:minmax(0,1fr)}
 }

@@ -7,9 +7,12 @@
   const root = doc.documentElement;
   const $$ = (selector, scope) => Array.from((scope || doc).querySelectorAll(selector));
   const MOTION = '(prefers-reduced-motion: no-preference)';
-  const MAX_PULL = 6; // magnetic button: never more than 6px from its place
-  const DIM = 0.45; // inactive "What we do" headings: bone at this opacity on ink stays above 3:1 (tested)
-  const ownsOpening = !doc.querySelector('.hero-h'); // home.js opens the homepage hero and releases .ph-wait itself
+  // magnetic button: never more than 6px from its place
+  const MAX_PULL = 6;
+  // inactive "What we do" headings: bone at this opacity on ink stays above 3:1 (tested)
+  const DIM = 0.45;
+  // home.js opens the homepage hero and releases .ph-wait itself
+  const ownsOpening = !doc.querySelector('.hero-h');
   const release = () => root.classList.remove('ph-wait');
   // The two Daylight curves (CSS cubic-bezier): entrances, and changes of state.
   const bezier = (x1, y1, x2, y2) => {
@@ -39,7 +42,8 @@
   const photos = $$('.svc-photo');
   const heads = rows.map(row => row.querySelector('h3'));
   let current = -1;
-  let swap = null; // GSAP motion only: wipes the photo in, dims the other headings
+  // GSAP motion only: wipes the photo in, dims the other headings
+  let swap = null;
   const activate = active => {
     const index = rows.indexOf(active);
     if (index === current) return;

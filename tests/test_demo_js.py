@@ -82,6 +82,7 @@ function makeGsap(env) {
         fromTo(t, a, v, p) { log.varsSeen.push(a); record(tl, 'fromTo', t, v, p).from = a; return tl; },
         add(fn, p) { tl.callbacks.push({ fn, at: p }); tl.cursor = Math.max(tl.cursor, p); return tl; },
         addLabel(name, p) { tl.labels[name] = p; return tl; },
+        eventCallback(type, fn) { tl.vars[type] = fn; return tl; },
         play(at) { tl.played.push(at); return tl; },
         progress(v) { tl.progressed.push(v); if (v === 1) { tl.callbacks.forEach(c => c.fn()); if (tl.vars.onComplete) tl.vars.onComplete(); } return tl; },
         duration() { return Math.max(0, ...tl.tweens.map(t => t.end), ...tl.callbacks.map(c => c.at)); },
@@ -857,6 +858,47 @@ console.log(JSON.stringify({
   touch: run({ width: 390, height: 844, fine: false, reduce: false }),
   reduced: run({ width: 1440, height: 900, fine: true, reduce: true }),
   paused: run({ width: 1440, height: 900, fine: true, reduce: false }, true),
+}));
+"""
+
+# Task 55 (owner): scenes.js builds the Services "New website" vignette up in six steps, scrubbed by scroll. Each element
+# marked data-step-layer="N" rises in over the Nth sixth of one timeline. Runs with motion (desktop and phone), with
+# reduced motion and with the vignette already on screen at load; the list after it marks the step being built.
+BUILD_SEQUENCE_SCRIPT = HARNESS + r"""
+const source = fs.readFileSync(process.argv[1], 'utf8');
+function run(env, inView) {
+  // Source order in services.html: plan, cream page, type, photo, service line, button, phone.
+  const layers = ['1', '6', '2', '3', '4', '5', '6'].map((n, i) => { const el = element('layer' + i); el.dataset.stepLayer = n; return el; });
+  const vig = element('vig', { '[data-step-layer]': layers });
+  vig.getBoundingClientRect = () => ({ left: 0, top: inView ? 300 : 2000, width: 400, height: 330 });
+  const parts = { '[data-build]': [vig] };
+  const doc = { documentElement: element('html'), querySelectorAll: s => parts[s] || [], querySelector: s => (parts[s] || [])[0] || null };
+  const items = many('item', 6);
+  vig.nextElementSibling = element('steps', { li: items });
+  const { win } = makeWindow(env);
+  const stub = makeGsap(env);
+  const teardowns = [];
+  stub.gsap.matchMedia = () => ({ add(query, fn) { if (media(query, env)) { const off = fn(); if (off) teardowns.push(off); } } });
+  win.gsap = stub.gsap; win.ScrollTrigger = stub.ScrollTrigger;
+  vm.runInNewContext(source, { window: win, document: doc });
+  const current = () => items.map((item, i) => item.ariaCurrent === 'step' ? i + 1 : 0).filter(Boolean);
+  const out = stub.log.timelines.filter(tl => tl.vars.scrollTrigger && tl.vars.scrollTrigger.trigger === vig).map(tl => {
+    const { trigger, ...rest } = tl.vars.scrollTrigger;
+    // Drive the timeline's playhead (scrubbed by scroll, or sent to 1 by Pause motion) and read the list after each update.
+    let at = 0;
+    tl.progress = () => at;
+    const marks = [0, 0.1, 1 / 6, 0.34, 0.5, 0.7, 0.84, 0.999, 1, 0.3].map(p => { at = p; tl.vars.onUpdate(); return current(); });
+    return { scrollTrigger: rest, duration: tl.duration(), creates: stub.log.creates.length, marks,
+      tweens: tl.tweens.map(t => ({ names: t.names, at: t.at, end: t.end, kind: t.kind, from: t.from, to: t.vars })) };
+  });
+  teardowns.forEach(fn => fn());
+  return { scenes: out, afterTeardown: current(), cleared: items.every(item => item.ariaCurrent === null || item.ariaCurrent === undefined) };
+}
+console.log(JSON.stringify({
+  motion: run({ width: 1440, height: 900, fine: true, reduce: false }),
+  phone: run({ width: 390, height: 844, fine: false, reduce: false }),
+  reduced: run({ width: 1440, height: 900, fine: true, reduce: true }),
+  inView: run({ width: 1440, height: 900, fine: true, reduce: false }, true),
 }));
 """
 
@@ -1800,6 +1842,42 @@ class DemoScriptTests(unittest.TestCase):
         self.assertNotIn('focus', tilt)
         self.assertNotIn('gsap.to', tilt)
         self.assertNotIn('quickTo', tilt)
+
+    def test_new_website_build_sequence_is_scrubbed_once_in_six_steps(self):
+        # Task 55 (owner): one timeline on the vignette, scrubbed by scroll from the shared 85% line until its bottom
+        # crosses 40% of the viewport. Nothing is pinned, and it plays once: glass.js ends every once-scene when Pause motion
+        # is pressed, so the page shows built. Step N's layers rise 16px into place between N-1 and N (of 6); only opacity
+        # and transform animate, and they are cleared at the end so services.css draws the finished page. Reduced motion,
+        # or a vignette already on screen, gets no timeline at all.
+        r = self.node_json(BUILD_SEQUENCE_SCRIPT, SCENES)
+        for name in ('motion', 'phone'):
+            with self.subTest(env=name):
+                self.assertEqual(len(r[name]['scenes']), 1)
+                scene = r[name]['scenes'][0]
+                # The step being built is the list's aria-current="step"; none once built (Pause motion sends the
+                # timeline to 1) or after the branch is torn down (reduced motion switched on mid-visit).
+                self.assertEqual(scene['marks'], [[1], [1], [2], [3], [4], [5], [6], [6], [], [2]])
+                self.assertEqual(r[name]['afterTeardown'], [])
+                self.assertTrue(r[name]['cleared'])
+                self.assertEqual(scene['scrollTrigger'], {'start': 'top 85%', 'once': True, 'end': 'bottom 40%', 'scrub': 0.5})
+                self.assertEqual(scene['creates'], 0)
+                self.assertEqual(scene['duration'], 6)
+                steps = {(t['names'][0], t['at'], t['end']) for t in scene['tweens']}
+                self.assertEqual(steps, {('layer0', 0, 1), ('layer1', 5, 6), ('layer2', 1, 2), ('layer3', 2, 3), ('layer4', 3, 4),
+                                         ('layer5', 4, 5), ('layer6', 5, 6)})
+                for tween in scene['tweens']:
+                    self.assertEqual(tween['kind'], 'fromTo')
+                    self.assertEqual(tween['from'], {'opacity': 0, 'y': 16})
+                    self.assertEqual(tween['to']['clearProps'], 'opacity,transform')
+                    self.assertLessEqual(set(tween['from']) | set(tween['to']), {'opacity', 'y', 'duration', 'stagger', 'clearProps'})
+        for name in ('reduced', 'inView'):
+            with self.subTest(env=name):
+                self.assertEqual(r[name]['scenes'], [])
+                self.assertEqual(r[name]['afterTeardown'], [])  # the list is never marked
+        source = SCENES.read_text(encoding='utf-8')
+        block = source.split("later($$('[data-build]'))", 1)[1].split('later(', 1)[0]
+        for banned in ('pin', 'snap', 'style', 'innerHTML'):
+            self.assertNotIn(banned, block)
 
     def test_every_reveal_starts_at_the_same_line(self):
         # Task 43: reveals (anything hidden until it scrolls in) start as their trigger's top crosses 85% of the viewport.
