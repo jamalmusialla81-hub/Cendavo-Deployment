@@ -364,3 +364,15 @@ Redesign: a controlled scroll-triggered transformation from an outdated page to 
 
 ### Task 57 — Mobile 3D hero
 Phones currently get a still image. Add a lightweight mobile version: on capable phones (WebGL2, ≥ 4 cores or deviceMemory ≥ 4, not Save-Data, not reduced motion) render the glass C only (lower tessellation, DPR ≤ 1.25, smaller env map), scroll-driven gentle turn and a slow idle sway, paused off-screen/hidden/Pause motion; others keep the poster. Must not delay LCP (load after idle), must keep the headline and CTAs fully visible at 360–430 px, ≥ 50 fps target on a mid-range phone (measure with CPU throttling in tests where possible).
+
+### Task 60 — final polish from the final QA (OWNER-MANDATED; profile `site`)
+Final QA of 95622e8 (no blockers). Fix only these:
+1. Home 768×1024: the 3D CENDAVO wordmark sits behind the first headline line (ghost "AVO" beside "Your work is") — reposition/scale the stage at tablet widths so the wordmark never overlaps the headline.
+2. Home 768–1920 and 150% zoom: after the hero scrolls away ~70–80% of the viewport is empty for about one screen-height (only a faded C) — shorten the sticky exit or bring the reel section up sooner so no viewport is mostly blank.
+3. Home 844×390 landscape: ~one blank screen between the "Concept projects" intro and the first card — tighten spacing/stagger on short viewports.
+4. Pricing and 404 at 844×390: hero buttons below the fold — short-viewport rules so the primary CTA is visible. Landscape phones (height ≤ 500) should get the lite WebGL scene, not the desktop one.
+5. Home project cards at 1024 and 150% zoom: Greenline/Fade & Co cards too narrow (text wraps 2–4 words per line) — switch to a 2-up/stacked layout below ~1200 px CSS width.
+6. Services hero stack at 430: overlapping cards cut subtitles mid-word — hide subtitles inside the stack on narrow screens or offset cards so they're fully visible.
+7. Demo at 1024 and 430: the request table's "Draft reply" column is hidden off to the right with no scroll cue — add a visible scroll affordance (edge fade + hint) or reflow to stacked rows below ~1100 px.
+8. Work: remove the black strip between the hero index and the Harbourside band, and make sure "The action it asks for" row never straddles the dark/light section boundary.
+Small, focused; same budgets and tests. **Never `cd` in Bash.**
