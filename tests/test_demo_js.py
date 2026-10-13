@@ -815,6 +815,51 @@ console.log(JSON.stringify({ motion: run({ width: 1440, height: 900, fine: true,
 """
 SCENES = Path(__file__).resolve().parents[1] / 'assets' / 'scenes.js'
 
+# Task 54: scenes.js leans the /work/ index tiles toward a fine pointer by setting --rx/--ry (work.css draws the lean). Runs
+# with motion on a fine pointer, on touch, with reduced motion and with Pause motion pressed from the start; the matchMedia
+# stub keeps each branch's teardown so the query stopping to match can be checked too.
+WORK_TILT_SCRIPT = HARNESS + r"""
+const source = fs.readFileSync(process.argv[1], 'utf8');
+const snap = el => Object.assign({}, el.style.props);
+function run(env, paused) {
+  const tiles = many('tile', 2);
+  tiles.forEach(t => { t.style.removeProperty = function (key) { delete this.props[key]; }; });
+  const parts = { '.wk-tile': tiles };
+  const doc = { documentElement: element('html'), querySelectorAll: s => parts[s] || [], querySelector: s => (parts[s] || [])[0] || null };
+  const { win } = makeWindow(env, { __glass: { paused: Boolean(paused) } });
+  const stub = makeGsap(env);
+  const teardowns = [];
+  stub.gsap.matchMedia = () => ({ add(query, fn) { stub.log.queries.push(query); if (media(query, env)) { const off = fn(); if (off) teardowns.push(off); } } });
+  win.gsap = stub.gsap; win.ScrollTrigger = stub.ScrollTrigger;
+  vm.runInNewContext(source, { window: win, document: doc });
+  // Each tile's box is left 100, top 100, 200 wide and 52 high (the harness default).
+  const fire = (tile, type, x, y) => (tile.listeners[type] || []).forEach(fn => fn({ currentTarget: tile, clientX: x, clientY: y }));
+  const out = { queries: stub.log.queries, types: Object.keys(tiles[0].listeners).filter(type => tiles[0].listeners[type].length) };
+  fire(tiles[0], 'pointermove', 300, 152); out.corner = snap(tiles[0]);
+  fire(tiles[0], 'pointermove', 100000, -100000); out.far = snap(tiles[0]);
+  fire(tiles[0], 'pointermove', -100000, 100000); out.farOther = snap(tiles[0]);
+  fire(tiles[0], 'pointerleave'); out.left = snap(tiles[0]);
+  fire(tiles[1], 'pointermove', 100, 100); out.beforePause = snap(tiles[1]);
+  win.__glass.paused = true;
+  fire(tiles[1], 'pointermove', 300, 152); out.whilePaused = snap(tiles[1]);
+  win.__glass.paused = Boolean(paused);
+  fire(tiles[1], 'pointermove', 300, 152);
+  teardowns.forEach(fn => fn());
+  out.teardowns = teardowns.length;
+  out.afterTeardown = tiles.map(snap);
+  out.listenersAfter = tiles.map(t => Object.values(t.listeners).reduce((n, list) => n + list.length, 0));
+  fire(tiles[0], 'pointermove', 300, 152); out.moveAfterTeardown = snap(tiles[0]);
+  out.gsapWork = stub.log.tweens.length + stub.log.sets.length + stub.log.quick.length + stub.log.timelines.length;
+  return out;
+}
+console.log(JSON.stringify({
+  motion: run({ width: 1440, height: 900, fine: true, reduce: false }),
+  touch: run({ width: 390, height: 844, fine: false, reduce: false }),
+  reduced: run({ width: 1440, height: 900, fine: true, reduce: true }),
+  paused: run({ width: 1440, height: 900, fine: true, reduce: false }, true),
+}));
+"""
+
 SCRIPT = r"""
 const vm = require('vm');
 const source = require('fs').readFileSync(process.argv[1], 'utf8');
@@ -1714,6 +1759,47 @@ class DemoScriptTests(unittest.TestCase):
         source = SCENES.read_text(encoding='utf-8')
         self.assertIn("const START = 'top 85%';", source)
         self.assertEqual(re.findall(r"'top \d+%'", source), ["'top 85%'"])  # one line for every scene
+
+    def test_work_tiles_lean_only_for_a_fine_pointer_within_six_degrees(self):
+        # Task 54 (owner): at most 6 degrees each way, set as two CSS variables (work.css draws them with perspective 900px);
+        # flat on leave, on a move while Pause motion is pressed and after the query stops matching; nothing on touch, with
+        # reduced motion, on keyboard focus, and no GSAP tween (so the ticker never wakes for it).
+        r = self.node_json(WORK_TILT_SCRIPT, SCENES)
+        query = '(prefers-reduced-motion: no-preference) and (hover: hover) and (pointer: fine)'
+        motion = r['motion']
+        self.assertIn(query, motion['queries'])
+        self.assertEqual(sorted(motion['types']), ['pointerleave', 'pointermove'])  # no focus or touch handlers
+        self.assertEqual(motion['corner'], {'--rx': '-4deg', '--ry': '5deg'})
+        self.assertEqual(motion['far'], {'--rx': '6deg', '--ry': '6deg'})
+        self.assertEqual(motion['farOther'], {'--rx': '-6deg', '--ry': '-6deg'})
+        for snap in (motion['corner'], motion['far'], motion['farOther']):
+            for value in snap.values():
+                self.assertLessEqual(abs(float(value.removesuffix('deg'))), 6)
+        self.assertEqual(motion['left'], {})
+        self.assertTrue(motion['beforePause'])
+        self.assertEqual(motion['whilePaused'], {})
+        self.assertEqual(motion['teardowns'], 2)  # the scenes branch and the tilt branch
+        self.assertEqual(motion['afterTeardown'], [{}, {}])
+        self.assertEqual(motion['listenersAfter'], [0, 0])
+        self.assertEqual(motion['moveAfterTeardown'], {})
+        self.assertEqual(motion['gsapWork'], 0)
+        for name in ('touch', 'reduced'):
+            with self.subTest(env=name):
+                run = r[name]
+                self.assertEqual(run['types'], [])
+                for key in ('corner', 'far', 'farOther', 'beforePause', 'whilePaused', 'moveAfterTeardown'):
+                    self.assertEqual(run[key], {})
+        paused = r['paused']
+        for key in ('corner', 'far', 'farOther', 'beforePause', 'whilePaused'):
+            with self.subTest(paused=key):
+                self.assertEqual(paused[key], {})
+        source = SCENES.read_text(encoding='utf-8')
+        before, tilt = source.split('// Task 54 (owner)', 1)
+        self.assertNotIn('--rx', before)  # set and cleared inside the tilt block only
+        tilt = '\n'.join(line for line in tilt.splitlines() if not line.strip().startswith('//'))
+        self.assertNotIn('focus', tilt)
+        self.assertNotIn('gsap.to', tilt)
+        self.assertNotIn('quickTo', tilt)
 
     def test_every_reveal_starts_at_the_same_line(self):
         # Task 43: reveals (anything hidden until it scrolls in) start as their trigger's top crosses 85% of the viewport.

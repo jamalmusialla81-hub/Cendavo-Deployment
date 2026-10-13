@@ -5,8 +5,12 @@
 .wk-hero-copy{grid-column:1/8}
 .wk-clip{grid-column:8/13;grid-template-columns:minmax(0,1fr);justify-items:start;gap:16px;margin-top:0}
 .wk-index{list-style:none;margin-top:clamp(8px,2vw,24px);margin-bottom:0;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:24px}
-.wk-tile a{display:grid;gap:6px;border-radius:16px;text-decoration:none}
-.wk-tile-img{position:relative;display:block;aspect-ratio:4/3;margin-bottom:10px;overflow:hidden;border-radius:14px;background:var(--warm-2)}
+.wk-tile a{position:relative;display:grid;gap:6px;border-radius:16px;text-decoration:none}
+/* Task 54: a glass rim drawn with edge light only (an inset highlight and a hairline, no blur: there is nothing to blur
+   behind a photo), and a visible Concept or Demo tag that is part of each link's name. */
+.wk-tile-img{position:relative;display:block;aspect-ratio:4/3;margin-bottom:10px;overflow:hidden;border-radius:14px;background:var(--warm-2);box-shadow:0 0 0 1px var(--line),0 18px 32px -22px rgba(58,40,12,.45)}
+.wk-tile-img::before{content:"";position:absolute;inset:0;z-index:1;border-radius:inherit;box-shadow:inset 0 1px 0 rgba(255,255,255,.6),inset 0 0 0 1px rgba(255,255,255,.24);pointer-events:none}
+.wk-tile-tag{position:absolute;z-index:2;top:10px;left:10px;padding:.4em .7em;border-radius:999px;background:rgba(255,255,255,.9);box-shadow:inset 0 0 0 1px #fff,0 4px 12px -6px rgba(14,14,13,.4);color:var(--ink);font:650 .75rem/1 var(--font-display);letter-spacing:.02em}
 .wk-tile-img img,.hover-video{width:100%;height:100%;object-fit:cover}
 .hover-video{position:absolute;inset:0;display:block;pointer-events:none}
 .wk-tile-name{justify-self:start;font:760 clamp(1.15rem,1rem + .5vw,1.45rem)/1.05 var(--font-display);font-stretch:88%;letter-spacing:-.015em}
@@ -32,7 +36,7 @@
 .cs-body{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:40px 24px;padding-top:clamp(48px,6vw,88px);padding-bottom:clamp(24px,3vw,40px)}
 .cs-brief{grid-column:1/6}
 .cs-does{grid-column:7/13}
-.cs-brief h3,.cs-does h3,.cs-screens-h,.hb-story h3,.gl-story h3,.hb-pack h3{margin:0 0 14px;font:700 1rem/1.2 var(--font-display);font-stretch:96%;letter-spacing:0}
+.cs-brief h3,.cs-does h3,.cs-screens-h,.hb-story h3,.gl-story h3,.hb-pack h3,.fc-story h3{margin:0 0 14px;font:700 1rem/1.2 var(--font-display);font-stretch:96%;letter-spacing:0}
 .cs-lede{margin:0;color:var(--ink);font:560 clamp(1.3rem,1rem + 1vw,1.9rem)/1.25 var(--font-display);font-stretch:94%;letter-spacing:-.015em}
 .cs-list{list-style:none;margin:0;padding:0;border-top:1px solid var(--ink)}
 .cs-list li{padding:16px 0;border-bottom:1px solid var(--line-2);color:var(--ink-2)}
@@ -89,14 +93,46 @@
 .gl-strip{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:24px}
 .gl-strip img{display:block;width:100%;height:auto;aspect-ratio:3/2;object-fit:cover;border-radius:14px}
 .gl-strip-fig figcaption{margin-top:12px;color:var(--mute);font-size:.875rem}
-/* Fade & Co: a photo column beside the devices */
+/* Fade & Co (Task 54): a moody barbershop, warm near-black with brass (not Harbourside's cold ink). A photo and the
+   Book a chair mockup share a column beside the devices; the story follows as a two-column board ending on its action. */
+.cs-fc{--fc-bg:#17130F;--fc-card:#211B15;--fc-ink:#F1EADF;--fc-ink-2:#D9CFBF;--fc-mute:#B3A794;--fc-brass:#CDA66C;--fc-line:rgba(241,234,223,.16);padding-bottom:clamp(40px,5vw,72px);background:var(--fc-bg);color:var(--fc-ink)}
+.cs-fc .cs-label,.fc-beats dt{color:var(--fc-brass)}
+.cs-fc .cs-facts div{border-top-color:var(--fc-line)}
+.cs-fc .cs-facts dt,.cs-fc .bench-cap,.fc-flow-note{color:var(--fc-mute)}
+.cs-fc .cs-lede,.cs-fc .cs-list b{color:var(--fc-ink)}
+.cs-fc .cs-list li{border-bottom-color:var(--fc-line);color:var(--fc-ink-2)}
+.cs-fc .photo{background:var(--fc-card)}
+.cs-fc .bench-plinth{background:linear-gradient(160deg,#2B241D 0%,#221C16 100%);box-shadow:inset 0 0 0 1px rgba(241,234,223,.07)}
+.cs-fc :focus-visible{outline-color:var(--fc-ink)}
 .fc-head{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));column-gap:24px;align-items:end}
 .fc-head-t{grid-column:1/7}
 .fc-head .cs-facts{grid-column:7/13}
 .cs-fc .cs-screens-h{margin-top:clamp(40px,5vw,64px)}
-.fc-stage{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:24px;align-items:stretch}
-.fc-photo{grid-column:1/4;min-height:100%}
-.fc-stage .bench{grid-column:4/13}
+.fc-stage{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));grid-template-rows:minmax(160px,1fr) auto;gap:24px;align-items:stretch}
+.fc-photo{grid-column:1/4;grid-row:1;min-height:100%}
+.fc-stage .bench{grid-column:4/13;grid-row:1/3}
+.fc-flow{grid-column:1/4;grid-row:2;display:grid;align-content:start;gap:14px;padding:20px;border-radius:22px;background:var(--fc-card);box-shadow:inset 0 0 0 1px var(--fc-line)}
+.fc-flow-top{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.fc-flow h3{margin:0;font:780 1.375rem/1.05 var(--font-display);font-stretch:80%;letter-spacing:-.01em}
+.fc-flow .tag{background:transparent;box-shadow:inset 0 0 0 1px var(--fc-brass);color:var(--fc-brass)}
+.fc-wait{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:baseline;gap:4px 12px;margin:0;padding:10px 12px;border-radius:12px;box-shadow:inset 0 0 0 1px var(--fc-brass);font-size:.875rem}
+.fc-wait b{color:var(--fc-brass);font-family:var(--font-display)}
+.fc-steps{list-style:none;margin:0;padding:0;counter-reset:fc}
+.fc-steps li{counter-increment:fc;display:grid;grid-template-columns:auto minmax(0,1fr);gap:0 12px;padding:10px 0;border-top:1px solid var(--fc-line)}
+.fc-steps li::before{content:counter(fc);grid-row:1/3;display:grid;place-items:center;width:1.75rem;height:1.75rem;border-radius:50%;box-shadow:inset 0 0 0 1px var(--fc-brass);color:var(--fc-brass);font:700 .8125rem/1 var(--font-display)}
+.fc-steps b{font:700 .9375rem/1.25 var(--font-display)}
+.fc-steps span{color:var(--fc-ink-2);font-size:.875rem}
+.fc-flow-note{margin:0;font-size:.8125rem}
+.fc-story{grid-column:1/-1}
+.fc-beats{display:grid;grid-template-columns:minmax(0,5fr) minmax(0,7fr);gap:0 48px;margin:0}
+.fc-beats>div{display:grid;align-content:start;gap:8px;padding:20px 0;border-top:1px solid var(--fc-line)}
+.fc-beats dt{font:700 .875rem/1.5 var(--font-display);letter-spacing:.04em;text-transform:uppercase}
+.fc-beats dd{margin:0;color:var(--fc-ink-2)}
+.fc-beats .cs-list{border-top:0}
+.fc-beats .cs-list li:first-child{padding-top:0}
+.fc-beats .cs-list li:last-child{padding-bottom:0;border-bottom:0}
+.fc-beat-action{grid-column:1/-1}
+.fc-beat-action dd{color:var(--fc-ink);font:780 clamp(1.5rem,1rem + 1.6vw,2.4rem)/1.05 var(--font-display);font-stretch:80%;letter-spacing:-.015em}
 
 /* The demonstration project: a card, an illustrated queue (aria-hidden) and three steps */
 .wk-demo{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:40px 24px;align-items:center}
@@ -127,9 +163,13 @@
 @media(max-width:1023px){
 .wk-hero-copy,.wk-clip{grid-column:1/-1}
 .wk-clip{grid-template-columns:auto minmax(0,1fr);align-items:end;column-gap:24px;margin-top:40px}
-.wk-index{grid-template-columns:repeat(2,minmax(0,1fr))}
+.wk-index{grid-template-columns:repeat(2,minmax(0,1fr));row-gap:32px}
 .fc-head-t,.fc-head .cs-facts,.fc-photo,.fc-stage .bench{grid-column:1/-1}
 .fc-photo{aspect-ratio:16/7;min-height:0}
+/* Stacked: the photo band, then the Book a chair flow (steps in a row), then the devices. */
+.fc-stage{grid-template-rows:none}
+.fc-photo,.fc-flow,.fc-stage .bench{grid-column:1/-1;grid-row:auto}
+.fc-steps{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:0 16px}
 .hb-story,.hb-pack{grid-column:1/-1}
 }
 @media(max-width:960px){
@@ -144,18 +184,33 @@
 .cs-facts div{display:grid;grid-template-columns:7rem minmax(0,1fr);gap:12px;align-items:baseline;padding:10px 0}
 .cs-facts dd{margin:0}
 .gl-beats{grid-template-columns:minmax(0,1fr);gap:28px}
+.fc-beats{grid-template-columns:minmax(0,1fr)}
 .gl-beat-problem{grid-column:auto}
 .gl-strip{grid-template-columns:none;grid-auto-flow:column;grid-auto-columns:78%;gap:16px;overflow-x:auto;overscroll-behavior-x:contain;scroll-snap-type:x mandatory;padding-bottom:12px}
 .gl-strip li{scroll-snap-align:start}
 }
 @media(max-width:560px){
 .wk-clip{grid-template-columns:42% minmax(0,1fr);column-gap:16px}
-.wk-index{gap:20px 12px}
 .hb-beats>div{grid-template-columns:minmax(0,1fr);gap:4px}
+/* Task 54, phones: the index is art-directed, not shrunk. Harbourside leads full width in landscape, Greenline and Fade & Co
+   sit side by side as tall portrait crops, and the demo closes full width. */
+.wk-index{gap:28px 12px}
+.wk-tile:first-child,.wk-tile-demo{grid-column:1/-1}
+.wk-tile-img{aspect-ratio:4/5}
+.wk-tile:first-child .wk-tile-img{aspect-ratio:16/9}
+.wk-tile-demo .wk-tile-img{aspect-ratio:2/1}
+/* Fade & Co on a phone: a short cropped photo band, the Book a chair steps as a list ahead of the devices. */
+.fc-photo{aspect-ratio:5/2}
+.fc-steps{grid-template-columns:minmax(0,1fr)}
 }
 
 /* Motion: hover feedback within 200 ms, transform only */
 @media(prefers-reduced-motion:no-preference){
 .wk-tile-img img{transition:transform var(--dur-1) var(--ease-out)}
 .wk-tile a:is(:hover,:focus-visible) .wk-tile-img img{transform:scale(1.02)}
+/* Task 54 (owner): the index tiles lean toward a fine pointer. scenes.js sets --rx/--ry (clamped to 6deg) under the same
+   query; nothing leans on touch, keyboard focus, reduced motion or while Pause motion is pressed. */
+@media(hover:hover) and (pointer:fine){
+.wk-tile{transform:perspective(900px) rotateX(var(--rx,0deg)) rotateY(var(--ry,0deg));transition:transform var(--dur-1) var(--ease-out)}
+}
 }

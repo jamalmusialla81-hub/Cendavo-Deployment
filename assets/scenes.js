@@ -99,4 +99,23 @@
     // Reduced motion switched on mid-visit: GSAP reverts the tweens; the cards get their finished states back.
     return () => restore.forEach(fn => fn());
   });
+
+  // Task 54 (owner): Work tiles lean toward a fine pointer, at most 6 degrees each way. Only --rx/--ry are set here; work.css
+  // draws the lean (perspective 900px) under the same query. Never on keyboard focus or touch; flat on leave, on any move
+  // while Pause motion is pressed, and when the query stops matching.
+  const tiles = $$('.wk-tile');
+  if (tiles.length) gsap.matchMedia().add('(prefers-reduced-motion: no-preference) and (hover: hover) and (pointer: fine)', () => {
+    const deg = v => Math.max(-6, Math.min(6, v)) + 'deg';
+    const clear = t => ['--rx', '--ry'].forEach(v => t.style.removeProperty(v));
+    const leave = e => clear(e.currentTarget);
+    const move = e => {
+      const t = e.currentTarget, r = t.getBoundingClientRect();
+      if (window.__glass?.paused) return clear(t);
+      t.style.setProperty('--rx', deg(((e.clientY - r.top) / r.height - .5) * -8));
+      t.style.setProperty('--ry', deg(((e.clientX - r.left) / r.width - .5) * 10));
+    };
+    const listen = m => tiles.forEach(t => { t[m]('pointermove', move); t[m]('pointerleave', leave); });
+    listen('addEventListener');
+    return () => { listen('removeEventListener'); tiles.forEach(clear); };
+  });
 })();

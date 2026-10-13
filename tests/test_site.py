@@ -1980,9 +1980,10 @@ class DesignCritiqueFixTests(unittest.TestCase):
         self.assertIn('gap:24px', rule)
         self.assertNotIn('wk-index', self.pages_css)
         self.assertNotIn('.6fr', work_css)
+        # Task 54: the two-up tablet grid gets more room between its rows, and phones a little more again.
         tablet = rules_for(media_blocks(work_css, 'max-width:1023px'), '.wk-index')
-        self.assertEqual(tablet, ['grid-template-columns:repeat(2,minmax(0,1fr))'])
-        self.assertEqual(rules_for(media_blocks(work_css, 'max-width:560px'), '.wk-index'), ['gap:20px 12px'])
+        self.assertEqual(tablet, ['grid-template-columns:repeat(2,minmax(0,1fr));row-gap:32px'])
+        self.assertEqual(rules_for(media_blocks(work_css, 'max-width:560px'), '.wk-index'), ['gap:28px 12px'])
         for query in ('max-width:1023px', 'max-width:960px', 'max-width:860px', 'max-width:560px'):
             for rule in rules_for(media_blocks(work_css, query), '.wk-index'):
                 self.assertNotRegex(rule, r'(?<![-\w])(?:margin|padding)(?:-inline|-left|-right)?:')
@@ -2327,12 +2328,16 @@ class WorkArtDirectionTests(unittest.TestCase):
 
     def test_fade_co_leads_with_its_screens_beside_a_photo(self):
         # Replaces Night Shift's dimmed photo band: the screens come straight after the title and facts, with the
-        # barbershop photo as a described column beside the bench, then the brief.
+        # barbershop photo as a described column beside the bench. Task 54: the Book a chair mockup shares that column,
+        # after the photo and before the devices, and the five-beat story follows the screens.
         fc = self.article('fade-co')
         self.assertNotIn('cs-cover', fc)
         self.assertNotIn('fc-band', fc)
+        self.assertNotIn('cs-brief', fc)
+        self.assertNotIn('cs-does', fc)
         order = [CONCEPT_LABEL, '</h2>', '<dl class="cs-facts">', '</header>', '<section class="cs-screens"', '<div class="fc-stage">',
-                 '<figure class="photo fc-photo" data-reveal>', '<figure class="bench b-fc" data-bench="fc">', 'class="cs-brief"', 'class="cs-does"']
+                 '<figure class="photo fc-photo" data-reveal>', '<aside class="fc-flow"', '<figure class="bench b-fc" data-bench="fc">',
+                 '<section class="fc-story"']
         positions = [fc.index(marker) for marker in order]
         self.assertEqual(positions, sorted(positions))
         photo = re.search(r'<figure class="photo fc-photo"[^>]*>(.*?)</figure>', fc, re.S).group(1)
@@ -2529,6 +2534,167 @@ class Task53CaseStudyTests(unittest.TestCase):
                 self.assertNotIn('$', text)
                 self.assertNotIn('%', text)
                 self.assertNotRegex(text.lower(), r'increase|more bookings|results|testimonial|rating')
+
+
+class Task54WorkTests(unittest.TestCase):
+    """Night Shift Task 54 (owner-mandated, reduced scope per the strategist brief): Fade & Co as a moody barbershop with the
+    five-beat story, a Book a chair mockup and an example walk-in wait; the Work index with visible Concept and Demo tags, an
+    edge-light glass rim, a demo tile that opens /demo/ and an art-directed phone layout. No new photo, video, script or
+    external request. The tilt's limits are in CardTiltTests-style checks above and behaviour in tests/test_demo_js.py."""
+    BEATS = Task53CaseStudyTests.BEATS
+    WORK_SCRIPTS = ['/assets/motion-boot.js', '/assets/site.js', '/assets/vendor/gsap/gsap.min.js', '/assets/vendor/gsap/ScrollTrigger.min.js',
+                    '/assets/motion.js', '/assets/scenes.js', '/assets/reel.js', '/assets/vendor/lenis/lenis.min.js', '/assets/glass.js',
+                    '/assets/glass-boot.js']
+    WORK_VIDEOS = {'cendavo-social-3-signs-540', 'loop-fc-desktop', 'loop-fc-phone', 'loop-gl-desktop', 'loop-gl-phone', 'loop-hb-desktop', 'loop-hb-phone'}
+
+    @classmethod
+    def setUpClass(cls):
+        build()
+        cls.page = (OUT / 'work/index.html').read_text()
+        cls.work = main_of(cls.page)
+        cls.css = re.sub(r'/\*.*?\*/', '', (OUT / 'assets/work.css').read_text(), flags=re.S)
+        cls.base = base_rules(cls.css)
+        site = (OUT / 'assets/site.css').read_text()
+        cls.tokens = {k: v.strip() for k, v in re.findall(r'(--[\w-]+):([^;]+)', re.search(r':root\{(.*?)\}', site, re.S).group(1))}
+        cls.fc = re.search(r'<article [^>]*id="fade-co"[^>]*>.*?</article>', cls.work, re.S).group(0)
+        cls.index = re.search(r'<ul class="wrap wk-index"[^>]*>(.*?)</ul>', cls.work, re.S).group(1)
+
+    text = staticmethod(Task53CaseStudyTests.text)
+
+    def palette(self):
+        rule = rules_for(self.base, '.cs-fc')
+        self.assertEqual(len(rule), 1)
+        return dict(re.findall(r'(--fc-[\w-]+):(#[0-9A-Fa-f]{6})', rule[0]))
+
+    def test_fade_co_tells_five_beats_in_its_own_layout(self):
+        stories = re.findall(r'<section class="fc-story" aria-labelledby="fc-title fc-story-h">(.*?)</section>', self.fc, re.S)
+        self.assertEqual(len(stories), 1)
+        self.assertRegex(stories[0], r'^<h3 id="fc-story-h">The story</h3><dl class="fc-beats">')
+        beats = re.findall(r'<div(?: class="[^"]+")?><dt>([^<]+)</dt><dd>(.*?)</dd></div>', stories[0], re.S)
+        self.assertEqual([label for label, _ in beats], self.BEATS)
+        self.assertEqual(stories[0].count('<dt>'), 5)
+        for label, body in beats:
+            with self.subTest(beat=label):
+                self.assertGreaterEqual(len(self.text(body)), 20)
+        self.assertEqual(len(re.findall(r'<li><b>', beats[2][1])), 3)  # the three design decisions stay
+        # Its own layout: not the spec sheet (Harbourside) or the three-up grid (Greenline), and no shared rules.
+        fc = re.search(r'grid-template-columns:([^;]+)', rules_for(self.base, '.fc-beats')[0]).group(1)
+        self.assertNotIn(fc, {re.search(r'grid-template-columns:([^;]+)', rules_for(self.base, sel)[0]).group(1) for sel in ('.hb-beats>div', '.gl-beats')})
+        for selectors, _ in re.findall(r'([^{}]+)\{([^{}]*)\}', self.css):
+            if '.fc-beats' in selectors:
+                self.assertNotRegex(selectors, r'\.(?:hb|gl)-beats')
+        self.assertIn('grid-template-columns:minmax(0,1fr)', ''.join(rules_for(media_blocks(self.css, 'max-width:860px'), '.fc-beats')))
+
+    def test_book_a_chair_flow_is_readable_text_marked_as_a_mockup(self):
+        flows = re.findall(r'<aside class="fc-flow" aria-labelledby="fc-title fc-flow-h">(.*?)</aside>', self.fc, re.S)
+        self.assertEqual(len(flows), 1)
+        flow = flows[0]
+        self.assertRegex(flow, r'<h3 id="fc-flow-h">Book a chair</h3><span class="tag">Mockup</span>')
+        self.assertNotIn('aria-hidden', flow)
+        self.assertNotIn('role="img"', flow)
+        steps = re.findall(r'<li><b>([^<]+)</b><span>([^<]+)</span></li>', flow)
+        self.assertGreaterEqual(len(steps), 3)
+        self.assertEqual([name for name, _ in steps], ['Choose a service', 'Choose a barber', 'Pick a time', 'Confirmed'])
+        self.assertIn('first free chair', flow)
+        # The walk-in wait is visibly an example, and the note says the details are made up.
+        wait = re.search(r'<p class="fc-wait">(.*?)</p>', flow, re.S)
+        self.assertIsNotNone(wait)
+        self.assertIn('Walk-ins', wait.group(1))
+        self.assertIn('(example)', self.text(wait.group(1)))
+        self.assertIn('made-up examples', self.text(flow))
+        self.assertNotIn('data-', flow)  # static: no motion or live hook
+
+    def test_fade_co_claims_no_live_data_results_or_prices(self):
+        text = self.text(self.fc).lower()
+        self.assertNotRegex(text, r'\blive\b|real-time|real time|right now|\bcurrent wait')
+        self.assertNotIn('$', text)
+        self.assertNotIn('%', text)
+        self.assertNotRegex(text, r'increase|more bookings|results|testimonial|rating')
+
+    def test_fade_co_is_a_moody_palette_with_readable_type(self):
+        colours = self.palette()
+        bg, card = colours['--fc-bg'], colours['--fc-card']
+        self.assertIn('background:var(--fc-bg)', rules_for(self.base, '.cs-fc')[0])
+        self.assertIn('color:var(--fc-ink)', rules_for(self.base, '.cs-fc')[0])
+        # Dark, and not Harbourside's ink (its cover background).
+        self.assertIn('background:var(--ink)', rules_for(self.base, '.cs-cover')[0])
+        self.assertNotEqual(bg.upper(), self.tokens['--ink'].upper())
+        self.assertGreaterEqual(contrast(bg, '#FFFFFF'), 15)
+        r, g, b = (int(bg[i:i + 2], 16) for i in (1, 3, 5))
+        self.assertGreater(r, b)  # warm, not neutral or cold
+        for name in ('--fc-ink', '--fc-ink-2', '--fc-mute', '--fc-brass'):
+            for surface in (bg, card):
+                with self.subTest(colour=name, surface=surface):
+                    self.assertGreaterEqual(contrast(colours[name], surface), 4.5)
+        # Each text role uses those colours on the dark surface.
+        self.assertIn('color:var(--fc-brass)', rules_for(self.base, '.cs-fc .cs-label')[0])
+        self.assertIn('color:var(--fc-brass)', rules_for(self.base, '.fc-flow .tag')[0])
+        self.assertIn('background:transparent', rules_for(self.base, '.fc-flow .tag')[0])
+        self.assertIn('color:var(--fc-mute)', rules_for(self.base, '.cs-fc .bench-cap')[0])
+        self.assertIn('color:var(--fc-mute)', rules_for(self.base, '.cs-fc .cs-facts dt')[0])
+        self.assertIn('color:var(--fc-ink-2)', rules_for(self.base, '.cs-fc .cs-list li')[0])
+        self.assertIn('outline-color:var(--fc-ink)', rules_for(self.base, '.cs-fc :focus-visible')[0])
+        for selectors, body in re.findall(r'([^{}]+)\{([^{}]*)\}', self.css):
+            if '.fc-' in selectors or '.cs-fc' in selectors:
+                with self.subTest(selectors=selectors.strip()):
+                    self.assertNotRegex(body, r'(?<![-\w])(?:-webkit-)?(?:backdrop-)?filter:')
+
+    def test_fade_co_stacks_for_phones_with_the_flow_before_the_devices(self):
+        self.assertIn('grid-column:1/4', rules_for(self.base, '.fc-flow')[0])
+        self.assertIn('grid-row:1/3', rules_for(self.base, '.fc-stage .bench')[0])
+        tablet = media_blocks(self.css, 'max-width:1023px')
+        self.assertIn('grid-row:auto', rules_for(tablet, '.fc-flow')[0])
+        self.assertIn('grid-template-columns:repeat(4,minmax(0,1fr))', rules_for(tablet, '.fc-steps')[0])
+        phone = media_blocks(self.css, 'max-width:560px')
+        self.assertEqual(rules_for(phone, '.fc-photo'), ['aspect-ratio:5/2'])  # a cropped band
+        self.assertEqual(rules_for(phone, '.fc-steps'), ['grid-template-columns:minmax(0,1fr)'])
+        self.assertLess(self.fc.index('<aside class="fc-flow"'), self.fc.index('class="d-ph"'))
+
+    def test_index_tiles_carry_visible_concept_and_demo_tags(self):
+        tiles = re.findall(r'<li class="([^"]+)"><a href="([^"]+)"><span class="wk-tile-tag">([^<]+)</span><span class="wk-tile-img', self.index)
+        self.assertEqual(tiles, [('wk-tile', '#harbourside', 'Concept'), ('wk-tile', '#greenline', 'Concept'), ('wk-tile', '#fade-co', 'Concept'),
+                                 ('wk-tile wk-tile-demo', '/demo/', 'Demo')])
+        self.assertNotIn('href="#demo"', self.index)
+        demo = re.search(r'<li class="wk-tile wk-tile-demo">(.*?)</li>', self.index, re.S).group(1)
+        self.assertIn('A working demo you can try', self.text(demo))
+        self.assertNotIn('data-', demo)  # still static
+        tag = rules_for(self.base, '.wk-tile-tag')[0]
+        self.assertIn('color:var(--ink)', tag)
+        self.assertIn('background:rgba(255,255,255,.9)', tag)
+        # Ink on .9 white stays readable over the darkest photo.
+        self.assertGreaterEqual(contrast(self.tokens['--ink'], '#E6E6E6'), 4.5)
+        self.assertIn('position:relative', rules_for(self.base, '.wk-tile a')[0])
+
+    def test_index_glass_rim_is_edge_light_only(self):
+        rim = rules_for(self.base, '.wk-tile-img::before')
+        self.assertEqual(len(rim), 1)
+        self.assertIn('inset 0 1px 0 rgba(255,255,255,', rim[0])
+        self.assertIn('pointer-events:none', rim[0])
+        self.assertIn('box-shadow:0 0 0 1px var(--line)', rules_for(self.base, '.wk-tile-img')[0])
+        for selectors, body in re.findall(r'([^{}]+)\{([^{}]*)\}', self.css):
+            if '.wk-tile' in selectors:
+                with self.subTest(selectors=selectors.strip()):
+                    self.assertNotRegex(body, r'(?<![-\w])(?:-webkit-)?(?:backdrop-)?filter:')
+
+    def test_index_is_art_directed_on_phones_not_shrunk(self):
+        self.assertIn('grid-template-columns:repeat(4,minmax(0,1fr))', rules_for(self.base, '.wk-index')[0])
+        self.assertEqual(rules_for(media_blocks(self.css, 'max-width:1023px'), '.wk-index'), ['grid-template-columns:repeat(2,minmax(0,1fr));row-gap:32px'])
+        phone = media_blocks(self.css, 'max-width:560px')
+        for rule in rules_for(phone, '.wk-index'):
+            self.assertNotIn('repeat(4', rule)
+        self.assertEqual(rules_for(phone, '.wk-tile:first-child'), ['grid-column:1/-1'])
+        self.assertEqual(rules_for(phone, '.wk-tile-demo'), ['grid-column:1/-1'])
+        self.assertEqual(rules_for(phone, '.wk-tile-img'), ['aspect-ratio:4/5'])
+        self.assertEqual(rules_for(phone, '.wk-tile:first-child .wk-tile-img'), ['aspect-ratio:16/9'])
+        self.assertEqual(rules_for(phone, '.wk-tile-demo .wk-tile-img'), ['aspect-ratio:2/1'])
+        # The full-width first tile asks for a full-width image on phones.
+        self.assertIn('sizes="(max-width: 560px) 100vw, (max-width: 1023px) 50vw, 24vw"', self.index.split('</li>', 1)[0])
+
+    def test_no_new_media_scripts_or_requests_on_work(self):
+        self.assertEqual(re.findall(r'<script[^>]*\bsrc="([^"]+)"', self.page), self.WORK_SCRIPTS)
+        self.assertEqual(set(re.findall(r'/assets/video/([a-z0-9-]+)\.mp4', self.page)), self.WORK_VIDEOS)
+        self.assertLessEqual({u.rsplit('-', 1)[0] for u in re.findall(r'/assets/images/([a-z-]+-(?:800|1600))\.jpg', self.work)}, DAYLIGHT_WORK_PHOTOS)
+        self.assertNotRegex(self.work, r'(?:src|href|srcset)="https?://')
 
 
 class LiquidGlassTests(unittest.TestCase):
@@ -3275,7 +3441,7 @@ class ViewTransitionAndDetailTests(unittest.TestCase):
         self.assertNotIn('focus', fine[1])  # keyboard focus gets the CSS push-in and sweep, never the tilt
         # Push-in: guarded, transform-only, within 200 ms, the same on hover and keyboard focus. Daylight (Task 33) gave the
         # homepage cards a small push-in; Daylight (Task 34) gives the /work/ tiles the same (the light sweep is gone), and
-        # no page loads details.js, so no card tilts anywhere.
+        # no page loads details.js (Task 54's /work/ lean, below, lives in scenes.js and work.css instead).
         for name, needle in (('home.css', '.motion .teaser-card:is(:hover,:focus-within) .teaser-img img{transform:scale(1.03)}'),
                              ('home.css', '.motion .teaser-img img{transition:transform var(--dur-1) var(--ease-out)}'),
                              ('work.css', '.wk-tile-img img{transition:transform var(--dur-1) var(--ease-out)}'),
@@ -3292,7 +3458,7 @@ class ViewTransitionAndDetailTests(unittest.TestCase):
                         self.assertNotIn('rotate(', body.replace('rotate(45deg)', ''))  # only the arrow glyphs' fixed 45deg
         self.assertNotIn('teaser', self.css['site.css'])
         for route in self.ROUTES:
-            self.assertNotIn('/assets/details.js', self.html[route])  # so no tilt on any card
+            self.assertNotIn('/assets/details.js', self.html[route])  # so no cursor ring and no details.js tilt
         # Liquid Glass (Task 37): the homepage cards fan in from depth (home.js) and preview their loop through reel.js; the
         # owner asked for a tilt on them, so home.js tilts them within the same limits as details.js did: at most 6 degrees,
         # fine pointers with motion allowed only, and never on keyboard focus.
@@ -3305,6 +3471,20 @@ class ViewTransitionAndDetailTests(unittest.TestCase):
         self.assertNotIn('focus', tilt)
         self.assertIn("mm.add(MOTION + ' and (hover: hover) and (pointer: fine)', tilt);", js)
         self.assertEqual(js.count('tilt)'), 1)  # the tilt runs only from that branch
+        # Task 54 (owner): the /work/ index tiles lean too, without details.js (and so without its cursor ring): scenes.js,
+        # already loaded there, sets two clamped variables under the same fine-pointer, motion-allowed query, and work.css
+        # draws the lean inside the motion guard. Behaviour is in tests/test_demo_js.py (WorkTiltTests).
+        scenes = (OUT / 'assets/scenes.js').read_text()
+        branch = scenes.split("gsap.matchMedia().add('(prefers-reduced-motion: no-preference) and (hover: hover) and (pointer: fine)', () => {", 1)
+        self.assertEqual(len(branch), 2)
+        self.assertNotIn('--rx', branch[0])  # every lean sits inside that branch
+        self.assertNotIn('focus', branch[1])
+        self.assertIn('Math.max(-6, Math.min(6, v))', branch[1])
+        self.assertIn('/assets/scenes.js', self.html['work/index.html'])
+        guarded = ''.join(without_blocks(self.css['work.css'], MOTION_GUARD)[1])
+        lean = rules_for(media_blocks(guarded, 'hover:hover) and (pointer:fine'), '.wk-tile')
+        self.assertEqual(lean, ['transform:perspective(900px) rotateX(var(--rx,0deg)) rotateY(var(--ry,0deg));transition:transform var(--dur-1) var(--ease-out)'])
+        self.assertNotIn('--rx', without_blocks(self.css['work.css'], MOTION_GUARD)[0])
 
 
 class SocialClipTests(unittest.TestCase):
@@ -4697,9 +4877,9 @@ class EnquiryRobustnessAndAccessTests(unittest.TestCase):
         self.assertGreaterEqual(len(names), 9)
         self.assertEqual(len(names), len(set(names)), names)
         # Task 53: Harbourside and Greenline tell their brief and "what the site does" inside a five-beat story region
-        # (Harbourside adds its packages mockup); Fade & Co keeps its brief and "does" regions until Task 54.
+        # (Harbourside adds its packages mockup). Task 54: Fade & Co's do too, with its Book a chair mockup.
         for short, project, regions in (('hb', 'Harbourside Mobile Detailing', ('screens', 'story-h', 'pack-h')),
-                                        ('gl', 'Greenline Landscapes', ('screens', 'story-h')), ('fc', 'Fade & Co', ('screens', 'brief', 'does'))):
+                                        ('gl', 'Greenline Landscapes', ('screens', 'story-h')), ('fc', 'Fade & Co', ('screens', 'flow-h', 'story-h'))):
             for part in regions:
                 with self.subTest(region=f'{short}-{part}'):
                     self.assertIn(f'aria-labelledby="{short}-title {short}-{part}"', main)
