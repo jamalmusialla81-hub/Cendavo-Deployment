@@ -902,6 +902,46 @@ console.log(JSON.stringify({
 }));
 """
 
+# Task 56 (owner): scenes.js wipes the Services Redesign figure from the dated page to the redesign, scrubbed by scroll, and
+# the four-item list after it marks the improvement being shown. Runs with motion, with reduced motion and with the figure
+# already on screen at load.
+REDESIGN_SCRIPT = HARNESS + r"""
+const source = fs.readFileSync(process.argv[1], 'utf8');
+function run(env, inView) {
+  const after = element('after');
+  const fig = element('fig', { '.rd-after': [after] });
+  fig.getBoundingClientRect = () => ({ left: 0, top: inView ? 300 : 2000, width: 400, height: 330 });
+  const parts = { '[data-redesign]': [fig] };
+  const doc = { documentElement: element('html'), querySelectorAll: s => parts[s] || [], querySelector: s => (parts[s] || [])[0] || null };
+  const items = many('item', 4);
+  fig.nextElementSibling = element('steps', { li: items });
+  const { win } = makeWindow(env);
+  const stub = makeGsap(env);
+  const teardowns = [];
+  stub.gsap.matchMedia = () => ({ add(query, fn) { if (media(query, env)) { const off = fn(); if (off) teardowns.push(off); } } });
+  win.gsap = stub.gsap; win.ScrollTrigger = stub.ScrollTrigger;
+  vm.runInNewContext(source, { window: win, document: doc });
+  const current = () => items.map((item, i) => item.ariaCurrent === 'step' ? i + 1 : 0).filter(Boolean);
+  const out = stub.log.timelines.filter(tl => tl.vars.scrollTrigger && tl.vars.scrollTrigger.trigger === fig).map(tl => {
+    const { trigger, ...rest } = tl.vars.scrollTrigger;
+    let at = 0;
+    tl.progress = () => at;
+    const marks = [0, 0.2, 0.25, 0.5, 0.74, 0.8, 0.999, 1].map(p => { at = p; tl.vars.onUpdate(); return current(); });
+    return { scrollTrigger: rest, creates: stub.log.creates.length, marks,
+      tweens: tl.tweens.map(t => ({ names: t.names, at: t.at, kind: t.kind, from: t.from, to: t.vars })) };
+  });
+  const tweens = stub.log.tweens.length + stub.log.timelines.length;
+  teardowns.forEach(fn => fn());
+  return { scenes: out, tweens, afterTeardown: current(), cleared: items.every(item => item.ariaCurrent === null || item.ariaCurrent === undefined) };
+}
+console.log(JSON.stringify({
+  motion: run({ width: 1440, height: 900, fine: true, reduce: false }),
+  phone: run({ width: 390, height: 844, fine: false, reduce: false }),
+  reduced: run({ width: 1440, height: 900, fine: true, reduce: true }),
+  inView: run({ width: 1440, height: 900, fine: true, reduce: false }, true),
+}));
+"""
+
 SCRIPT = r"""
 const vm = require('vm');
 const source = require('fs').readFileSync(process.argv[1], 'utf8');
@@ -1876,6 +1916,38 @@ class DemoScriptTests(unittest.TestCase):
                 self.assertEqual(r[name]['afterTeardown'], [])  # the list is never marked
         source = SCENES.read_text(encoding='utf-8')
         block = source.split("later($$('[data-build]'))", 1)[1].split('later(', 1)[0]
+        for banned in ('pin', 'snap', 'style', 'innerHTML'):
+            self.assertNotIn(banned, block)
+
+    def test_redesign_figure_is_wiped_in_by_scroll_and_marks_four_steps(self):
+        # Task 56 (owner): one timeline on the figure, scrubbed by scroll from the shared 85% line to bottom 40%, played once
+        # (Pause motion ends it fully shown). Only the after layer's clip-path animates, cleared at the end so services.css
+        # draws the redesign. The list item for the stage reached is aria-current="step"; none when finished or torn down.
+        r = self.node_json(REDESIGN_SCRIPT, SCENES)
+        for name in ('motion', 'phone'):
+            with self.subTest(env=name):
+                self.assertEqual(len(r[name]['scenes']), 1)
+                scene = r[name]['scenes'][0]
+                self.assertEqual(scene['scrollTrigger'], {'start': 'top 85%', 'once': True, 'end': 'bottom 40%', 'scrub': 0.5})
+                self.assertEqual(scene['creates'], 0)
+                self.assertEqual(scene['marks'], [[1], [1], [2], [3], [3], [4], [4], []])
+                self.assertEqual(len(scene['tweens']), 1)
+                tween = scene['tweens'][0]
+                self.assertEqual((tween['names'], tween['at'], tween['kind']), (['after'], 0, 'fromTo'))
+                self.assertEqual(tween['from'], {'clipPath': 'inset(0% 100% 0% 0%)'})
+                self.assertEqual(tween['to']['clipPath'], 'inset(0% 0% 0% 0%)')
+                self.assertEqual(tween['to']['clearProps'], 'clipPath')
+                self.assertLessEqual(set(tween['from']) | set(tween['to']), {'clipPath', 'duration', 'ease', 'clearProps'})
+                self.assertEqual(r[name]['afterTeardown'], [])
+                self.assertTrue(r[name]['cleared'])
+        for name in ('reduced', 'inView'):
+            with self.subTest(env=name):
+                self.assertEqual(r[name]['scenes'], [])
+                self.assertEqual(r[name]['tweens'], 0)
+                self.assertEqual(r[name]['afterTeardown'], [])
+                self.assertTrue(r[name]['cleared'])
+        source = SCENES.read_text(encoding='utf-8')
+        block = source.split("later($$('[data-redesign]'))", 1)[1].split('later(', 1)[0]
         for banned in ('pin', 'snap', 'style', 'innerHTML'):
             self.assertNotIn(banned, block)
 

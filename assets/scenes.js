@@ -7,21 +7,9 @@
   const { gsap, ScrollTrigger } = window;
   if (!gsap || !ScrollTrigger) return;
   const $$ = (selector, scope) => Array.from((scope || document).querySelectorAll(selector));
-  // The two Daylight curves (CSS cubic-bezier, x solved by bisection): entrances, and changes of state.
-  const bezier = (x1, y1, x2, y2) => {
-    const at = (t, a, b) => 3 * a * t * (1 - t) * (1 - t) + 3 * b * t * t * (1 - t) + t * t * t;
-    return x => {
-      if (x <= 0 || x >= 1) return x <= 0 ? 0 : 1;
-      let low = 0, high = 1, t = x;
-      for (let i = 0; i < 24; i++) {
-        if (at(t, x1, x2) < x) low = t; else high = t;
-        t = (low + high) / 2;
-      }
-      return at(t, y1, y2);
-    };
-  };
-  const IN = bezier(0.2, 0.8, 0.2, 1);
-  const IO = bezier(0.7, 0, 0.2, 1);
+  // The two Daylight curves (entrances, and changes of state), solved once in motion.js, which always loads first (Task 56:
+  // this file kept its own copy until then; without them GSAP's default ease applies).
+  const { IN, IO } = window.__ease || {};
   const SHOWN = 'opacity,transform';
   // fromTo pairs: rise y px into place; un-mask a clip-path to the full frame.
   const up = (y, duration, stagger) => [{ opacity: 0, y }, { opacity: 1, y: 0, duration, stagger: stagger || 0, clearProps: SHOWN }];
@@ -82,19 +70,25 @@
       $$('[data-step-layer]', vig).forEach(layer => t.fromTo(layer, ...up(16, 1), layer.dataset.stepLayer - 1));
       restore.push(() => steps.forEach(li => { li.ariaCurrent = null; }));
     });
-    // Task 43: the white card itself rises with its rows, so it never stands empty below them while it scrolls in.
-    later($$('[data-month]')).forEach(card => {
-      tl(card)
-        .fromTo(card, ...up(24, 0.6), 0)
-        .fromTo($$('li', card), ...up(8, 0.4, 0.08), 0.1)
-        .fromTo($$('.box', card), { opacity: 0, scale: 0.6 }, { opacity: 1, scale: 1, duration: 0.4, stagger: 0.08, clearProps: SHOWN }, 0.4);
+    // Services, Task 56: the Redesign figure wipes from the dated page to the redesign (clip-path only), scrubbed by scroll
+    // and never held in place. The visible list after it names the four improvements; the one being shown is
+    // aria-current="step", none once the redesign is fully shown (as services.css draws it) or reverted.
+    later($$('[data-redesign]')).forEach(fig => {
+      const steps = $$('li', fig.nextElementSibling);
+      const t = tl(fig, { end: 'bottom 40%', scrub: 0.5 }).eventCallback('onUpdate', () => steps.forEach((li, i) => {
+        li.ariaCurrent = i === Math.floor(t.progress() * 4) ? 'step' : null;
+      }));
+      t.fromTo($$('.rd-after', fig), ...unmask('inset(0% 100% 0% 0%)', 1), 0);
+      restore.push(() => steps.forEach(li => { li.ariaCurrent = null; }));
     });
-    later($$('[data-redir]')).forEach(map => {
-      tl(map)
-        .fromTo(map, ...up(24, 0.6), 0)
-        .fromTo($$('li', map), ...up(8, 0.4, 0.08), 0.1)
-        .fromTo($$('.arr', map), ...grow({ scaleX: 0 }, 0.7, 0.08), 0.4);
-    });
+    // Task 43: the white card itself rises with its rows, so it never stands empty below them while it scrolls in; then
+    // its marks (Care plan ticks one at a time, Task 56; redirect arrows) follow.
+    const card = (selector, marks, ...pair) => later($$(selector)).forEach(box => tl(box)
+      .fromTo(box, ...up(24, 0.6), 0)
+      .fromTo($$('li', box), ...up(8, 0.4, 0.08), 0.1)
+      .fromTo($$(marks, box), ...pair, 0.4));
+    card('[data-month]', '.box', { opacity: 0, scale: 0.6 }, { opacity: 1, scale: 1, duration: 0.4, stagger: 0.3, clearProps: SHOWN });
+    card('[data-redir]', '.arr', ...grow({ scaleX: 0 }, 0.7, 0.08));
 
     // Work: the illustrated queue fills, one request is picked up and its reply draft appears (classes only).
     later($$('[data-queue]')).forEach(queue => {

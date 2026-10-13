@@ -29,6 +29,8 @@
   };
   const IN = bezier(0.2, 0.8, 0.2, 1);
   const IO = bezier(0.7, 0, 0.2, 1);
+  // Task 56: shared with scenes.js (loaded after this file), so the inner pages ship the curves once.
+  window.__ease = { IN, IO };
   const SHOWN = 'opacity,transform';
   // Task 48: while Pause motion is pressed GSAP's ticker sleeps (glass.js), so nothing here starts a new tween then.
   const paused = () => Boolean(window.__glass?.paused);

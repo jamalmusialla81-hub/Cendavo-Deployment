@@ -425,7 +425,8 @@ VIDEOS_PER_ROUTE = {'index.html': 5, 'services/index.html': 4, 'work/index.html'
 # Daylight (Task 34) adds the inner-page choreography hooks from the prototype (lists, benches and their cues, drawn lines,
 # the Services illustrations, the Work queue and the Pricing quote sheet).
 MOTION_HOOKS = ('data-ph', 'data-reveal', 'data-parallax', 'data-devices', 'data-rise', 'data-work', 'data-intro', 'data-stagger',
-                'data-bench', 'data-cue', 'data-line', 'data-build', 'data-month', 'data-redir', 'data-queue', 'data-sheet')
+                'data-bench', 'data-cue', 'data-line', 'data-build', 'data-month', 'data-redir', 'data-queue', 'data-sheet',
+                'data-redesign')  # Task 56: the Redesign before-to-after figure (data-redesign-steps contains it)
 # Hooks for reel.js (Task 28 showreel, Task 29 clips; Task 33 hero loops, Pause motion and showreel chapters); playback,
 # not motion, so they may appear wherever a video is.
 REEL_HOOKS = ('data-reel', 'data-reel-toggle', 'data-loop', 'data-motion-toggle', 'data-chapters', 'data-reel-ui', 'data-progress',
@@ -3008,11 +3009,12 @@ class ServicesCareBandTests(unittest.TestCase):
         care = self.care.group(1)
         self.assertIn('<h2 id="care-title" class="h2" data-rise>Care plan</h2>', care)
         self.assertIn('A website isn’t finished at launch.', care)
-        self.assertRegex(care, r'<h3>Every month</h3>')
-        self.assertLess(care.index('care-title'), care.index('Every month'))
+        # Task 56 (owner): the card is an example log of one month ("This month", tagged Example), in the past tense.
+        self.assertRegex(care, r'<h3>This month</h3><span class="tag">Example</span>')
+        self.assertLess(care.index('care-title'), care.index('This month'))
         month = re.search(r'<div class="month" data-month>(.*?)<figure', care, re.S).group(1)
         items = re.findall(r'<li><span class="box" aria-hidden="true">.*?</span><b>([^<]+)</b><span>([^<]+)</span></li>', month, re.S)
-        self.assertEqual([name for name, _ in items], ['Updates', 'Backups', 'Form check', 'Small changes'])
+        self.assertEqual([name for name, _ in items], ['Updates applied', 'Backup taken', 'Enquiry form checked', 'Small change made'])
         facts = re.search(r'<dl class="care-facts" data-stagger>(.*?)</dl>', care, re.S).group(1)
         self.assertEqual(re.findall(r'<div><dt>([^<]+)</dt><dd>[^<]+</dd></div>', facts),
                          ['Who it’s for', 'When it starts', 'What we need from you'])
@@ -3183,6 +3185,100 @@ class ServicesBuildSequenceTests(unittest.TestCase):
         self.assertIn("li.ariaCurrent = i === Math.floor(t.progress() * 6) ? 'step' : null;", block)
         self.assertIn('restore.push(() => steps.forEach(li => { li.ariaCurrent = null; }));', block)
         self.assertEqual(self.scenes.count("$$('[data-build]')"), 1)
+
+
+class ServicesRedesignAndCareTests(unittest.TestCase):
+    """Night Shift Task 56 (owner): the Redesign section shows a dated page turning into its redesign (a fictional business)
+    beside a visible list of the four improvements, and the Care plan card is an example log of one month. services.css
+    only draws the finished redesign; scenes.js wipes it in by scroll for people who accept motion (behaviour in
+    tests/test_demo_js.py, the redesign wipe test). Reduced motion and no-JS visitors get the redesign and the list."""
+    STEPS = ['Clear navigation', 'Service info up front', 'Phone layout', 'One enquiry button']
+
+    @classmethod
+    def setUpClass(cls):
+        build()
+        cls.main = main_of((OUT / 'services/index.html').read_text())
+        cls.section = re.search(r'<section class="sec band-warm" id="redesign".*?</section>', cls.main, re.S).group(0)
+        cls.figure = re.search(r'<figure class="vig rd" data-redesign aria-hidden="true">.*?</figure>\s*(?=<ol)', cls.section, re.S)
+        cls.css = (OUT / 'assets/services.css').read_text()
+        cls.scenes = (OUT / 'assets/scenes.js').read_text()
+
+    def test_one_hidden_figure_then_the_four_improvements_in_words(self):
+        self.assertIsNotNone(self.figure)
+        figure = self.figure.group(0)
+        self.assertEqual(self.main.count('data-redesign aria-hidden'), 1)
+        self.assertEqual(figure.count('class="rd-before"'), 1)
+        self.assertEqual(figure.count('class="rd-after"'), 1)
+        self.assertIn('<span class="vig-tag">Concept, fictional business</span>', figure)
+        steps = re.search(r'</figure>\s*<ol class="sb-steps" data-redesign-steps>(.*?)</ol>', self.section, re.S)
+        self.assertIsNotNone(steps)  # directly after the figure: scenes.js marks the figure's next sibling
+        items = re.findall(r'<li><b>([^<]+)</b> ([^<]+)</li>', steps.group(1))
+        self.assertEqual([title for title, _ in items], self.STEPS)
+        self.assertEqual(steps.group(1).count('<li'), 4)
+        self.assertNotIn('aria-hidden', steps.group(0))
+        self.assertNotIn('aria-current', self.section)  # never shipped marked
+        # Before the existing video, which stays.
+        self.assertLess(self.section.index('data-redesign'), self.section.index('<video'))
+        self.assertLess(self.section.index('re-title'), self.section.index('data-redesign'))
+
+    def test_the_figure_uses_existing_images_only(self):
+        figure = self.figure.group(0)
+        urls = [url for value in re.findall(r'(?:src|srcset)="([^"]+)"', figure) for url in re.findall(r'/assets/\S+', value)]
+        self.assertTrue(urls)
+        for url in urls:
+            self.assertRegex(url, r'^/assets/images/detail-(?:wax|splash)-(?:800|1600)\.(?:jpg|avif)$')
+            self.assertTrue((ROOT / url.lstrip('/')).is_file() or url.endswith('.avif'))
+        parser = ImageCollector()
+        parser.feed(figure)
+        self.assertEqual(len(parser.images), 3)
+        for attrs, hidden in parser.images:
+            self.assertTrue(hidden)
+            self.assertEqual((attrs.get('alt'), attrs.get('loading'), attrs.get('width'), attrs.get('height')), ('', 'lazy', '800', '533'))
+        for needle in ('<video', 'url(', '<script', '<svg', 'http://', 'https://', '<iframe'):
+            self.assertNotIn(needle, figure)
+
+    def test_the_stylesheets_draw_only_the_finished_redesign(self):
+        css = re.sub(r'/\*.*?\*/', '', self.css, flags=re.S)
+        rules = [(selector, body) for selector, body in re.findall(r'([^{}]+)\{([^{}]*)\}', css) if '.rd' in selector]
+        self.assertGreaterEqual(len(rules), 6)
+        self.assertLessEqual(len(rules), 12)
+        for selector, body in rules:
+            with self.subTest(selector=selector.strip()):
+                for hiding in ('opacity:', 'visibility:', 'display:none', 'clip-path', 'transform', 'transition', 'animation'):
+                    self.assertNotIn(hiding, body)
+        for name in SHEETS:
+            if name != 'services.css':
+                with self.subTest(sheet=name):
+                    self.assertNotRegex((OUT / 'assets' / name).read_text(), r'\.rd[-{ .,:]')
+
+    def test_scenes_wipes_it_by_scroll_once_without_pinning(self):
+        head, branch = self.scenes.split("gsap.matchMedia().add('(prefers-reduced-motion: no-preference)', () => {", 1)
+        self.assertNotIn('data-redesign', head)
+        self.assertEqual(self.scenes.count("later($$('[data-redesign]'))"), 1)
+        block = branch.split("later($$('[data-redesign]'))", 1)[1].split('later(', 1)[0]
+        self.assertIn("tl(fig, { end: 'bottom 40%', scrub: 0.5 })", block)
+        self.assertIn("t.fromTo($$('.rd-after', fig), ...unmask('inset(0% 100% 0% 0%)', 1), 0);", block)
+        self.assertIn("li.ariaCurrent = i === Math.floor(t.progress() * 4) ? 'step' : null;", block)
+        self.assertIn('restore.push(() => steps.forEach(li => { li.ariaCurrent = null; }));', block)
+        for banned in ('pin', 'style', 'ScrollTrigger.create', 'snap', 'innerHTML'):
+            self.assertNotIn(banned, block)
+        self.assertIn('once: true, ...more', self.scenes)
+
+    def test_care_ticks_arrive_one_at_a_time(self):
+        # The .box ticks follow each other at least 0.25 s apart, in the card's one-off timeline (start 85%, once).
+        tick = re.search(r"card\('\[data-month\]', '\.box', \{ opacity: 0, scale: 0\.6 \}, \{[^}]*stagger: ([\d.]+)[^}]*\}\);", self.scenes)
+        self.assertIsNotNone(tick)
+        self.assertGreaterEqual(float(tick.group(1)), 0.25)
+
+    def test_services_copy_makes_no_monitoring_price_or_rating_claims(self):
+        # The Care plan card is an example; nothing on the page promises watching, response times or results, quotes a
+        # price or shows ratings or testimonials.
+        text = self.main.lower()
+        for banned in ('monitor', '24/7', 'uptime', 'guarantee', 'automatic', 'testimonial', 'aggregaterating', 'ratingvalue',
+                       'reviewrating', 'itemprop="review', '★', '☆'):
+            with self.subTest(banned=banned):
+                self.assertNotIn(banned, text)
+        self.assertIsNone(re.search(r'(?:[$€£]|\baud\s?)\s?\d|\d\s?(?:aud|dollars)\b', text))
 
 
 class MotionQualityTests(unittest.TestCase):
@@ -3634,8 +3730,8 @@ class SocialClipTests(unittest.TestCase):
         self.assertLess(chap_a.index('re-title'), chap_a.index('<video'))
         care = re.search(r'<section class="sec" id="care".*?</section>', services, re.S).group(0)
         self.assertIn('cendavo-social-care-plan-540.mp4', care)
-        self.assertLess(care.index('care-title'), care.index('Every month'))
-        self.assertLess(care.index('Every month'), care.index('cendavo-social-care-plan-540.mp4'))
+        self.assertLess(care.index('care-title'), care.index('This month'))
+        self.assertLess(care.index('This month'), care.index('cendavo-social-care-plan-540.mp4'))
         work = self.main['work/index.html']
         intro = re.search(r'<section class="pg-hero wk-hero".*?<ul class="wrap wk-index"', work, re.S).group(0)
         self.assertIn('cendavo-social-3-signs-540.mp4', intro)
