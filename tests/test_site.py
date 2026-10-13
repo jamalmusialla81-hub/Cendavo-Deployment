@@ -1258,7 +1258,7 @@ def normalise_copy(text):
 # Task 51: the only operational commitments an inner page may state, each copied word for word from the owner's draft
 # (docs/OWNER_DRAFT_POLICIES.md, which the owner confirms before launch). Exact phrases per route, never a pattern.
 DRAFT_POLICY_PHRASES = {
-    'pricing/index.html': ('20–30 minute call or video chat', 'sent in writing after the consultation',
+    'pricing/index.html': ('20–30 minute call or text', 'sent in writing after the consultation',
                            '2–4 weeks from approved quote', "30 days' notice"),
 }
 OWNER_DRAFT = Path(__file__).resolve().parents[1] / 'docs/OWNER_DRAFT_POLICIES.md'
