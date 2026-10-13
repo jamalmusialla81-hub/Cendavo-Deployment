@@ -69,9 +69,10 @@
 }
 /* Pause motion (Task 41, WCAG 2.2.2), one per page that moves. Task 46: it lives in the header pill, after the logo and
    before the menu button, so it can never cover page content (it used to float in the bottom corner). One style for every
-   page, matching the menu button. Its name stays "Pause motion"; aria-pressed carries the state and the icon follows it:
-   pause bars, then a play triangle on an ink button once pressed. Both are drawn with borders, so they survive forced
-   colours (the pressed button opts out of them, and ::before inherits that). */
+   page, matching the menu button. Task 59: its words say what a press does ("Pause motion", then "Play motion" once
+   paused; site.js sets them, with aria-pressed) and aria-pressed drives the icon: pause bars, then a play triangle on an
+   ink button. Both are
+   drawn with borders, so they survive forced colours (the paused button opts out of them, and ::before inherits that). */
 .motion-btn{display:inline-flex;flex:none;align-items:center;justify-content:center;gap:8px;min-height:44px;min-width:44px;padding:0 16px;border:1px solid rgba(14,14,13,.12);border-radius:var(--radius-pill);background:rgba(255,255,255,.5);color:var(--ink);font:600 .875rem/1 var(--font-display)}
 .motion-btn::before{content:"";flex:none;width:8px;height:10px;border-inline:2.5px solid currentColor}
 .motion-btn[aria-pressed="true"]::before{width:0;height:0;margin-left:2px;border-inline:0;border-block:6px solid transparent;border-left:10px solid currentColor}
@@ -80,7 +81,7 @@
 @media(forced-colors:active){.motion-btn[aria-pressed="true"]{forced-color-adjust:none;border-color:ButtonText;background:ButtonText;color:ButtonFace}}
 /* Below 1200px the header row has no room for the words (tablets keep the consultation button beside the menu button;
    1081-1199px shows every link), so the button is a 44x44 icon. The words stay in it at font-size 0: still its accessible
-   name, "Pause motion", for screen readers and voice control. */
+   name ("Pause motion" or "Play motion") for screen readers and voice control. */
 @media(max-width:1199px){
 .motion-btn{width:44px;height:44px;padding:0;gap:0;font-size:0;line-height:0}
 }

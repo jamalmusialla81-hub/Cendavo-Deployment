@@ -50,19 +50,20 @@ if (header) {
   header.addEventListener('focusin', showHeader);
 }
 // Pause motion (Task 41, WCAG 2.2.2): build_site.py puts one button in the header (Task 46) on every page with ongoing
-// motion (WebGL, the drifting atmosphere, the marquee, video loops). Its name stays "Pause motion"; aria-pressed is the
-// state, and glass.css swaps its icon from it. It works on its own, video or not: it holds the shared state
+// motion (WebGL, the drifting atmosphere, the marquee, video loops). Task 59 (owner-mandated): its visible name follows the
+// state ("Pause motion" while motion runs, "Play motion" once paused) and aria-pressed is "true" while paused; glass.css
+// swaps its icon (pause bars, then a play triangle) and home.js reads the state from aria-pressed. It works on its own,
+// video or not: it holds the shared state
 // window.__glass.paused and tells every listener through __glass.onPauseChange (the pauseFns fan-out, which glass.js,
-// reel.js and the WebGL scenes join). It is shown once this runs and stays put; reduced motion or Save-Data start it pressed.
+// reel.js and the WebGL scenes join). It is shown once this runs and stays put; reduced motion or Save-Data start it paused.
 {
   const toggle = document.querySelector('[data-motion-toggle]');
   if (toggle) {
     const G = window.__glass = window.__glass || { paused: false, heroP: 0, pointer: { x: 0, y: 0 } };
     const fns = G.pauseFns = G.pauseFns || [];
     if (!G.onPauseChange) G.onPauseChange = paused => fns.forEach(fn => fn(paused));
-    const still = Boolean(window.matchMedia?.('(prefers-reduced-motion: reduce)').matches);
-    G.paused = still || Boolean(window.navigator?.connection?.saveData);
-    const show = () => toggle.setAttribute('aria-pressed', String(G.paused));
+    G.paused = Boolean(window.matchMedia?.('(prefers-reduced-motion: reduce)').matches || window.navigator?.connection?.saveData);
+    const show = () => { toggle.setAttribute('aria-pressed', G.paused); toggle.textContent = (G.paused ? 'Play' : 'Pause') + ' motion'; };
     toggle.addEventListener('click', () => {
       G.paused = !G.paused;
       show();

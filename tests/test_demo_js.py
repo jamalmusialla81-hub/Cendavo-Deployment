@@ -322,7 +322,7 @@ async function runHero(env) {
   const loopSource = name => { const s = element('source'); s.dataset.src = '/assets/video/loop-hb-' + name + '.mp4'; return s; };
   const laptop = makeVideo(env, 'laptop', loopSource('desktop')), phone = makeVideo(env, 'phone', loopSource('phone'));
   laptop.dataset.loop = 'wide'; phone.dataset.loop = '';
-  const motion = element('motion'); motion.hidden = true; motion.attrs['aria-pressed'] = 'false';
+  const motion = element('motion'); motion.hidden = true; motion.attrs['aria-pressed'] = 'false'; motion.textContent = 'Pause motion';
   const buttons = [0, 6.5, 8].map((t, i) => { const b = element('chapter' + i); b.dataset.t = String(t); return b; });
   const list = element('chapters', { 'button[data-t]': buttons }); list.hidden = true;
   const root = element('html'); root.classList = classList(['js']);
@@ -432,7 +432,7 @@ async function run(env) {
   });
   // Work also has device loops, so Pause motion is wired; one stands in for them.
   const loop = makeVideo('loop'); loop.dataset.loop = '';
-  const motion = element('motion'); motion.hidden = true; motion.attrs['aria-pressed'] = 'false';
+  const motion = element('motion'); motion.hidden = true; motion.attrs['aria-pressed'] = 'false'; motion.textContent = 'Pause motion';
   motion.classList = classList(['motion-btn', 'motion-fab']);
   // The About film: a large reel with its button, progress bar and time.
   const film = makeVideo('film'); film.parts.source[0].attrs.src = '/assets/video/cendavo-launch-1600.mp4'; film.attrs.controls = '';
@@ -1862,7 +1862,7 @@ function run(env) {
     Object.assign(v, { paused: true, load() {}, play() { v.paused = false; return Promise.resolve(); }, pause() { v.paused = true; } });
     return v;
   });
-  const motion = element('motion'); motion.hidden = true; motion.attrs['aria-pressed'] = 'false';
+  const motion = element('motion'); motion.hidden = true; motion.attrs['aria-pressed'] = 'false'; motion.textContent = 'Pause motion';
   const parts = { 'video[data-loop]': env.noLoops ? [] : videos, '[data-motion-toggle]': [motion] };
   const doc = { documentElement: element('html'), readyState: 'complete', hidden: false, listeners: {}, addEventListener(type, fn) { (this.listeners[type] = this.listeners[type] || []).push(fn); },
     querySelector: s => (parts[s] || [])[0] || null, querySelectorAll: s => parts[s] || [] };
@@ -1876,15 +1876,15 @@ function run(env) {
   // Task 41: Pricing and Contact have WebGL but no video loops, and only Pricing loads reel.js; neither hides the button.
   vm.runInNewContext(env.noReel ? source.split('\n// Task 41 reel.js\n')[0] : source, { window: win, document: doc, getComputedStyle: () => ({}) });
   if (env.lateScene) (win.__glass.pauseFns = win.__glass.pauseFns || []).push(p => calls.push(p));  // a scene imported after idle
-  const out = { initial: win.__glass.paused, hidden: motion.hidden, aria: motion.attrs['aria-pressed'], playing: videos.map(v => !v.paused) };
+  const out = { initial: win.__glass.paused, hidden: motion.hidden, state: motion.attrs['aria-pressed'], name: motion.textContent, pausedAttr: 'data-paused' in motion.attrs, playing: videos.map(v => !v.paused) };
   if (env.offScreen) observers.forEach(o => o.targets.forEach(t => o.cb([{ isIntersecting: false, target: t }])));
   else observers.forEach(o => o.targets.forEach(t => o.cb([{ isIntersecting: true, target: t }])));
   out.hiddenAfterScroll = motion.hidden;
   out.playing = videos.map(v => !v.paused);
   (motion.listeners.click || []).forEach(fn => fn({ type: 'click' }));
-  out.pressed = { paused: win.__glass.paused, aria: motion.attrs['aria-pressed'], playing: videos.map(v => !v.paused) };
+  out.pressed = { paused: win.__glass.paused, state: motion.attrs['aria-pressed'], name: motion.textContent, playing: videos.map(v => !v.paused) };
   (motion.listeners.click || []).forEach(fn => fn({ type: 'click' }));
-  out.released = { paused: win.__glass.paused, aria: motion.attrs['aria-pressed'], playing: videos.map(v => !v.paused) };
+  out.released = { paused: win.__glass.paused, state: motion.attrs['aria-pressed'], name: motion.textContent, playing: videos.map(v => !v.paused) };
   out.calls = calls;
   out.listeners = (motion.listeners.click || []).length;
   return out;
@@ -2226,8 +2226,8 @@ const { pathToFileURL } = require('url');
         shared = r['shared']
         self.assertFalse(shared['initial'])
         self.assertEqual(shared['playing'], [True, True])
-        self.assertEqual(shared['pressed'], {'paused': True, 'aria': 'true', 'playing': [False, False]})
-        self.assertEqual(shared['released'], {'paused': False, 'aria': 'false', 'playing': [True, True]})
+        self.assertEqual(shared['pressed'], {'paused': True, 'state': 'true', 'name': 'Play motion', 'playing': [False, False]})
+        self.assertEqual(shared['released'], {'paused': False, 'state': 'false', 'name': 'Pause motion', 'playing': [True, True]})
         self.assertEqual(shared['calls'], [True, False])  # window.__glass.onPauseChange, which the scene and glass.js listen to
         self.assertEqual(r['alone']['pressed']['paused'], True)  # the shared state exists even before glass.js loads
         save = r['saveData']
@@ -2244,18 +2244,19 @@ const { pathToFileURL } = require('url');
                 case = r[name]
                 self.assertFalse(case['hidden'])
                 self.assertFalse(case['hiddenAfterScroll'])
-                self.assertEqual(case['aria'], 'false')
-                self.assertEqual(case['pressed']['aria'], 'true')
+                # Task 59: aria-pressed and the visible name follow the state together (no second state attribute).
+                self.assertEqual((case['state'], case['name'], case['pausedAttr']), ('false', 'Pause motion', False))
+                self.assertEqual((case['pressed']['state'], case['pressed']['name']), ('true', 'Play motion'))
                 self.assertTrue(case['pressed']['paused'])
-                self.assertEqual(case['released']['aria'], 'false')
+                self.assertEqual((case['released']['state'], case['released']['name']), ('false', 'Pause motion'))
                 self.assertFalse(case['released']['paused'])
                 self.assertEqual(case['calls'], [True, False])  # the WebGL pause hook fired once each way
                 self.assertEqual(case['listeners'], 1)  # one owner: reel.js adds no second click handler
         self.assertEqual(r['offScreen']['playing'], [False, False])  # nothing on screen plays, the button stays
         reduced = r['reducedNoLoops']
         self.assertTrue(reduced['initial'])  # reduced motion: starts pressed
-        self.assertEqual((reduced['aria'], reduced['hidden']), ('true', False))
-        self.assertEqual(reduced['pressed']['aria'], 'false')  # a press releases it
+        self.assertEqual((reduced['state'], reduced['name'], reduced['hidden']), ('true', 'Play motion', False))
+        self.assertEqual((reduced['pressed']['state'], reduced['pressed']['name']), ('false', 'Pause motion'))  # a press releases it
 
     def test_glass_layer_keeps_lenis_drift_and_refraction_to_where_they_belong(self):
         r = self.node_json(GLASS_SCRIPT, GLASS)
@@ -2364,10 +2365,12 @@ console.log(JSON.stringify(out));
 
 
 # Task 46: site.js's Pause motion toggle on its own (it now sits in the header): its initial state from reduced motion and
-# Save-Data, and a press flipping aria-pressed, window.__glass.paused and every pauseFns listener. The name never changes.
+# Save-Data, and a press flipping aria-pressed, window.__glass.paused and every pauseFns listener. Task 59 (owner-mandated):
+# the visible name follows the state too ("Pause motion" while motion runs, "Play motion" once paused).
 SITE_TOGGLE_SCRIPT = HARNESS + r"""
 const source = fs.readFileSync(process.argv[1], 'utf8');
 function run(env) {
+  // As build_site.py ships it.
   const toggle = element('toggle'); toggle.hidden = true; toggle.attrs['aria-pressed'] = 'false'; toggle.textContent = 'Pause motion';
   const parts = { '[data-motion-toggle]': [toggle] };
   const doc = { documentElement: element('html'), listeners: {}, addEventListener(type, fn) { (this.listeners[type] = this.listeners[type] || []).push(fn); },
@@ -2376,7 +2379,7 @@ function run(env) {
   const calls = [];
   win.__glass = { paused: false, heroP: 0, pointer: { x: 0, y: 0 }, pauseFns: [p => calls.push(['a', p]), p => calls.push(['b', p])] };
   vm.runInNewContext(source, { window: win, document: doc, getComputedStyle: () => ({}) });
-  const snap = () => ({ aria: toggle.attrs['aria-pressed'], paused: win.__glass.paused, name: toggle.textContent, label: toggle.getAttribute('aria-label') });
+  const snap = () => ({ aria: toggle.getAttribute('aria-pressed'), paused: win.__glass.paused, name: toggle.textContent, label: toggle.getAttribute('aria-label'), other: toggle.getAttribute('data-paused') });
   const out = { hidden: toggle.hidden, load: snap() };
   (toggle.listeners.click || []).forEach(fn => fn({ type: 'click' })); out.first = snap();
   (toggle.listeners.click || []).forEach(fn => fn({ type: 'click' })); out.second = snap();
@@ -2456,11 +2459,13 @@ class HeaderPauseAndDragScriptTests(unittest.TestCase):
             with self.subTest(case=case):
                 out = r[case]
                 self.assertFalse(out['hidden'])  # revealed once site.js runs
-                on, off = str(start).lower(), str(not start).lower()
-                name = {'name': 'Pause motion', 'label': None}
-                self.assertEqual(out['load'], {'aria': on, 'paused': start, **name})
-                self.assertEqual(out['first'], {'aria': off, 'paused': not start, **name})
-                self.assertEqual(out['second'], {'aria': on, 'paused': start, **name})
+                # Task 59 (owner-mandated): aria-pressed is "true" while paused and "false" while running, and the visible
+                # name follows the same state; no aria-label overrides the name and no second attribute holds the state.
+                state = lambda paused: {'aria': str(paused).lower(), 'paused': paused, 'label': None, 'other': None,
+                                        'name': 'Play motion' if paused else 'Pause motion'}
+                self.assertEqual(out['load'], state(start))
+                self.assertEqual(out['first'], state(not start))
+                self.assertEqual(out['second'], state(start))  # two presses return to the start
                 # Every listener in the fan-out hears each press, in order.
                 self.assertEqual(out['calls'], [['a', not start], ['b', not start], ['a', start], ['b', start]])
 
@@ -2832,7 +2837,9 @@ const SKIP = ['duration', 'stagger', 'ease', 'clearProps', 'scrollTrigger', 'del
   'onUpdate', 'paused', 'defaults', 'transformPerspective', 'transformOrigin'];
 const TRANSFORM = ['x', 'y', 'xPercent', 'yPercent', 'scale', 'rotationX', 'rotationY', 'rotationZ', 'z'];
 function liveGsap(env, resolve) {
-  const triggers = [], top = [], log = { order: [], sleeps: 0, wakes: 0, awake: true, refreshes: 0, listeners: {} };
+  // Task 59: st models ScrollTrigger's own state: enabled (its requestAnimationFrame loop and listeners run) and every
+  // disable/enable call with its arguments.
+  const triggers = [], top = [], log = { order: [], sleeps: 0, wakes: 0, awake: true, refreshes: 0, listeners: {}, st: { enabled: true, calls: [], loops: 1 } };
   const wake = () => { if (!log.awake) { log.awake = true; log.wakes++; log.order.push('woken'); } };
   const list = t => [].concat(resolve(t)).filter(Boolean);
   const apply = (targets, vars) => list(targets).forEach((el, i) => {
@@ -2893,8 +2900,12 @@ function liveGsap(env, resolve) {
       sleep() { log.awake = false; log.sleeps++; log.order.push('sleep'); }, wake() { log.order.push('wake'); wake(); } },
   };
   const ScrollTrigger = { getAll: () => triggers.slice(), batch: (targets, vars) => targets.map(el => trigger(Object.assign({}, vars, { trigger: el }), null)),
-    create: v => trigger(v, null), update() {}, refresh() { log.refreshes++; (log.listeners.refresh || []).forEach(fn => fn()); },
-    addEventListener(type, fn) { (log.listeners[type] = log.listeners[type] || []).push(fn); } };
+    create: v => trigger(v, null), update() {}, refresh() { log.refreshes++; log.order.push('refresh'); (log.listeners.refresh || []).forEach(fn => fn()); },
+    addEventListener(type, fn) { (log.listeners[type] = log.listeners[type] || []).push(fn); },
+    // As the vendored ScrollTrigger 3.13: disable ends its frame loop (and listeners); disable(false) keeps each animation
+    // where it is. enable starts a new loop every time it is called (twice would leave two running) and makes delayed calls.
+    disable(revert) { log.st.calls.push(['disable', revert === undefined ? 'default' : revert]); log.st.enabled = false; log.st.loops = 0; log.order.push('st.disable'); },
+    enable() { log.st.calls.push(['enable']); log.st.enabled = true; log.st.loops++; log.order.push('st.enable'); wake(); } };
   return { gsap, ScrollTrigger, log, triggers, top };
 }
 const low = el => { el.getBoundingClientRect = () => ({ left: 0, top: 3000, width: 400, height: 300 }); return el; };
@@ -2939,7 +2950,8 @@ function run(page, env) {
     navigator: { connection: { saveData: Boolean(env.saveData) }, userAgentData: { brands: [{ brand: 'Firefox' }] } }, scrollY: 0, location: { pathname: '/' } });
   const errors = [];
   scripts.forEach(name => { try { vm.runInNewContext(read(name), { window: win, document: doc, getComputedStyle: () => ({ display: 'none' }), Event: class {} }); } catch (e) { errors.push(name + ': ' + e); } });
-  const out = { errors, before: hiddenOf(tracked), awake: live.log.awake, sleeps: live.log.sleeps, lenisMade, lenis: Boolean(win.__glass.lenis) };
+  const out = { errors, before: hiddenOf(tracked), awake: live.log.awake, sleeps: live.log.sleeps, lenisMade, lenis: Boolean(win.__glass.lenis),
+    st: { enabled: live.log.st.enabled, loops: live.log.st.loops, calls: live.log.st.calls.slice() } };
   if (env.midReveal) {
     // a reveal whose line was just crossed: its trigger fired (and, being once, went) and its tween is under way
     const t = live.triggers.find(x => x.vars.once && !x.animation);
@@ -2950,16 +2962,18 @@ function run(page, env) {
   (toggle.listeners.click || []).forEach(fn => fn({ type: 'click' }));
   out.pressed = { paused: win.__glass.paused, hidden: hiddenOf(tracked), awake: live.log.awake, order: live.log.order.slice(), lenis: Boolean(win.__glass.lenis),
     once: live.triggers.filter(t => t.vars.once).length, scrubs: live.triggers.filter(t => t.vars.scrub).map(t => t.dur),
-    running: live.top.filter(a => a.isActive()).length, cue: parts.cue ? parts.cue[0].classList.contains('on') : null };
+    running: live.top.filter(a => a.isActive()).length, cue: parts.cue ? parts.cue[0].classList.contains('on') : null,
+    st: { enabled: live.log.st.enabled, loops: live.log.st.loops, calls: live.log.st.calls.slice() } };
   live.log.order.length = 0;
   (toggle.listeners.click || []).forEach(fn => fn({ type: 'click' }));
   out.released = { paused: win.__glass.paused, hidden: hiddenOf(tracked), awake: live.log.awake, order: live.log.order.slice(), refreshes: live.log.refreshes,
-    lenis: Boolean(win.__glass.lenis), lenisMade, scrubs: live.triggers.filter(t => t.vars.scrub).map(t => t.dur) };
+    lenis: Boolean(win.__glass.lenis), lenisMade, scrubs: live.triggers.filter(t => t.vars.scrub).map(t => t.dur),
+    st: { enabled: live.log.st.enabled, loops: live.log.st.loops, calls: live.log.st.calls.slice() } };
   // a resize while paused again: ScrollTrigger refreshes (its delayed call woke the ticker); it settles and sleeps again
   (toggle.listeners.click || []).forEach(fn => fn({ type: 'click' }));
   live.gsap.set([], {});
   live.ScrollTrigger.refresh();
-  out.refreshedWhilePaused = { awake: live.log.awake };
+  out.refreshedWhilePaused = { awake: live.log.awake, st: { enabled: live.log.st.enabled, loops: live.log.st.loops } };
   return out;
 }
 const desktop = { width: 1440, height: 900, fine: true, reduce: false };
@@ -2991,16 +3005,27 @@ class PauseMotionSleepsGsapTests(unittest.TestCase):
                 order = pressed['order']
                 self.assertEqual(order[-1], 'sleep')
                 self.assertLess(order.index('lenis.destroy'), order.index('sleep'))
+                # Task 59: ScrollTrigger is switched off before the ticker sleeps, so its own frame loop ends too (no
+                # animation frame is requested while paused), and with revert false, so nothing on the page jumps.
+                self.assertTrue(case['st']['enabled'])
+                self.assertEqual(case['st']['calls'], [])
+                self.assertEqual(pressed['st'], {'enabled': False, 'loops': 0, 'calls': [['disable', False]]})
+                self.assertLess(order.index('st.disable'), order.index('sleep'))
                 released = case['released']
                 self.assertFalse(released['paused'])
                 self.assertEqual(released['hidden'], [])  # what was shown stays shown
                 self.assertTrue(released['awake'])
                 self.assertEqual(released['order'][0], 'wake')
                 self.assertEqual(released['refreshes'], 1)
+                # Task 59: released, ScrollTrigger is back (one loop, not two) after the ticker wakes, then re-measures.
+                self.assertEqual(released['st'], {'enabled': True, 'loops': 1, 'calls': [['disable', False], ['enable']]})
+                self.assertLess(released['order'].index('wake'), released['order'].index('st.enable'))
+                self.assertLess(released['order'].index('st.enable'), released['order'].index('refresh'))
                 self.assertTrue(released['lenis'])
                 self.assertEqual(released['lenisMade'], 2)
                 self.assertTrue(all(d not in (0, None) for d in released['scrubs']), released['scrubs'])  # easing again
                 self.assertFalse(case['refreshedWhilePaused']['awake'])
+                self.assertEqual(case['refreshedWhilePaused']['st'], {'enabled': False, 'loops': 0})  # paused again: off again
         self.assertTrue(r['innerMid']['midReveal'])
         self.assertTrue(r['inner']['pressed']['cue'])  # scenes finish in their shipped state (the card's cue class is back)
         self.assertTrue(r['inner']['released']['scrubs'])
@@ -3010,6 +3035,8 @@ class PauseMotionSleepsGsapTests(unittest.TestCase):
         self.assertEqual(save['before'], [])
         self.assertFalse(save['awake'])
         self.assertFalse(save['lenis'])
+        # Task 59: and ScrollTrigger is off from the start (never enabled again until a press releases it).
+        self.assertEqual(save['st'], {'enabled': False, 'loops': 0, 'calls': [['disable', False]]})
         # Reduced motion: nothing is held, the ticker sleeps at once and nothing is added to it.
         reduced = r['reduced']
         self.assertEqual(reduced['errors'], [])
@@ -3017,6 +3044,83 @@ class PauseMotionSleepsGsapTests(unittest.TestCase):
         self.assertFalse(reduced['awake'])
         self.assertEqual(reduced['sleeps'], 1)
         self.assertEqual(reduced['lenisMade'], 0)
+        # Task 59: reduced motion switches ScrollTrigger off at once (its frame loop used to run all the time) and never
+        # back on, whatever the Pause motion button does (glass.js joins no pause listener under reduced motion).
+        self.assertEqual(reduced['st'], {'enabled': False, 'loops': 0, 'calls': [['disable', False]]})
+        self.assertEqual(reduced['released']['st'], reduced['st'])
+        self.assertEqual(reduced['refreshedWhilePaused']['st'], {'enabled': False, 'loops': 0})
+
+
+
+# Task 59 (owner-mandated performance follow-up): reel.js gives every video whose still waits in data-poster its poster only
+# when it comes near the screen, including a "wide" loop that phones never play but still show (Work's laptop screens),
+# and on phones the showreel's phone still replaces its wide one before either is fetched.
+LAZY_POSTER_SCRIPT = HARNESS + r"""
+const source = fs.readFileSync(process.argv[1], 'utf8');
+function run(env) {
+  const observers = [];
+  class FakeObserver { constructor(cb, options) { this.cb = cb; this.options = options || {}; this.targets = []; this.off = false; observers.push(this); }
+    observe(t) { this.targets.push(t); } disconnect() { this.off = true; } }
+  const video = (name, data, src) => {
+    const s = element('source'); if (src) s.attrs.src = src; else s.dataset.src = '/assets/video/' + name + '.mp4';
+    const v = element(name, { source: [s] });
+    Object.assign(v, { paused: true, loads: 0, load() { v.loads++; }, play() { v.paused = false; return Promise.resolve(); }, pause() { v.paused = true; } });
+    Object.assign(v.dataset, data);
+    return v;
+  };
+  // As pages/index.html and pages/work.html ship them: stills in data-poster, the showreel's file in src (preload="none").
+  const reelVideo = video('reel', { poster: '/assets/glass/glass-reel-poster.jpg', narrowSrc: '/assets/glass/glass-reel-vertical-720.mp4',
+    narrowPoster: '/assets/glass/glass-reel-vertical-poster.jpg' }, '/assets/glass/glass-reel-1600.mp4');
+  const laptop = video('laptop', { loop: 'wide', poster: '/assets/video/loop-hb-desktop-poster-800.jpg' });
+  const phone = video('phone', { loop: '', poster: '/assets/video/loop-hb-phone-poster-390.jpg' });
+  const toggle = element('toggle'); toggle.textContent = 'Play showreel';
+  const reel = element('reel', { video: [reelVideo], '[data-reel-toggle]': [toggle] });
+  const all = [reelVideo, laptop, phone];
+  const parts = { '[data-reel]': [reel], 'video[data-loop]': [laptop, phone], 'video[data-poster]': all };
+  const doc = { documentElement: element('html'), readyState: 'complete', hidden: false, listeners: {},
+    addEventListener(type, fn) { (this.listeners[type] = this.listeners[type] || []).push(fn); },
+    querySelector: s => (parts[s] || [])[0] || null, querySelectorAll: s => parts[s] || [] };
+  const extra = { navigator: { connection: {} }, requestAnimationFrame: () => 1, cancelAnimationFrame() {} };
+  if (!env.noObserver) extra.IntersectionObserver = FakeObserver;
+  const { win } = makeWindow(env, extra);
+  vm.runInNewContext(source, { window: win, document: doc, setImmediate });
+  const posters = () => all.map(v => v.getAttribute('poster'));
+  const near = observers.filter(o => o.options.rootMargin);
+  const fire = on => near.forEach(o => o.targets.forEach(t => o.cb([{ isIntersecting: on, target: t }])));
+  const out = { start: posters(), nearObservers: near.map(o => [o.targets.map(t => t.name), o.options.rootMargin]) };
+  fire(false); out.far = posters();
+  fire(true); out.near = posters();
+  out.disconnected = near.every(o => o.off);
+  out.reelSource = reelVideo.parts.source[0].attrs.src;
+  out.loopSources = [laptop, phone].map(v => v.parts.source[0].attrs.src || null);
+  return out;
+}
+console.log(JSON.stringify({ phone: run({ width: 390, height: 844, fine: false, reduce: false }),
+  desktop: run({ width: 1440, height: 900, fine: true, reduce: false }),
+  noObserver: run({ width: 1440, height: 900, fine: true, reduce: false, noObserver: true }) }));
+"""
+
+
+class LazyPosterScriptTests(unittest.TestCase):
+    def test_stills_wait_until_near_the_screen_on_every_width_and_phones_fetch_only_their_own(self):
+        out = subprocess.run(['node', '-e', LAZY_POSTER_SCRIPT, str(REEL)], capture_output=True, text=True, check=True)
+        r = json.loads(out.stdout)
+        wide = ['/assets/glass/glass-reel-poster.jpg', '/assets/video/loop-hb-desktop-poster-800.jpg', '/assets/video/loop-hb-phone-poster-390.jpg']
+        phone = ['/assets/glass/glass-reel-vertical-poster.jpg'] + wide[1:]
+        for name, expected in (('phone', phone), ('desktop', wide)):
+            with self.subTest(width=name):
+                case = r[name]
+                self.assertEqual(case['start'], [None, None, None])  # nothing is fetched with the first load
+                self.assertEqual(case['far'], [None, None, None])
+                # Near the screen (half a screen ahead) each gets its still, including the laptop loop phones never play.
+                self.assertEqual(case['near'], expected)
+                self.assertEqual(case['nearObservers'], [[['reel'], '50% 0px'], [['laptop'], '50% 0px'], [['phone'], '50% 0px']])
+                self.assertTrue(case['disconnected'])
+                self.assertEqual(case['loopSources'], [None, None])  # no loop file before it plays
+        self.assertEqual(r['phone']['reelSource'], '/assets/glass/glass-reel-vertical-720.mp4')
+        self.assertEqual(r['desktop']['reelSource'], '/assets/glass/glass-reel-1600.mp4')
+        # Without IntersectionObserver every still is set at once (nothing stays blank).
+        self.assertEqual(r['noObserver']['start'], wide)
 
 
 if __name__ == '__main__':

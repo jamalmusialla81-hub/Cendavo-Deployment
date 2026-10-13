@@ -1,7 +1,8 @@
 // Liquid Glass shell (Task 37): pointer light, Chromium edge refraction, Lenis and the atmosphere drift. Hides nothing;
-// reduced motion: no Lenis, drift or light, and GSAP's ticker sleeps; Save-Data: no refraction maps. Task 48: Pause motion
-// first shows everything GSAP still holds (settle: the reveals and openings of motion.js, scenes.js and home.js), then ends
-// Lenis (native scrolling) and puts GSAP's ticker to sleep; releasing it wakes the ticker and brings Lenis back.
+// reduced motion: no Lenis, drift or light, GSAP's ticker sleeps and ScrollTrigger is off; Save-Data: no refraction maps.
+// Task 48: Pause motion first shows everything GSAP still holds (settle: the reveals and openings of motion.js, scenes.js
+// and home.js), then ends Lenis (native scrolling), switches ScrollTrigger off (Task 59) and puts GSAP's ticker to sleep;
+// releasing it wakes the ticker and brings ScrollTrigger and Lenis back.
 (() => {
   const win = window, doc = document, root = doc.documentElement;
   const motionOK = Boolean(win.matchMedia?.('(prefers-reduced-motion: no-preference)').matches);
@@ -52,7 +53,8 @@
   const defs = doc.querySelector('[data-lg-defs]');
   if (defs && motionOK && !saveData && brands.some(b => /Chromium/.test(b.brand))) {
     root.classList.add('lg-refract');
-    const NS = defs.namespaceURI, cache = {}; // the SVG namespace, read from the page's own <defs>
+    // the SVG namespace, read from the page's own <defs>
+    const NS = defs.namespaceURI, cache = {};
     let n = 0;
     const map = (w, h, r, band) => {
       const cw = Math.max(2, Math.round(w / 2)), ch = Math.max(2, Math.round(h / 2));
@@ -115,10 +117,18 @@
     });
     gsap.globalTimeline.getChildren(false, true, true).forEach(a => { if (a.isActive()) a.progress(1); });
   };
-  // Under reduced motion nothing animates, so the ticker never runs and nothing is added to it. Any new tween wakes it (a
-  // ScrollTrigger refresh after a resize makes one, and may rebuild reveals): after each refresh it settles and sleeps again.
+  // Task 59: a sleeping ticker is not enough. While enabled, ScrollTrigger runs its own requestAnimationFrame loop every
+  // frame (the vendored _rafBugFix, ended only by ScrollTrigger.disable) and listens to scroll, wheel, touch and resize.
+  // stOff(true) ends all of that; false keeps every animation where it is (no revert, so nothing jumps). stOff(false)
+  // brings it back (enable() again restores the listeners and each trigger); it runs only after a disable, since enabling
+  // twice would start a second loop.
+  let stIsOff = false;
+  const stOff = off => { if (off !== stIsOff) { stIsOff = off; off ? ScrollTrigger.disable?.(false) : ScrollTrigger.enable?.(); } };
+  // Under reduced motion nothing animates, so the ticker never runs and nothing is added to it, and ScrollTrigger is off.
+  // Any new tween wakes the ticker (a ScrollTrigger refresh makes one, and may rebuild reveals): after each refresh it
+  // settles and sleeps again.
   if (ticker) ScrollTrigger.addEventListener('refresh', () => { if (!motionOK || G.paused) { settle(); ticker.sleep(); } });
-  if (!motionOK) { if (ticker) ticker.sleep(); return; }
+  if (!motionOK) { if (ticker) { stOff(true); ticker.sleep(); } return; }
 
   // Lenis on GSAP's ticker (touch stays native). Lenis 1.1.0 calls options.prevent on every wheel: its default, false, threw.
   const lenis = () => (G.lenis = new win.Lenis({ lerp: 0.1, smoothWheel: true, prevent: () => false }));
@@ -132,11 +142,12 @@
       if (on) { const l = lenis(); l.on('scroll', ScrollTrigger.update); tick = ticker.add(t => l.raf(t * 1000)); }
       else { ticker.remove(tick); G.lenis.destroy(); G.lenis = null; }
     };
-    // Pause motion pressed: everything held is shown, Lenis goes, then the ticker sleeps. Released: the ticker wakes, scrubs
-    // ease again, ScrollTrigger re-measures and Lenis comes back. What was shown stays shown.
+    // Pause motion pressed: everything held is shown, Lenis goes, ScrollTrigger is switched off, then the ticker sleeps: no
+    // animation frame is requested while paused. Released: the ticker wakes, ScrollTrigger comes back, scrubs ease again,
+    // it re-measures and Lenis comes back. What was shown stays shown.
     const hold = paused => {
-      if (paused) { settle(); smooth(false); ticker.sleep(); return; }
-      ticker.wake(); scrubs(true); ScrollTrigger.refresh(); smooth(true);
+      if (paused) { settle(); smooth(false); stOff(true); ticker.sleep(); return; }
+      ticker.wake(); stOff(false); scrubs(true); ScrollTrigger.refresh(); smooth(true);
     };
     pauseFns.push(hold);
     // Save-Data: Pause motion starts pressed.

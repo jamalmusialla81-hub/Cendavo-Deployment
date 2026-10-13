@@ -838,8 +838,9 @@ class DesignSystemTests(unittest.TestCase):
                 if not attrs['alt'].strip():
                     self.assertTrue(hidden, 'an empty alt is only allowed inside an aria-hidden mockup')
                 candidates = dict(reversed(part.split()) for part in attrs['srcset'].split(','))
-                self.assertEqual(set(candidates), {'800w', '1600w'})
-                small, large = candidates['800w'], candidates['1600w']
+                self.assertEqual(set(candidates), photo_widths(attrs['sizes']))
+                small = candidates['800w']
+                large = candidates.get('1600w', small.replace('-800.jpg', '-1600.jpg'))
                 self.assertRegex(small, r'^/assets/images/[a-z-]+-800\.jpg$')
                 self.assertEqual(large, small.replace('-800.jpg', '-1600.jpg'))
                 self.assertIn(attrs['src'], (small, large))
@@ -1324,8 +1325,9 @@ class InnerPageTests(unittest.TestCase):
         for route in MOTION_ROUTES:
             for frame in re.findall(r'<(?:div|figure|span)[^>]*data-parallax[^>]*>(.*?)</(?:div|figure|span)>', self.main[route], re.S):
                 with self.subTest(route=route, frame=frame[:50]):
-                    # Exactly one photo: its <picture> (AVIF source, then the JPEG img) and nothing else.
-                    self.assertRegex(frame.strip(), r'^<picture><source type="image/avif" [^>]*><img [^>]*></picture>$')
+                    # Exactly one photo: its <picture> (AVIF sources, the phone-only one first since Task 59, then the
+                    # JPEG img) and nothing else.
+                    self.assertRegex(frame.strip(), r'^<picture>(?:<source type="image/avif" media="\(max-width: 640px\)" [^>]*>)?<source type="image/avif" [^>]*><img [^>]*></picture>$')
 
     def test_images_on_every_route_are_local_sized_and_described(self):
         for route in self.ROUTES:
@@ -1344,8 +1346,9 @@ class InnerPageTests(unittest.TestCase):
                     if not attrs['alt'].strip():
                         self.assertTrue(hidden, 'decorative images must sit inside an aria-hidden wrapper')
                     candidates = dict(reversed(part.split()) for part in attrs['srcset'].split(','))
-                    self.assertEqual(set(candidates), {'800w', '1600w'})
-                    small, large = candidates['800w'], candidates['1600w']
+                    self.assertEqual(set(candidates), photo_widths(attrs['sizes']))
+                    small = candidates['800w']
+                    large = candidates.get('1600w', small.replace('-800.jpg', '-1600.jpg'))
                     self.assertRegex(small, r'^/assets/images/[a-z-]+-800\.jpg$')
                     self.assertEqual(large, small.replace('-800.jpg', '-1600.jpg'))
                     self.assertIn(attrs['src'], (small, large))
@@ -1539,6 +1542,14 @@ class InnerPageTests(unittest.TestCase):
         self.assertEqual(weights, {400, 700})
 
 
+def photo_widths(sizes):
+    """Task 59: the srcset widths a photo offers. Shown at a fixed 400 CSS px or less (marquee tiles at 320px, thumbnails
+    at 200px and below), only the 800w file: at least 2x density there, where DPR3 phones used to fetch 1600w. Anything
+    larger keeps 800w and 1600w."""
+    fixed = re.fullmatch(r'(\d+)px', sizes.strip())
+    return {'800w'} if fixed and int(fixed.group(1)) <= 400 else {'800w', '1600w'}
+
+
 class PictureCollector(HTMLParser):
     """Collect every <img> with its parent tag name and the <source> elements of its enclosing <picture>."""
 
@@ -1589,21 +1600,35 @@ class ImagePerformanceAndSharingTests(unittest.TestCase):
             parser = PictureCollector()
             parser.feed(main_of(self.html[route]))
             total += len(parser.images)
+            route_sources = 0
             for attrs, parent, sources in parser.images:
                 with self.subTest(route=route, src=attrs.get('src')):
                     self.assertEqual(parent, 'picture')
-                    self.assertEqual(len(sources), 1)
-                    source, source_parent = sources[0]
+                    jpegs = [part.split()[0] for part in attrs['srcset'].split(',')]
+                    self.assertIn(len(jpegs), (1, 2))
+                    # Task 59: a photo offering 800w and 1600w gets a phone-only AVIF source first (800w only); a photo
+                    # that only ever needs 800w (Task 59's small fixed sizes) has the one source.
+                    self.assertEqual(len(sources), len(jpegs))
+                    route_sources += len(sources)
+                    source, source_parent = sources[-1]
                     self.assertEqual(source_parent, 'picture')
                     self.assertEqual(source.get('type'), 'image/avif')
+                    self.assertNotIn('media', source)
                     self.assertEqual(source.get('srcset'), attrs['srcset'].replace('.jpg', '.avif'))
                     self.assertEqual(source.get('sizes'), attrs['sizes'])
                     self.assertTrue(attrs['src'].endswith('.jpg'))  # the fallback img stays JPEG
                     urls = [part.split()[0] for part in source['srcset'].split(',')]
-                    self.assertEqual(len(urls), 2)
+                    self.assertEqual(len(urls), len(jpegs))
                     for url in urls:
                         self.assertRegex(url, r'^/assets/images/[a-z-]+-(?:800|1600)\.avif$')
                         self.assertTrue((OUT / url.lstrip('/')).is_file(), url)
+                    if len(sources) == 2:
+                        phone, phone_parent = sources[0]
+                        self.assertEqual(phone_parent, 'picture')
+                        self.assertEqual((phone.get('type'), phone.get('media')), ('image/avif', '(max-width: 640px)'))
+                        self.assertRegex(phone['srcset'], r'^/assets/images/[a-z-]+-800\.avif 800w$')
+                        self.assertIn(phone['srcset'], source['srcset'])
+                        self.assertEqual(phone.get('sizes'), attrs['sizes'])
             with self.subTest(route=route):
                 main = main_of(self.html[route])
                 self.assertEqual(main.count('<picture>'), len(parser.images))
@@ -1613,9 +1638,10 @@ class ImagePerformanceAndSharingTests(unittest.TestCase):
                 video_sources = re.findall(r'<source (?:data-)?src="[^"]+\.mp4" type="video/mp4">', main)
                 # Liquid Glass (Task 37): the homepage's four silent loops (marquee and closing footage, two glass phones).
                 # Task 41: plus the ambient glass loop behind the closing panel on Work, Services, Pricing and About.
-                self.assertEqual(main.count('<source data-src='), {'index.html': 4, 'work/index.html': 7, 'services/index.html': 2, 'pricing/index.html': 1, 'about/index.html': 1}.get(route, 0))
+                # Task 59: Work's social clip waits in data-src too (reel.js loads it on first play, after load).
+                self.assertEqual(main.count('<source data-src='), {'index.html': 4, 'work/index.html': 8, 'services/index.html': 2, 'pricing/index.html': 1, 'about/index.html': 1}.get(route, 0))
                 self.assertEqual(len(video_sources), VIDEOS_PER_ROUTE.get(route, 0))
-                self.assertEqual(main.count('<source '), len(parser.images) + len(video_sources))
+                self.assertEqual(main.count('<source '), route_sources + len(video_sources))
         self.assertGreaterEqual(total, 40)
 
     def test_wrapping_keeps_the_original_img_markup(self):
@@ -2241,6 +2267,9 @@ class WorkArtDirectionTests(unittest.TestCase):
         import hashlib
         # Task 47: its three regions are named with the project title too (aria-labelledby="hb-title hb-...").
         frozen = undo_edits(self, self.article('harbourside'), tuple((f'aria-labelledby="hb-title hb-{part}"', f'aria-labelledby="hb-{part}"') for part in ('screens', 'brief', 'does')))
+        # Task 59: the two device loops' stills wait in data-poster (reel.js sets poster near the screen).
+        frozen = undo_edits(self, frozen, tuple((f'preload="none" data-poster="/assets/video/loop-hb-{still}.jpg"', f'preload="none" poster="/assets/video/loop-hb-{still}.jpg"')
+                                                for still in ('desktop-poster-800', 'phone-poster-390')))
         self.assertEqual(hashlib.sha256(frozen.encode()).hexdigest(), HARBOURSIDE_SHA256)
         self.assertEqual(re.findall(r'<article [^>]*id="([^"]+)"', self.source), ['harbourside', 'greenline', 'fade-co'])
 
@@ -2480,8 +2509,9 @@ class LiquidGlassTests(unittest.TestCase):
         js = (OUT / 'assets/glass.js').read_text()
         self.assertIn("root.classList.add('lg-refract');", js)
         self.assertLess(js.index("brands.some(b => /Chromium/.test(b.brand))"), js.index("root.classList.add('lg-refract');"))
-        # Task 48: under reduced motion GSAP's ticker is put to sleep and glass.js stops before Lenis.
-        self.assertLess(js.index('if (!motionOK) { if (ticker) ticker.sleep(); return; }'), js.index('new win.Lenis('))
+        # Task 48: under reduced motion GSAP's ticker is put to sleep and glass.js stops before Lenis. Task 59: ScrollTrigger is
+        # switched off first (its own frame loop and listeners).
+        self.assertLess(js.index('if (!motionOK) { if (ticker) { stOff(true); ticker.sleep(); } return; }'), js.index('new win.Lenis('))
         for banned in MOTION_SCRIPT_BANS:
             self.assertNotIn(banned, js)
 
@@ -2975,7 +3005,10 @@ class ShowreelMarkupTests(unittest.TestCase):
             with self.subTest(flag=flag):
                 self.assertIn(flag, attrs)
         self.assertEqual(attrs['preload'], 'none')
-        self.assertEqual(attrs['poster'], '/assets/glass/glass-reel-poster.jpg')  # Task 41: the liquid-glass reel
+        # Task 41: the liquid-glass reel. Task 59: its still waits in data-poster (reel.js sets poster near the screen, and
+        # swaps in the phone still first on phones, so a phone never fetches the wide one).
+        self.assertNotIn('poster', attrs)
+        self.assertEqual(attrs['data-poster'], '/assets/glass/glass-reel-poster.jpg')
         self.assertEqual((attrs['width'], attrs['height']), ('1600', '900'))
         self.assertNotIn('autoplay', tag)
         self.assertNotIn('src', attrs)  # the file comes from <source>
@@ -2984,7 +3017,7 @@ class ShowreelMarkupTests(unittest.TestCase):
         # The phone cut is named in the markup for home.js; every referenced file ships with the site.
         self.assertEqual(attrs['data-narrow-src'], '/assets/glass/glass-reel-vertical-720.mp4')
         self.assertEqual(attrs['data-narrow-poster'], '/assets/glass/glass-reel-vertical-poster.jpg')
-        for path in (attrs['poster'], attrs['data-narrow-src'], attrs['data-narrow-poster'], '/assets/glass/glass-reel-1600.mp4'):
+        for path in (attrs['data-poster'], attrs['data-narrow-src'], attrs['data-narrow-poster'], '/assets/glass/glass-reel-1600.mp4'):
             with self.subTest(path=path):
                 self.assertTrue((OUT / path.lstrip('/')).is_file())
         # Described for assistive technology by the visible line under the heading.
@@ -3196,7 +3229,10 @@ class SocialClipTests(unittest.TestCase):
                     self.assertEqual((attrs['width'], attrs['height']), ('540', '960'))
                     self.assertEqual(attrs['poster'], f'/assets/video/cendavo-social-{slug}-poster-540.jpg')
                     source = f'/assets/video/cendavo-social-{slug}-540.mp4'
-                    self.assertEqual(re.findall(r'<source ([^>]*)>', clip), [f'src="{source}" type="video/mp4"'])
+                    # Task 59: Work's clip (in its first screen) waits in data-src, so no file loads before reel.js plays it
+                    # after load; Services keeps src (preload="none").
+                    src = 'data-src' if route == 'work/index.html' else 'src'
+                    self.assertEqual(re.findall(r'<source ([^>]*)>', clip), [f'{src}="{source}" type="video/mp4"'])
                     for path in (attrs['poster'], source):
                         self.assertTrue((OUT / path.lstrip('/')).is_file(), path)
                     # A visible one-sentence alternative (WCAG 1.2.1), linked to the video.
@@ -3404,6 +3440,7 @@ class DaylightTests(unittest.TestCase):
 
     def test_pause_motion_is_a_real_toggle_button_hidden_without_js(self):
         # Task 41: the homepage's button is the site-wide one. Task 46: it sits in the header pill, after the logo.
+        # Task 59: it ships running ("Pause motion", aria-pressed="false"); aria-pressed drives the icon.
         button = '<button class="motion-btn" type="button" data-motion-toggle aria-pressed="false" hidden>Pause motion</button>'
         self.assertEqual(self.html.count(button), 1)
         self.assertEqual(self.html.count('data-motion-toggle'), 1)
@@ -3411,7 +3448,7 @@ class DaylightTests(unittest.TestCase):
         glass = base_rules((OUT / 'assets/glass.css').read_text())
         rule = rules_for(glass, '.motion-btn')[0]
         self.assertGreaterEqual(int(re.search(r'min-height:(\d+)px', rule).group(1)), 44)
-        self.assertTrue(rules_for(glass, '.motion-btn[aria-pressed="true"]::before'))  # pressed looks different
+        self.assertTrue(rules_for(glass, '.motion-btn[aria-pressed="true"]::before'))  # paused looks different
         self.assertNotIn('.motion-btn', self.css['home.css'])  # styled once, in the shared glass.css
 
     def test_showreel_chapters_are_buttons_revealed_by_script(self):
@@ -3716,8 +3753,14 @@ class DaylightInnerPageTests(unittest.TestCase):
                         for path in (attrs['data-poster'], sources[0]['data-src']):
                             self.assertTrue((OUT / path.lstrip('/')).is_file())
                         continue
-                    self.assertRegex(attrs.get('poster', ''), r'^/assets/video/[a-z0-9-]+\.jpg$')
-                    self.assertTrue((OUT / attrs['poster'].lstrip('/')).is_file())
+                    # Exactly one still: poster, or data-poster for a video below the first screen (reel.js sets it near
+                    # the screen). Task 59: Work's six device loops wait that way too.
+                    self.assertEqual(('poster' in attrs) + ('data-poster' in attrs), 1)
+                    still = attrs.get('poster') or attrs.get('data-poster')
+                    self.assertRegex(still, r'^/assets/video/[a-z0-9-]+\.jpg$')
+                    self.assertTrue((OUT / still.lstrip('/')).is_file())
+                    if route == 'work/index.html' and 'd-video' in attrs.get('class', ''):
+                        self.assertNotIn('poster', attrs)
                     self.assertEqual(len(sources), 1)
                     url = sources[0].get('src') or sources[0].get('data-src')
                     self.assertRegex(url, r'^/assets/video/[a-z0-9-]+\.mp4$')
@@ -3952,7 +3995,8 @@ class MobileAndContactPolishTests(unittest.TestCase):
         cls.module = (OUT / 'assets/glass-page.js').read_text()
 
     def test_phone_pause_button_is_a_44px_icon_that_keeps_its_name(self):
-        # Same markup on every page that moves, so the accessible name stays "Pause motion".
+        # Same markup on every page that moves, so the accessible name starts as "Pause motion" (site.js sets "Play motion"
+        # while paused, Task 59).
         for route in ('index.html', 'work/index.html', 'services/index.html', 'pricing/index.html', 'about/index.html', 'contact/index.html'):
             with self.subTest(route=route):
                 self.assertEqual((OUT / route).read_text().count(self.BUTTON), 1)
@@ -3970,7 +4014,7 @@ class MobileAndContactPolishTests(unittest.TestCase):
             self.assertNotIn(banned, narrow[0])
         self.assertNotRegex(narrow[0], r'(?<![-\w])content:')  # no generated text replacing the label
         self.assertNotIn('font-size:0', base)  # the words show on wide screens
-        # The icon is drawn with borders in both states (Task 46: pause bars, then a play triangle when pressed).
+        # The icon is drawn with borders in both states (Task 46: pause bars, then a play triangle when paused).
         self.assertIn('border-inline:2.5px solid currentColor', rules_for(base_rules(self.css['glass.css']), '.motion-btn::before')[0])
         self.assertIn('background:var(--ink)', rules_for(base_rules(self.css['glass.css']), '.motion-btn[aria-pressed="true"]')[0])
         for sheet in ('home.css', 'pages.css'):
@@ -4040,8 +4084,9 @@ class GlassCritiqueFixesTests(unittest.TestCase):
         cls.css = {name: (OUT / 'assets' / name).read_text() for name in ('site.css', 'glass.css', 'home.css', 'pages.css', 'work.css')}
 
     def test_pressed_pause_button_is_inverted_and_its_icon_follows_the_state(self):
-        # Task 46 (owner): the icon reflects the state: pause bars while motion runs, a play triangle once pressed (motion
-        # paused). The name stays "Pause motion" (a toggle button's name is fixed; aria-pressed carries the state).
+        # Task 46 (owner): the icon reflects the state: pause bars while motion runs, a play triangle once paused. Task 59
+        # (owner-mandated): the visible name follows the state ("Pause motion", then "Play motion") and aria-pressed is
+        # "true" while paused; aria-pressed drives the look.
         css = base_rules(self.css['glass.css'])
         rest = rules_for(css, '.motion-btn')[0]
         pressed = rules_for(css, '.motion-btn[aria-pressed="true"]')
@@ -4061,11 +4106,14 @@ class GlassCritiqueFixesTests(unittest.TestCase):
             self.assertIn(needle, forced[0])
         for sheet in ('home.css', 'pages.css'):
             self.assertNotIn('.motion-btn', self.css[sheet])
-        # The name never changes with the state (aria-pressed carries it), so the label and state cannot disagree.
+        # Task 59: the name changes with the state and nothing else names it, so name, icon and state cannot disagree: one
+        # place sets the visible name and aria-pressed together from the one state, and no aria-label overrides the name.
         site = (OUT / 'assets/site.js').read_text()
         toggle = site[site.index("const toggle = document.querySelector('[data-motion-toggle]');"):site.index("const asked = document.querySelector('[data-nf-path]');")]
-        for banned in ('textContent', 'innerHTML', 'aria-label', 'Play motion'):
+        self.assertIn("const show = () => { toggle.setAttribute('aria-pressed', G.paused); toggle.textContent = (G.paused ? 'Play' : 'Pause') + ' motion'; };", toggle)
+        for banned in ('innerHTML', 'aria-label', 'data-paused'):
             self.assertNotIn(banned, toggle)
+        self.assertNotIn('data-paused', self.css['glass.css'])
 
     def test_phone_faq_toggles_and_marquee_keep_clear_of_the_pause_button(self):
         # Task 46: the button moved into the header, so the FAQ toggles and the marquee use the full width again: no lane
@@ -4878,6 +4926,147 @@ class OwnerDraftPolicyTests(unittest.TestCase):
                 for banned in ('<blockquote', 'testimonial', 'aggregaterating', 'ratingvalue', '"review"',
                                'itemprop="review', '★', 'out of 5', 'stars'):
                     self.assertNotIn(banned, html)
+
+
+
+class HeroMediaCollector(HTMLParser):
+    """Every <img> with its attributes and whether it sits inside a page's hero media ([data-ph-media]); every <video> with
+    its attributes, its <source> attributes and whether it sits inside the page's first section."""
+
+    def __init__(self):
+        super().__init__()
+        self.stack, self.images, self.videos, self.sections = [], [], [], 0
+
+    def handle_starttag(self, tag, attrs):
+        attrs = dict(attrs)
+        if tag == 'img':
+            self.images.append((attrs, any('data-ph-media' in a for _, a in self.stack)))
+        elif tag == 'source' and self.stack and self.stack[-1][0] == 'video':
+            self.videos[-1][1].append(attrs)
+        elif tag not in VOID_ELEMENTS:
+            if tag == 'section' and not any(t == 'section' for t, _ in self.stack):
+                self.sections += 1
+            if tag == 'video':
+                self.videos.append((attrs, [], self.sections == 1))
+            self.stack.append((tag, attrs))
+
+    def handle_endtag(self, tag):
+        if tag not in VOID_ELEMENTS and self.stack:
+            self.stack.pop()
+
+
+def media_matches(query, width, height):
+    """A small evaluator for the preload media queries below: comma-separated alternatives of min/max width/height."""
+    def feature(text):
+        bound, axis, value = re.fullmatch(r'\((min|max)-(width|height): (\d+)px\)', text.strip()).groups()
+        size = width if axis == 'width' else height
+        return size >= int(value) if bound == 'min' else size <= int(value)
+    return any(all(feature(f) for f in alternative.split(' and ')) for alternative in query.split(', '))
+
+
+class MobilePerformanceTests(unittest.TestCase):
+    """Task 59 (owner-mandated, measured at 390x844 DPR3 on throttled 4G): only the first screen's media loads before the
+    page does. Every photo but a page hero's is lazy, phones get the 800w files, the homepage hero's still is preloaded
+    with high priority, and /work/'s clip and device-loop stills wait for reel.js."""
+
+    @classmethod
+    def setUpClass(cls):
+        build()
+        cls.routes = ['index.html', 'work/index.html', 'services/index.html', 'pricing/index.html', 'about/index.html',
+                      'contact/index.html', 'demo/index.html', '404.html']
+        cls.html = {route: (OUT / route).read_text() for route in cls.routes}
+
+    def test_every_photo_below_a_hero_is_lazy_async_and_sized(self):
+        eager = []
+        for route, html in self.html.items():
+            parser = HeroMediaCollector()
+            parser.feed(main_of(html))
+            for attrs, hero in parser.images:
+                with self.subTest(route=route, src=attrs.get('src')):
+                    self.assertEqual(attrs.get('decoding'), 'async')
+                    self.assertTrue(attrs.get('sizes'))
+                    if attrs.get('loading') != 'lazy':
+                        self.assertTrue(hero, 'only a page hero photo may load eagerly')
+                        self.assertNotIn('loading', attrs)
+                        eager.append((route, attrs['src']))
+                    # High priority belongs to the hero (the homepage's is a CSS still, preloaded below), never a photo.
+                    self.assertNotIn('fetchpriority', attrs)
+        # The only eager photo on the site is About's first hero photo.
+        self.assertEqual(eager, [('about/index.html', '/assets/images/barber-shave-800.jpg')])
+
+    def test_photos_in_small_fixed_slots_offer_only_the_800w_file(self):
+        small = 0
+        for route, html in self.html.items():
+            parser = PictureCollector()
+            parser.feed(main_of(html))
+            for attrs, _, sources in parser.images:
+                fixed = re.fullmatch(r'(\d+)px', attrs['sizes'])
+                if not (fixed and int(fixed.group(1)) <= 400):
+                    continue
+                small += 1
+                with self.subTest(route=route, src=attrs['src']):
+                    self.assertRegex(attrs['srcset'], r'^/assets/images/[a-z-]+-800\.jpg 800w$')
+                    self.assertEqual(attrs['src'], attrs['srcset'].split()[0])
+                    self.assertEqual([source.get('srcset') for source, _ in sources], [attrs['srcset'].replace('.jpg', '.avif')])
+        self.assertGreaterEqual(small, 20)  # the homepage marquee, thumbnails on Home, Pricing and Work
+
+    def test_phones_get_the_800w_avif_and_the_build_stops_without_it(self):
+        from scripts.build_site import with_avif
+        tag = ('<img src="/assets/images/detail-rear-800.jpg" srcset="/assets/images/detail-rear-800.jpg 800w, '
+               '/assets/images/detail-rear-1600.jpg 1600w" sizes="100vw" width="1600" height="1067" alt="" loading="lazy" decoding="async">')
+        self.assertEqual(with_avif(tag), '<picture><source type="image/avif" media="(max-width: 640px)" srcset="/assets/images/detail-rear-800.avif 800w" sizes="100vw">'
+                         '<source type="image/avif" srcset="/assets/images/detail-rear-800.avif 800w, /assets/images/detail-rear-1600.avif 1600w" sizes="100vw">'
+                         + tag + '</picture>')
+        only = tag.replace(', /assets/images/detail-rear-1600.jpg 1600w', '').replace('sizes="100vw"', 'sizes="120px"')
+        self.assertEqual(with_avif(only), '<picture><source type="image/avif" srcset="/assets/images/detail-rear-800.avif 800w" sizes="120px">' + only + '</picture>')
+        with self.assertRaises(ValueError):  # no 800w file for phones
+            with_avif(tag.replace('/assets/images/detail-rear-800.jpg 800w, ', ''))
+        with self.assertRaises(FileNotFoundError):  # an AVIF that does not exist
+            with_avif(tag.replace('detail-rear-800.jpg 800w', 'detail-nowhere-800.jpg 800w'))
+
+    def test_homepage_hero_still_is_preloaded_for_exactly_the_screens_that_show_it(self):
+        head = self.html['index.html'].split('</head>', 1)[0]
+        links = re.findall(r'<link rel="preload" href="([^"]+)" as="image" media="([^"]+)" fetchpriority="high">', head)
+        self.assertEqual([href for href, _ in links], ['/assets/glass/hero-glass-poster-m.jpg', '/assets/glass/hero-glass-poster.jpg'])
+        self.assertEqual(head.count('as="image"'), 2)
+        self.assertLess(head.index('as="image"'), head.index('<link rel="stylesheet"'))  # found before any stylesheet
+        # home.css: the wide still by default, the phone still at 760px and below, the wide one again at 500px tall or less.
+        css = (OUT / 'assets/home.css').read_text()
+        self.assertIn('url("/assets/glass/hero-glass-poster.jpg")', rules_for(base_rules(css), '.hero-gl')[0])
+        self.assertIn('url("/assets/glass/hero-glass-poster-m.jpg")', rules_for(media_blocks(css, 'max-width:760px'), '.hero-gl')[0])
+        self.assertIn('url("/assets/glass/hero-glass-poster.jpg")', rules_for(media_blocks(css, 'max-height:500px'), '.hero-gl')[0])
+        self.assertLess(css.index('@media(max-width:760px)'), css.index('@media(max-height:500px)'))  # the later rule wins
+        for width in (320, 360, 390, 640, 759, 760, 761, 844, 1024, 1280, 1440, 1920):
+            for height in (360, 390, 499, 500, 501, 600, 720, 844, 900, 1080):
+                shown = '/assets/glass/hero-glass-poster-m.jpg' if width <= 760 and not height <= 500 else '/assets/glass/hero-glass-poster.jpg'
+                with self.subTest(width=width, height=height):
+                    self.assertEqual([href for href, media in links if media_matches(media, width, height)], [shown])
+        for route in self.routes[1:]:
+            with self.subTest(route=route):
+                self.assertNotIn('as="image"', self.html[route])
+                self.assertNotIn('fetchpriority', self.html[route])
+
+    def test_work_loads_no_video_and_no_below_the_fold_still_before_load(self):
+        parser = HeroMediaCollector()
+        parser.feed(main_of(self.html['work/index.html']))
+        self.assertEqual(len(parser.videos), VIDEOS_PER_ROUTE['work/index.html'])
+        self.assertNotRegex(self.html['work/index.html'], r'<source src="[^"]+\.mp4"')
+        for attrs, sources, first_screen in parser.videos:
+            with self.subTest(video=attrs.get('class'), first_screen=first_screen):
+                self.assertEqual(attrs.get('preload'), 'none')
+                self.assertEqual([sorted(source) for source in sources], [['data-src', 'type']])  # reel.js sets src on first play
+                if first_screen:
+                    self.assertTrue(attrs.get('poster'))  # the clip's still is part of the first screen
+                else:
+                    self.assertNotIn('poster', attrs)
+                    self.assertTrue(attrs.get('data-poster'))
+        self.assertEqual(sum(1 for attrs, _, first in parser.videos if first), 1)
+        # The homepage showreel's still waits too, so a phone fetches only its own vertical still.
+        home = HeroMediaCollector()
+        home.feed(main_of(self.html['index.html']))
+        reel = [attrs for attrs, _, _ in home.videos if attrs.get('class') == 'reel-video'][0]
+        self.assertNotIn('poster', reel)
+        self.assertEqual((reel['data-poster'], reel['data-narrow-poster']), ('/assets/glass/glass-reel-poster.jpg', '/assets/glass/glass-reel-vertical-poster.jpg'))
 
 
 if __name__ == '__main__':

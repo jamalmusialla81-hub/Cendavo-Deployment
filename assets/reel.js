@@ -8,7 +8,8 @@
   const win = window, doc = document;
   const still = win.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
   const saveData = win.navigator?.connection?.saveData;
-  const NARROW = '(max-width: 640px)'; // as home.css and about.css
+  // as home.css and about.css
+  const NARROW = '(max-width: 640px)';
   const narrowNow = Boolean(win.matchMedia?.(NARROW).matches);
   const fine = Boolean(win.matchMedia?.('(hover: hover) and (pointer: fine)').matches);
   const items = [], previews = [];
@@ -16,7 +17,8 @@
   // Pause motion (Task 41): the button belongs to site.js, which runs first and keeps the shared state in window.__glass;
   // this controller only follows it (see the pauseFns listener at the end).
   const glass = win.__glass = win.__glass || { paused: false, heroP: 0, pointer: { x: 0, y: 0 } };
-  let held = Boolean(still || saveData || glass.paused); // Pause motion pressed
+  // Pause motion pressed
+  let held = Boolean(still || saveData || glass.paused);
   const playing = it => !it.video.paused;
   const attempt = it => {
     const video = it.video, source = video.querySelector('source');
@@ -27,7 +29,8 @@
     it.label();
   };
   const sync = it => {
-    const busy = !it.loop && items.some(other => other !== it && !other.loop && playing(other)); // one large video at a time
+    // one large video at a time
+    const busy = !it.loop && items.some(other => other !== it && !other.loop && playing(other));
     const go = it.wanted && it.inView && !doc.hidden && (loaded || it.pressed);
     if (go && !busy && it.video.paused) attempt(it);
     else if (!go && playing(it)) it.video.pause();
@@ -36,16 +39,6 @@
     const it = { video, loop, label, wanted: !held };
     video.muted = true;
     if (win.IntersectionObserver) new win.IntersectionObserver(e => { it.inView = e[e.length - 1].isIntersecting; sync(it); }, { threshold: 0.4 }).observe(video);
-    // Liquid Glass (Task 37): a loop far down the page may carry data-poster instead of poster, so its still is fetched only
-    // when it comes near the screen (not with the first load).
-    if (video.dataset?.poster && win.IntersectionObserver) {
-      const near = new win.IntersectionObserver(e => {
-        if (!e[e.length - 1].isIntersecting) return;
-        video.setAttribute('poster', video.dataset.poster);
-        near.disconnect?.();
-      }, { rootMargin: '50% 0px' });
-      near.observe(video);
-    }
     // When a large video stops, another one in view may take its turn.
     if (!loop) video.addEventListener('pause', () => items.forEach(other => { if (other !== it && !other.loop) sync(other); }));
     return items.push(it) && it;
@@ -85,7 +78,9 @@
     const narrow = Boolean(video.dataset.narrowSrc && narrowNow);
     if (narrow) {
       video.querySelector('source')?.setAttribute('src', video.dataset.narrowSrc);
-      if (video.dataset.narrowPoster) video.setAttribute('poster', video.dataset.narrowPoster);
+      // Task 59: a still that waits in data-poster (set near the screen, below) is swapped there, so only one is fetched.
+      const p = video.dataset.narrowPoster;
+      if (p) video.dataset.poster ? (video.dataset.poster = p) : video.setAttribute('poster', p);
       video.load();
     }
     const noun = String(toggle.textContent).trim().replace(/^Play\s+/, '') || 'video';
@@ -149,6 +144,15 @@
     }
   });
   Array.from(doc.querySelectorAll('video[data-loop]')).filter(v => !(narrowNow && v.dataset.loop === 'wide')).forEach(v => add(v, true));
+  // Liquid Glass (Task 37), Task 59: a video below the first screen carries data-poster instead of poster, so its still is
+  // fetched only when it comes near the screen (not with the first load). This covers every such video, including a "wide"
+  // loop that phones never play but still show (the laptop screens on Work).
+  doc.querySelectorAll('video[data-poster]').forEach(video => {
+    const show = () => video.setAttribute('poster', video.dataset.poster);
+    if (!win.IntersectionObserver) return show();
+    const near = new win.IntersectionObserver(e => { if (e[e.length - 1].isIntersecting) { show(); near.disconnect?.(); } }, { rootMargin: '50% 0px' });
+    near.observe(video);
+  });
   // Pause motion pressed or released (site.js, through the shared fan-out that glass.js and the WebGL scenes also join):
   // every video and preview follows it.
   (glass.pauseFns = glass.pauseFns || []).push(paused => {

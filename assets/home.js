@@ -39,14 +39,16 @@
   const range = controls?.querySelector('input[type="range"]');
   let update = null;
   let sweep = null;
-  let swept = false; // once per page load, and never after the visitor has used the comparison
+  // once per page load, and never after the visitor has used the comparison
+  let swept = false;
   const stopSweep = () => {
     swept = true;
     SWEEP_STOP.forEach(type => window.removeEventListener(type, stopSweep));
     if (!sweep) return;
     sweep.kill();
     sweep = null;
-    figure.style.setProperty('--pos', (Number(range.value) || 0) + '%'); // back to the range value; no attribute changes
+    // back to the range value; no attribute changes
+    figure.style.setProperty('--pos', (Number(range.value) || 0) + '%');
   };
   if (range) {
     const buttons = controls.querySelectorAll('[data-compare-set]');
@@ -130,7 +132,8 @@
   const glass = window.__glass = window.__glass || { paused: false, heroP: 0, pointer: { x: 0, y: 0 } };
   // Every scroll-linked tween shares this one definition (smoothing in seconds); none pins anything.
   const SCRUB = { scrub: 0.6 };
-  const MAX_TILT = 6; // concept cards: never more than 6 degrees, fine pointers only
+  // concept cards: never more than 6 degrees, fine pointers only
+  const MAX_TILT = 6;
   const tiltOf = value => Math.max(-MAX_TILT, Math.min(MAX_TILT, value));
   // Scroll reveals only below the fold: hiding what is already on screen would make it blink.
   const below = el => el.getBoundingClientRect().top >= window.innerHeight;
@@ -291,7 +294,8 @@
     let hero = null;
     if (root.classList.contains('ph-wait')) {
       hero = heroTimeline();
-      if (held()) hero.end(); // Save-Data: the Pause motion button starts pressed
+      // Save-Data: the Pause motion button starts paused
+      if (held()) hero.end();
       else hero.tl.play(0);
     }
     release();

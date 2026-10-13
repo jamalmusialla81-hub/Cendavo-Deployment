@@ -59,6 +59,13 @@ def page_styles(key):
 # (external, not deferred) to set the .js/.motion classes before first paint. Contact (the enquiry form), Demo (the
 # browser app) and the 404 page load no GSAP and no motion scripts.
 MOTION_PAGES = ('index', 'work', 'services', 'pricing', 'about')
+# Task 59: the homepage hero's still (the LCP on phones) is a CSS background on .hero-gl, found only once home.css has
+# loaded. One high-priority preload per poster starts it with the HTML instead. The media queries mirror home.css exactly
+# (the phone poster at max-width:760px unless max-height:500px puts the wide one back), so a screen preloads only the
+# poster it shows: no extra request.
+HERO_POSTERS = (('/assets/glass/hero-glass-poster-m.jpg', '(max-width: 760px) and (min-height: 501px)'),
+                ('/assets/glass/hero-glass-poster.jpg', '(min-width: 761px), (max-height: 500px)'))
+HERO_PRELOAD = ''.join(f'<link rel="preload" href="{url}" as="image" media="{media}" fetchpriority="high">' for url, media in HERO_POSTERS)
 GSAP_CORE = '<script src="/assets/vendor/gsap/gsap.min.js" defer></script><script src="/assets/vendor/gsap/ScrollTrigger.min.js" defer></script><script src="/assets/motion.js" defer></script>'
 # The inner motion pages add scenes.js (Task 34: device benches, drawn lines, the Services vignettes, the Work queue and the
 # film frame) after motion.js; the homepage does not need it, which keeps its first-party script within the 30 KB budget.
@@ -93,8 +100,9 @@ GL_PAGES = ('index', 'work', 'services', 'pricing', 'about', 'contact')
 # Pause motion (Task 41, WCAG 2.2.2): every page with ongoing motion (the WebGL scene, the drifting atmosphere, the marquee,
 # video loops) gets one button. Task 46: it sits in the header's glass pill (after the logo, before the menu button), so it
 # can never cover page content; glass.css styles it. site.js reveals and drives it; it stays hidden without JavaScript,
-# when nothing moves either. Demo and the 404 page have no ongoing motion. Its name stays "Pause motion" in both states:
-# aria-pressed carries the state and the icon follows it (pause bars, then a play triangle once pressed).
+# when nothing moves either. Demo and the 404 page have no ongoing motion. Task 59 (owner-mandated): site.js switches its
+# visible name to "Play motion" while paused and sets aria-pressed with it; the icon follows aria-pressed (pause bars, then
+# a play triangle). It ships in the running state: "Pause motion", aria-pressed="false".
 MOTION_TOGGLE = '<button class="motion-btn" type="button" data-motion-toggle aria-pressed="false" hidden>Pause motion</button>'
 
 
@@ -166,23 +174,35 @@ HEADERS = ("/*\n  X-Content-Type-Options: nosniff\n  Referrer-Policy: strict-ori
 
 
 IMG_TAG = re.compile(r'<img\b[^>]*>')
+# Task 59: phones (up to 640 CSS px wide) get only the 800w AVIF. A DPR3 phone multiplies every sizes width by 3 (a 320px
+# marquee tile wants 960 device pixels), so with the 1600w file on offer it always took that; 800w is about 2x density
+# there, sharp enough, and half the bytes or less. Tablets and desktops keep the full srcset.
+PHONE_MEDIA = '(max-width: 640px)'
 
 
 def with_avif(page):
-    """Wrap every photo in <picture> with an AVIF source ahead of the unchanged JPEG <img> fallback.
+    """Wrap every photo in <picture> with AVIF sources ahead of the unchanged JPEG <img> fallback.
 
     The AVIF srcset is the img's srcset with .jpg swapped for .avif, and sizes is copied as is, so browsers pick the same
-    width either way. The build stops if a photo has no srcset/sizes or an AVIF file is missing."""
+    width either way. When the srcset offers more than the 800w file, a phone-only AVIF source listing just the 800w file
+    comes first (PHONE_MEDIA). The build stops if a photo has no srcset/sizes or an AVIF file is missing."""
     def wrap(match):
         tag = match.group(0)
         srcset, sizes = re.search(r'\ssrcset="([^"]+)"', tag), re.search(r'\ssizes="([^"]+)"', tag)
         if not (srcset and sizes):
             raise ValueError(f'image needs srcset and sizes for its AVIF source: {tag[:100]}')
         avif = srcset.group(1).replace('.jpg', '.avif')
-        for url in re.findall(r'(\S+)\s+\d+w', avif):
+        candidates = re.findall(r'(\S+)\s+(\d+)w', avif)
+        for url, _ in candidates:
             if not url.startswith('/assets/images/') or not (ROOT / url.lstrip('/')).is_file():
                 raise FileNotFoundError(f'missing AVIF image: {url}')
-        return f'<picture><source type="image/avif" srcset="{avif}" sizes="{sizes.group(1)}">{tag}</picture>'
+        small = [url for url, width in candidates if width == '800']
+        if not small:
+            raise ValueError(f'image needs an 800w file for phones: {tag[:100]}')
+        phone = ''
+        if len(candidates) > 1:
+            phone = f'<source type="image/avif" media="{PHONE_MEDIA}" srcset="{small[0]} 800w" sizes="{sizes.group(1)}">'
+        return f'<picture>{phone}<source type="image/avif" srcset="{avif}" sizes="{sizes.group(1)}">{tag}</picture>'
     return IMG_TAG.sub(wrap, page)
 
 
@@ -207,7 +227,7 @@ def build():
             # desktop row fits without wrapping. The footer keeps every link.
             optional = ' class="nav-optional"' if href in HEADER_OPTIONAL else ''
             header_links += f'<a{optional} href="{href}"{current}>{label}</a>'
-        html = f'''<!doctype html><html lang="en-AU"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="light"><meta name="theme-color" content="#FFFFFF"><meta name="description" content="{desc}"><title>{title}</title>{head_meta(key, title, desc)}<link rel="icon" href="/assets/favicon.svg" type="image/svg+xml"><link rel="preload" href="/assets/fonts/archivo-var-latin.woff2" as="font" type="font/woff2" crossorigin><link rel="stylesheet" href="/assets/site.css">{GLASS_STYLE}{page_styles(key)}{boot_script(key)}{structured_data() if key == 'index' else ''}</head><body><a class="skip-link" href="#main">Skip to main content</a>{ATMOSPHERE}<header class="site-header"><div class="wrap nav"><a class="brand" href="/" aria-label="Cendavo home">{MARK}CENDAVO</a>{MOTION_TOGGLE if key in GL_PAGES else ''}<button class="menu" type="button" data-menu aria-label="Toggle menu" aria-controls="site-nav" aria-expanded="false"><span aria-hidden="true">☰</span></button><nav class="nav-links" id="site-nav" data-nav aria-label="Main navigation">{header_links}</nav><a class="button small" href="/contact/">Request a free consultation</a></div></header><main id="main" tabindex="-1">{page}</main><footer class="footer"><div class="wrap"><div class="footer-row"><div><a class="brand" href="/">{MARK}CENDAVO</a><p>Website design, redesign and care for local service businesses.<br>Sydney, Australia.<br>{MAIL_LINK}</p></div><nav class="footer-links" aria-label="Footer navigation">{links}</nav></div><div class="footer-bottom"><p>© 2026 Cendavo. The demonstration project uses sample data only.</p><p>Harbourside Mobile Detailing, Greenline Landscapes and Fade &amp; Co are fictional concept businesses.</p></div></div>{FOOTER_SIGNATURE}</footer><script src="/assets/site.js" defer></script>{PAGE_SCRIPTS.get(key, '')}{shell_scripts(key)}{GLASS_DEFS if key in MOTION_PAGES else ''}</body></html>'''
+        html = f'''<!doctype html><html lang="en-AU"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="light"><meta name="theme-color" content="#FFFFFF"><meta name="description" content="{desc}"><title>{title}</title>{head_meta(key, title, desc)}<link rel="icon" href="/assets/favicon.svg" type="image/svg+xml"><link rel="preload" href="/assets/fonts/archivo-var-latin.woff2" as="font" type="font/woff2" crossorigin>{HERO_PRELOAD if key == 'index' else ''}<link rel="stylesheet" href="/assets/site.css">{GLASS_STYLE}{page_styles(key)}{boot_script(key)}{structured_data() if key == 'index' else ''}</head><body><a class="skip-link" href="#main">Skip to main content</a>{ATMOSPHERE}<header class="site-header"><div class="wrap nav"><a class="brand" href="/" aria-label="Cendavo home">{MARK}CENDAVO</a>{MOTION_TOGGLE if key in GL_PAGES else ''}<button class="menu" type="button" data-menu aria-label="Toggle menu" aria-controls="site-nav" aria-expanded="false"><span aria-hidden="true">☰</span></button><nav class="nav-links" id="site-nav" data-nav aria-label="Main navigation">{header_links}</nav><a class="button small" href="/contact/">Request a free consultation</a></div></header><main id="main" tabindex="-1">{page}</main><footer class="footer"><div class="wrap"><div class="footer-row"><div><a class="brand" href="/">{MARK}CENDAVO</a><p>Website design, redesign and care for local service businesses.<br>Sydney, Australia.<br>{MAIL_LINK}</p></div><nav class="footer-links" aria-label="Footer navigation">{links}</nav></div><div class="footer-bottom"><p>© 2026 Cendavo. The demonstration project uses sample data only.</p><p>Harbourside Mobile Detailing, Greenline Landscapes and Fade &amp; Co are fictional concept businesses.</p></div></div>{FOOTER_SIGNATURE}</footer><script src="/assets/site.js" defer></script>{PAGE_SCRIPTS.get(key, '')}{shell_scripts(key)}{GLASS_DEFS if key in MOTION_PAGES else ''}</body></html>'''
         if '{{' in html:
             raise ValueError(f'unreplaced placeholder in {source.name}')
         dest = OUT / ('index.html' if key == 'index' else '404.html' if key == NOT_FOUND else f'{key}/index.html')
