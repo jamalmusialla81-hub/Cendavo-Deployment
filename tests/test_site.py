@@ -1451,7 +1451,9 @@ class InnerPageTests(unittest.TestCase):
         # Page weight: the benches load only these photos (small, inside their interface cards) that the rest of the Work
         # page does not already load. The exact set is pinned so any further addition fails.
         elsewhere = {url.rsplit('-', 1)[0] for url in re.findall(r'/assets/images/[a-z-]+-(?:800|1600)\.jpg', rest)}
-        self.assertEqual({stem.rsplit('/', 1)[1] for stem in stems - elsewhere}, {'barber-cut', 'garden-deck', 'garden-lawn', 'garden-wall'})
+        # Task 53: Greenline's photo strip shows garden-deck and garden-wall at the same 800w files the bench thumbnails use,
+        # so the benches now add only these two.
+        self.assertEqual({stem.rsplit('/', 1)[1] for stem in stems - elsewhere}, {'barber-cut', 'garden-lawn'})
 
     def test_inner_pages_make_no_unconfirmed_operational_promises(self):
         # The owner has not confirmed call length, timelines or staffing; say "a short free consultation" instead.
@@ -2233,7 +2235,9 @@ class RepetitionTests(unittest.TestCase):
 # Night Shift Task 20 pinned the Work page's Harbourside case study (sha256 of its source <article>) so later tasks could
 # not change it by accident. Daylight (Task 34, owner-mandated) rebuilt it from the prototype; this is the new baseline.
 # Task 43 (owner-mandated) adds only data-rise to its "Concept project" label, so it rises with the title.
-HARBOURSIDE_SHA256 = 'ceef9a57c29b0a23497efbd546e6a4f94255037c7a813121d75848cda3e42fe6'
+# Task 53 (owner-mandated) replaces only its brief and "does" sections with the five-beat story and the packages mockup
+# (Task53CaseStudyTests); the cover and the bench are unchanged.
+HARBOURSIDE_SHA256 = '36cf96caf2f6aa9fe602402a2f8a437e991858623e00704bf3308cc6ea6968af'
 # The photos /work/ referenced before Task 20; the new art direction reuses them and adds no new downloads.
 # Task 24 adds detail-rear (the closing photo, already used on Home); garden-lawn stays inside the Greenline mockup.
 WORK_PHOTOS = {'barber-chair', 'barber-cut', 'barber-interior', 'barber-shave', 'detail-buffer', 'detail-dash', 'detail-headlight',
@@ -2266,7 +2270,8 @@ class WorkArtDirectionTests(unittest.TestCase):
     def test_harbourside_is_unchanged(self):
         import hashlib
         # Task 47: its three regions are named with the project title too (aria-labelledby="hb-title hb-...").
-        frozen = undo_edits(self, self.article('harbourside'), tuple((f'aria-labelledby="hb-title hb-{part}"', f'aria-labelledby="hb-{part}"') for part in ('screens', 'brief', 'does')))
+        # Task 53: the brief and "does" regions became the story and packages regions, which are named this way from the start.
+        frozen = undo_edits(self, self.article('harbourside'), (('aria-labelledby="hb-title hb-screens"', 'aria-labelledby="hb-screens"'),))
         # Task 59: the two device loops' stills wait in data-poster (reel.js sets poster near the screen).
         frozen = undo_edits(self, frozen, tuple((f'preload="none" data-poster="/assets/video/loop-hb-{still}.jpg"', f'preload="none" poster="/assets/video/loop-hb-{still}.jpg"')
                                                 for still in ('desktop-poster-800', 'phone-poster-390')))
@@ -2282,9 +2287,12 @@ class WorkArtDirectionTests(unittest.TestCase):
         self.assertLess(gl.index('class="gl-cover-copy"'), gl.index('</h2>'))
         self.assertLess(gl.index('</h2>'), gl.index('class="photo gl-cover-media"'))
         self.assertLess(gl.index('</header>'), gl.index('<section class="cs-screens'))
-        self.assertLess(gl.index('<section class="cs-screens'), gl.index('class="cs-brief"'))
-        brief = re.search(r'<section class="cs-brief"[^>]*>(.*?)</section>', gl, re.S).group(1)
-        self.assertEqual(re.findall(r'<p class="([^"]+)"', brief), ['gl-pull'])
+        # Task 53: the brief and the "what the site does" points now sit inside the story, after the screens: the pull line
+        # is the problem beat's only paragraph, and the three points are its design decisions.
+        self.assertLess(gl.index('<section class="cs-screens'), gl.index('<section class="gl-story"'))
+        problem = re.search(r'<div class="gl-beat-problem"><dt>The problem</dt><dd>(.*?)</dd></div>', gl, re.S).group(1)
+        self.assertEqual(re.findall(r'<p class="([^"]+)"', problem), ['gl-pull'])
+        self.assertEqual(gl.count('class="gl-pull"'), 1)
         self.assertEqual(len(re.findall(r'<li><b>', gl)), 3)  # the three "what the site does" points stay
         pull = rules_for(self.base, '.gl-pull')
         self.assertEqual(len(pull), 1)
@@ -2417,6 +2425,110 @@ class WorkArtDirectionTests(unittest.TestCase):
         self.assertEqual(self.source.count('class="cs-cover"'), 1)
         for needle in ('class="wrap wk-index"', 'id="demo"', 'href="/demo/"', '<section class="close"', 'href="/contact/"'):
             self.assertIn(needle, self.work)
+
+
+class Task53CaseStudyTests(unittest.TestCase):
+    """Night Shift Task 53 (owner-mandated, reduced scope per the strategist brief): Harbourside and Greenline each tell a
+    five-beat story in their own layout; Harbourside adds a static packages mockup, Greenline a row of finished-garden
+    photos (native scroll-snap on narrow screens). HTML and CSS only: no new script, video, photo, motion or price."""
+    BEATS = ['The business', 'The problem', 'Design decisions', 'How a customer uses it', 'The action it asks for']
+    STRIP_PHOTOS = {'garden-path', 'garden-walk', 'garden-wall', 'garden-deck'}
+
+    @classmethod
+    def setUpClass(cls):
+        build()
+        cls.work = main_of((OUT / 'work/index.html').read_text())
+        cls.css = re.sub(r'/\*.*?\*/', '', (OUT / 'assets/work.css').read_text(), flags=re.S)
+        cls.base = base_rules(cls.css)
+
+    def article(self, slug):
+        return re.search(rf'<article [^>]*id="{slug}"[^>]*>.*?</article>', self.work, re.S).group(0)
+
+    @staticmethod
+    def text(html):
+        return re.sub(r'\s+', ' ', re.sub(r'<[^>]+>', ' ', html)).strip()
+
+    def test_each_project_tells_five_beats_in_order(self):
+        for slug, short in (('harbourside', 'hb'), ('greenline', 'gl')):
+            with self.subTest(project=slug):
+                article = self.article(slug)
+                stories = re.findall(rf'<section class="{short}-story" aria-labelledby="{short}-title {short}-story-h">(.*?)</section>', article, re.S)
+                self.assertEqual(len(stories), 1)
+                self.assertRegex(stories[0], rf'^<h3 id="{short}-story-h">The story</h3><dl class="{short}-beats">')
+                beats = re.findall(r'<div(?: class="[^"]+")?><dt>([^<]+)</dt><dd>(.*?)</dd></div>', stories[0], re.S)
+                self.assertEqual([label for label, _ in beats], self.BEATS)
+                self.assertEqual(stories[0].count('<dt>'), 5)
+                for label, body in beats:
+                    with self.subTest(beat=label):
+                        self.assertGreaterEqual(len(self.text(body)), 20)
+
+    def test_the_two_stories_use_different_layouts(self):
+        hb = re.search(r'grid-template-columns:([^;]+)', rules_for(self.base, '.hb-beats>div')[0]).group(1)
+        gl = re.search(r'grid-template-columns:([^;]+)', rules_for(self.base, '.gl-beats')[0]).group(1)
+        self.assertNotEqual(hb, gl)
+        self.assertIn('display:grid', rules_for(self.base, '.gl-beats')[0])
+        self.assertNotIn('.hb-beats', ''.join(rules_for(self.base, '.gl-beats')))
+
+    def test_harbourside_packages_mockup_is_real_text_without_prices(self):
+        hb = self.article('harbourside')
+        packs = re.findall(r'<section class="hb-pack" aria-labelledby="hb-title hb-pack-h">(.*?)</section>', hb, re.S)
+        self.assertEqual(len(packs), 1)
+        pack = packs[0]
+        self.assertIn('<span class="tag">Mockup</span>', pack)
+        self.assertNotIn('role="img"', pack)
+        self.assertNotIn('aria-hidden', pack)
+        items = re.findall(r'<li><b>([^<]+)</b><span>([^<]+)</span><small>([^<]+)</small></li>', pack)
+        self.assertEqual([name for name, _, _ in items], ['Express wash', 'Full detail', 'Paint correction'])
+        for _, duration, _ in items:
+            self.assertRegex(duration, r'(?i)hour|day')
+        # It sits beside the story in the brief/body grid, after it in reading order, and outside the described bench.
+        self.assertLess(hb.index('class="hb-story"'), hb.index('class="hb-pack"'))
+        self.assertLess(hb.index('class="hb-pack"'), hb.index('<section class="cs-screens'))
+        self.assertIn('grid-column:1/9', rules_for(self.base, '.hb-story')[0])
+        self.assertIn('grid-column:9/13', rules_for(self.base, '.hb-pack')[0])
+        for selector in ('.hb-story', '.hb-pack'):
+            self.assertIn('grid-column:1/-1', ''.join(rules_for(media_blocks(self.css, 'max-width:1023px'), selector)))
+
+    def test_greenline_photo_strip_is_lazy_named_and_keyboard_scrollable(self):
+        gl = self.article('greenline')
+        figure = re.findall(r'<figure class="gl-strip-fig">(.*?)</figure>', gl, re.S)
+        self.assertEqual(len(figure), 1)
+        strip = re.search(r'<ul class="gl-strip" tabindex="0" aria-labelledby="gl-strip-cap">(.*?)</ul>', figure[0], re.S)
+        self.assertIsNotNone(strip)
+        caption = re.search(r'<figcaption id="gl-strip-cap">([^<]+)</figcaption>', figure[0])
+        self.assertIsNotNone(caption)
+        self.assertIn('made up', caption.group(1))
+        parser = ImageCollector()
+        parser.feed(strip.group(1))
+        self.assertTrue(3 <= len(parser.images) <= 4)
+        for attrs, hidden in parser.images:
+            with self.subTest(img=attrs.get('src')):
+                self.assertFalse(hidden)
+                self.assertIn(re.match(r'/assets/images/([a-z-]+)-(?:800|1600)\.jpg$', attrs['src']).group(1), self.STRIP_PHOTOS)
+                for url in re.findall(r'/assets/images/([a-z-]+)-(?:800|1600)\.jpg', attrs['srcset']):
+                    self.assertIn(url, self.STRIP_PHOTOS)
+                self.assertEqual((attrs.get('loading'), attrs.get('decoding')), ('lazy', 'async'))
+                for name in ('width', 'height', 'srcset', 'sizes'):
+                    self.assertTrue(attrs.get(name), name)
+                self.assertGreaterEqual(len(attrs.get('alt', '').strip()), 20)
+        self.assertNotIn('data-', strip.group(1))  # no reveal or other motion hook on the strip
+        # Desktop: a static row. Narrow screens: a native scroll-snap row (no script), inside a max-width query only.
+        self.assertNotIn('scroll-snap', self.base)
+        narrow = rules_for(media_blocks(self.css, 'max-width:860px'), '.gl-strip')
+        self.assertTrue(any('scroll-snap-type:x mandatory' in rule and 'overflow-x:auto' in rule for rule in narrow))
+        for selectors, body in re.findall(r'([^{}]+)\{([^{}]*)\}', self.css):
+            if '.gl-strip' in selectors:
+                with self.subTest(selectors=selectors.strip()):
+                    self.assertNotRegex(body, r'(?<![-\w])(?:animation|transition)(?:-[a-z]+)?:')
+        self.assertNotIn('gl-strip', (OUT / 'assets/reel.js').read_text() + (OUT / 'assets/motion.js').read_text())
+
+    def test_stories_claim_no_results_and_show_no_prices(self):
+        for slug in ('harbourside', 'greenline'):
+            with self.subTest(project=slug):
+                text = self.text(self.article(slug))
+                self.assertNotIn('$', text)
+                self.assertNotIn('%', text)
+                self.assertNotRegex(text.lower(), r'increase|more bookings|results|testimonial|rating')
 
 
 class LiquidGlassTests(unittest.TestCase):
@@ -4584,8 +4696,11 @@ class EnquiryRobustnessAndAccessTests(unittest.TestCase):
             names.append(' '.join(texts.get(ident, '') for ident in parts))
         self.assertGreaterEqual(len(names), 9)
         self.assertEqual(len(names), len(set(names)), names)
-        for short, project in (('hb', 'Harbourside Mobile Detailing'), ('gl', 'Greenline Landscapes'), ('fc', 'Fade & Co')):
-            for part in ('screens', 'brief', 'does'):
+        # Task 53: Harbourside and Greenline tell their brief and "what the site does" inside a five-beat story region
+        # (Harbourside adds its packages mockup); Fade & Co keeps its brief and "does" regions until Task 54.
+        for short, project, regions in (('hb', 'Harbourside Mobile Detailing', ('screens', 'story-h', 'pack-h')),
+                                        ('gl', 'Greenline Landscapes', ('screens', 'story-h')), ('fc', 'Fade & Co', ('screens', 'brief', 'does'))):
+            for part in regions:
                 with self.subTest(region=f'{short}-{part}'):
                     self.assertIn(f'aria-labelledby="{short}-title {short}-{part}"', main)
                     self.assertTrue(texts[f'{short}-title'].startswith(project))

@@ -32,7 +32,7 @@
 .cs-body{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:40px 24px;padding-top:clamp(48px,6vw,88px);padding-bottom:clamp(24px,3vw,40px)}
 .cs-brief{grid-column:1/6}
 .cs-does{grid-column:7/13}
-.cs-brief h3,.cs-does h3,.cs-screens-h{margin:0 0 14px;font:700 1rem/1.2 var(--font-display);font-stretch:96%;letter-spacing:0}
+.cs-brief h3,.cs-does h3,.cs-screens-h,.hb-story h3,.gl-story h3,.hb-pack h3{margin:0 0 14px;font:700 1rem/1.2 var(--font-display);font-stretch:96%;letter-spacing:0}
 .cs-lede{margin:0;color:var(--ink);font:560 clamp(1.3rem,1rem + 1vw,1.9rem)/1.25 var(--font-display);font-stretch:94%;letter-spacing:-.015em}
 .cs-list{list-style:none;margin:0;padding:0;border-top:1px solid var(--ink)}
 .cs-list li{padding:16px 0;border-bottom:1px solid var(--line-2);color:var(--ink-2)}
@@ -54,12 +54,41 @@
 .cs-cover .cs-facts div{border-top-color:rgba(255,255,255,.28)}
 .cs-cover .cs-facts dt{color:rgba(255,255,255,.78)}
 .cs-cover :focus-visible{outline-color:#fff}
+/* Task 53: Harbourside's story as a spec sheet (beat label left, answer right) beside a static packages mockup. */
+.hb-story{grid-column:1/9}
+.hb-beats{margin:0;border-top:1px solid var(--ink)}
+.hb-beats>div{display:grid;grid-template-columns:minmax(0,3fr) minmax(0,8fr);gap:6px 24px;padding:18px 0;border-bottom:1px solid var(--line-2)}
+.hb-beats dt{color:var(--amber-ink);font:700 .875rem/1.5 var(--font-display)}
+.hb-beats dd,.gl-beats dd{margin:0;color:var(--ink-2)}
+.hb-beats .cs-list,.gl-beats .cs-list{border-top:0}
+.hb-beats .cs-list li:first-child,.gl-beats .cs-list li:first-child{padding-top:0}
+.hb-beats .cs-list li:last-child,.gl-beats .cs-list li:last-child{padding-bottom:0;border-bottom:0}
+.hb-pack{grid-column:9/13;align-self:start;padding:22px;border-radius:22px;background:#fff;box-shadow:var(--shadow-lift)}
+.hb-pack-top{display:flex;align-items:center;justify-content:space-between;gap:12px;padding-bottom:14px;border-bottom:1px solid var(--line)}
+.hb-pack .hb-pack-top h3{margin:0}
+.hb-pack-list{list-style:none;margin:0;padding:0}
+.hb-pack-list li{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:4px 12px;padding:14px 0;border-bottom:1px solid var(--line)}
+.hb-pack-list b{font:720 1.0625rem/1.2 var(--font-display);font-stretch:94%}
+.hb-pack-list span{color:var(--amber-ink);font:650 .875rem/1.4 var(--font-display);text-align:right}
+.hb-pack-list small{grid-column:1/-1;color:var(--mute);font-size:.875rem}
+.hb-pack-note{margin:14px 0 0;color:var(--mute);font-size:.875rem}
 /* Greenline: a light split cover and a serif pull line in the concept's own green */
 .gl-cover{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));column-gap:24px;align-items:end}
 .gl-cover-copy{grid-column:1/6;padding-bottom:8px}
 .gl-cover-media{grid-column:6/13;aspect-ratio:16/10.5}
 .gl-pull{margin:0;color:#1D2A22;font:500 clamp(1.5rem,1rem + 1.5vw,2.4rem)/1.18 Georgia,"Times New Roman",serif;letter-spacing:-.01em}
 .cs-gl .cs-screens{padding-top:clamp(48px,6vw,88px);padding-bottom:0}
+/* Task 53: Greenline's story as an editorial grid (the pull line beside the business, then three beats in a row) and a
+   static row of finished-garden photos that becomes a native scroll-snap row on narrow screens (no script, no motion). */
+.gl-story{grid-column:1/-1}
+.gl-beats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:40px 24px;margin:0}
+.gl-beats>div{padding-top:14px;border-top:1px solid var(--line-2)}
+.gl-beats dt{margin-bottom:8px;color:#1D2A22;font:700 .875rem/1.5 var(--font-display)}
+.gl-beat-problem{grid-column:2/4}
+.gl-strip-fig{grid-column:1/-1;min-width:0;margin:0}
+.gl-strip{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:24px}
+.gl-strip img{display:block;width:100%;height:auto;aspect-ratio:3/2;object-fit:cover;border-radius:14px}
+.gl-strip-fig figcaption{margin-top:12px;color:var(--mute);font-size:.875rem}
 /* Fade & Co: a photo column beside the devices */
 .fc-head{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));column-gap:24px;align-items:end}
 .fc-head-t{grid-column:1/7}
@@ -101,6 +130,7 @@
 .wk-index{grid-template-columns:repeat(2,minmax(0,1fr))}
 .fc-head-t,.fc-head .cs-facts,.fc-photo,.fc-stage .bench{grid-column:1/-1}
 .fc-photo{aspect-ratio:16/7;min-height:0}
+.hb-story,.hb-pack{grid-column:1/-1}
 }
 @media(max-width:960px){
 .wk-demo-card,.queue{grid-column:1/-1}
@@ -113,10 +143,15 @@
 .cs-facts{grid-template-columns:minmax(0,1fr)}
 .cs-facts div{display:grid;grid-template-columns:7rem minmax(0,1fr);gap:12px;align-items:baseline;padding:10px 0}
 .cs-facts dd{margin:0}
+.gl-beats{grid-template-columns:minmax(0,1fr);gap:28px}
+.gl-beat-problem{grid-column:auto}
+.gl-strip{grid-template-columns:none;grid-auto-flow:column;grid-auto-columns:78%;gap:16px;overflow-x:auto;overscroll-behavior-x:contain;scroll-snap-type:x mandatory;padding-bottom:12px}
+.gl-strip li{scroll-snap-align:start}
 }
 @media(max-width:560px){
 .wk-clip{grid-template-columns:42% minmax(0,1fr);column-gap:16px}
 .wk-index{gap:20px 12px}
+.hb-beats>div{grid-template-columns:minmax(0,1fr);gap:4px}
 }
 
 /* Motion: hover feedback within 200 ms, transform only */
