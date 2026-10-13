@@ -2061,6 +2061,15 @@ async function run(env) {
     homePhoneNoWebGL: { ...phone, noWebGL: true }, homePhoneFail: { ...phone, fail: true }, homePhoneDeclines: { ...phone, declines: true },
     slabPhone: { ...phone, kind: 'slab' }, panesPhone: { ...phone, kind: 'panes' }, sheetsPhone: { ...phone, kind: 'sheets' },
     photosPhone: { ...phone, kind: 'photos' }, markPhone: { ...phone, kind: 'mark' } });
+  // Task 60: a phone on its side (844x390) is a phone (lite homepage, phone checks); 761-1023px (tablets) runs the
+  // homepage lite with the desktop checks, and the inner pages there exactly as before; laptops never run lite.
+  const side = { ...phone, width: 844, height: 390 }, tablet = { width: 768, height: 1024, fine: false, reduce: false, memory: 8, cores: 8 };
+  Object.assign(cases, { landHome: side, landHomeFourCores: { ...side, cores: 4, memory: 4 }, landHome3g: { ...side, net: '3g' },
+    landHomeLowCores: { ...side, cores: 3 }, landHomeLowMem: { ...side, memory: 2 }, landSlab: { ...side, kind: 'slab' }, landSheets: { ...side, kind: 'sheets' },
+    tabletHome: tablet, tabletHomeWide: { ...tablet, width: 1023, height: 800 }, tabletHomeFourCores: { ...tablet, cores: 4 },
+    tabletHome3g: { ...tablet, net: '3g' }, tabletSlab: { ...tablet, kind: 'slab' }, tabletPanes: { ...tablet, kind: 'panes' },
+    tabletSlabFourCores: { ...tablet, kind: 'slab', cores: 4 }, laptopHome: { ...desktop, width: 1280, height: 800 },
+    laptopHome1024: { ...desktop, width: 1024, height: 768 } });
   const out = {};
   for (const [name, env] of Object.entries(cases)) out[name] = await run(env);
   console.log(JSON.stringify(out));
@@ -2504,6 +2513,43 @@ const { pathToFileURL } = require('url');
         self.assertIn('(G.lite = lite, import(SCENE))', js)
         self.assertNotIn('setAttribute', js)
         self.assertNotIn('dataset', js)
+
+    def test_landscape_phones_and_tablets_get_the_lite_homepage_scene(self):
+        # Task 60: at 844x390 the desktop scene (with the wordmark) loaded on a phone on its side, and at 768x1024 its
+        # wordmark sat behind the headline. A phone on its side is now a phone: the homepage loads lite, after load and idle,
+        # only when capable (4+ cores, 4 GB+ where reported, not 2g/3g); inner pages keep the still. Tablets (761-1023px)
+        # run the homepage lite under the desktop checks (under 4 GB or 4 cores or fewer keeps the still), and the inner
+        # pages there load the inner-page scene exactly as before. Wider screens never run lite.
+        r = self.node_json(GLASS_BOOT_SCRIPT, GLASS_BOOT)
+        for name in ('landHome', 'landHomeFourCores', 'tabletHome', 'tabletHomeWide'):
+            with self.subTest(case=name):
+                c = r[name]
+                self.assertIsNone(c['error'])
+                self.assertEqual((c['beforeLoad'], c['afterLoad']), (0, 0))
+                self.assertEqual(c['imports'], ['/assets/glass-scene.js'])
+                self.assertEqual(c['started'], {'host': 'host', 'shared': True})
+                self.assertIs(c['lite'], True)
+                self.assertTrue(c['handed'])
+        for name in ('landHome3g', 'landHomeLowCores', 'landHomeLowMem', 'landSlab', 'landSheets', 'tabletHomeFourCores', 'tabletSlabFourCores'):
+            with self.subTest(case=name):
+                c = r[name]
+                self.assertIsNone(c['error'])
+                self.assertEqual(c['imports'], [])
+                self.assertIsNone(c['started'])
+                self.assertEqual(c['contexts'], [])  # no WebGL context is made to find out
+        # 3g is only a phone check: a tablet on 3g is judged like a desktop (as before Task 60).
+        self.assertEqual(r['tabletHome3g']['imports'], ['/assets/glass-scene.js'])
+        for name in ('tabletSlab', 'tabletPanes'):
+            with self.subTest(case=name):
+                self.assertEqual(r[name]['imports'], ['/assets/glass-page.js'])
+                self.assertIs(r[name]['lite'], False)  # inner pages never run lite
+        for name in ('laptopHome', 'laptopHome1024', 'desktop'):
+            with self.subTest(case=name):
+                self.assertEqual(r[name]['imports'], ['/assets/glass-scene.js'])
+                self.assertIs(r[name]['lite'], False)
+        js = GLASS_BOOT.read_text(encoding='utf-8')
+        self.assertIn("phone = mq('(max-width: 760px), (max-height: 500px)'), lite = kind == 'home' && (phone || mq('(max-width: 1023px)'))", js)
+        self.assertIn('lowEnd: nav.deviceMemory < 4 || cores <= 4 - phone,', js)
 
     def run_scene(self):
         # Task 57: the real glass-scene.js and glass-shapes.js beside stub modules at the vendored paths (see THREE_STUB).

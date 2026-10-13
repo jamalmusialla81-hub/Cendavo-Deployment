@@ -237,11 +237,13 @@
     return run;
   };
 
-  // Concept cards fan in from depth once, each on its own angle (wide screens), and settle flat.
+  // Concept cards fan in from depth once, each on its own angle (wide screens), and settle flat. Task 60: the trigger is
+  // the grid (.teaser, the card's parent), which never moves; a card's own box starts 160px lower and pushed back, so on
+  // short screens it met its line about a screen late and left the space under the intro empty.
   const cardsIn = wide => $$('.teaser-card').filter(below).forEach((card, i) => {
     const fan = [{ x: -160, rY: 32, rZ: -4 }, { x: 220, rY: -38, rZ: 5 }, { x: 260, rY: -30, rZ: -3 }][i % 3];
     gsap.fromTo(card, { opacity: 0, y: 160, x: wide ? fan.x : 0, z: -500, rotationX: 22, rotationY: wide ? fan.rY : 0, rotationZ: wide ? fan.rZ : 0, transformPerspective: 1400, transformOrigin: '50% 100%' },
-      { opacity: 1, y: 0, x: 0, z: 0, rotationX: 0, rotationY: 0, rotationZ: 0, duration: 1.6, delay: (i % 3) * 0.12, ease: OUT, clearProps: OT, scrollTrigger: once(card) });
+      { opacity: 1, y: 0, x: 0, z: 0, rotationX: 0, rotationY: 0, rotationZ: 0, duration: 1.6, delay: (i % 3) * 0.12, ease: OUT, clearProps: OT, scrollTrigger: once(card.parentNode || card) });
   });
 
   // Fine pointers: a small tilt toward the pointer and a light sweep across the photo (keyboard focus gets neither).

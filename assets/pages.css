@@ -143,11 +143,30 @@
 .faq details p{padding-right:0}
 }
 @media(max-width:760px){.ct-gl-spot{display:none}}
+/* Task 60: the demo's request table scrolls sideways below 1100px. A visible line says so, and a soft shadow marks the
+   right edge while more columns sit beyond it: the white cover (the panel's colour) is fixed to the table's far end (local), so it
+   slides over the shadow (fixed to the box's edge) and hides it once the last column is in view. Backgrounds only: the
+   shadow paints under the table, never over a Draft reply button, and needs no script. */
+.table-hint{display:none}
+@media(max-width:1099px){
+.table-hint{display:block;margin:0 0 10px;color:var(--mute);font-size:.875rem}
+.table-wrap{background:linear-gradient(90deg,rgba(255,255,255,0),#fff 70%) 100% 0/40px 100% no-repeat local,radial-gradient(farthest-side at 100% 50%,rgba(14,14,13,.2),rgba(14,14,13,0)) 100% 0/16px 100% no-repeat scroll;background-color:#fff}
+}
 @media(max-width:640px){
 .close-loop{display:none}
 .field-row{grid-template-columns:minmax(0,1fr)}
 .ct-form{border-radius:22px}
 .form-foot .button,.close-foot .button,.pg-actions .button{width:100%}
+}
+/* Task 60: landscape phones (844x390). Pricing's and the 404's first button in view: less space above, a headline sized
+   by the screen's height, tighter gaps, and buttons side by side at their own width. */
+@media(max-height:500px){
+.pr-hero,.pg-hero:has(>.nf){padding-top:16px}
+.pr-hero .pk,.nf .pk{font-size:clamp(1.9rem,10svh,3.2rem)}
+.pr-hero .pg-sub,.nf .pg-sub{margin-top:10px;font-size:1rem;line-height:1.45}
+.pr-hero .pg-actions,.nf .pg-actions{gap:8px;margin-top:14px}
+.pr-hero .pg-actions .button,.nf .pg-actions .button{width:auto}
+.nf-copy .chip{margin-bottom:12px}
 }
 
 /* Motion: only for people who have not asked for reduced motion; only transform and opacity move, hover within 200 ms.

@@ -144,6 +144,9 @@
 .sv-pane{width:62%;top:2%}
 .sv-pane:nth-child(2){left:19%;top:24%}
 .sv-pane:nth-child(3){left:38%;top:46%}
+/* Task 60: in the tighter 4:3 stack a covered pane shows only its number and title, so the one-line descriptions (cut
+   mid-word at 430) are left out here; the chapter links below say the same, and the panes are aria-hidden. */
+.sv-pane-f{display:none}
 }
 @media(max-width:960px){
 .chap-a,.chap-b,.care-a,.care-b,.proc-head .h2,.proc-head p,.proc-photo{grid-column:1/-1;grid-row:auto}

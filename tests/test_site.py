@@ -4090,6 +4090,12 @@ def undo_edits(test, text, edits):
         test.assertEqual(text.count(new), 1, new)
         text = text.replace(new, old)
     return text
+# Task 60's one addition to the demo app: a visible line above the request table saying it scrolls sideways (shown below
+# 1100px by pages.css). Undone before hashing, so everything else is still checked byte for byte.
+TASK60_DEMO_EDITS = (
+    ('<p class="table-hint">Scroll the table sideways to see every column, including Draft reply.</p><div class="table-wrap"',
+     '<div class="table-wrap"'),
+)
 # The demonstration app's markup, from its .demo-shell wrapper to the end of pages/demo.html, unchanged since before Task 34.
 DEMO_APP_SHA256 = 'edf5d1891ad9896aa8b44f0a53635fdfee7d6bc965ffb5d2a1b81bcffa44525e'
 VOID_TAGS = {'area', 'base', 'br', 'col', 'embed', 'hr', 'img', 'input', 'link', 'meta', 'source', 'track', 'wbr'}
@@ -4144,7 +4150,7 @@ class DaylightInnerPageTests(unittest.TestCase):
     def test_demo_app_markup_and_every_hook_demo_js_uses_are_kept(self):
         import hashlib
         source = (self.pages / 'demo.html').read_text()
-        app = source[source.index('<div class="wrap demo-shell">'):].rstrip()
+        app = undo_edits(self, source[source.index('<div class="wrap demo-shell">'):].rstrip(), TASK60_DEMO_EDITS)
         self.assertEqual(hashlib.sha256(app.encode()).hexdigest(), DEMO_APP_SHA256)
         script = (OUT / 'assets/demo.js').read_text()
         created = set(re.findall(r"\.id='([\w-]+)'", script))  # nodes demo.js makes itself
@@ -5551,6 +5557,132 @@ class MobilePerformanceTests(unittest.TestCase):
         reel = [attrs for attrs, _, _ in home.videos if attrs.get('class') == 'reel-video'][0]
         self.assertNotIn('poster', reel)
         self.assertEqual((reel['data-poster'], reel['data-narrow-poster']), ('/assets/glass/glass-reel-poster.jpg', '/assets/glass/glass-reel-vertical-poster.jpg'))
+
+
+
+class FinalQaPolishTests(unittest.TestCase):
+    """Task 60 (owner-mandated final QA): tablet hero, blank screens, landscape phones, narrow cards, the Services stack,
+    the demo table's scroll cue and the Work cover seam. CSS only apart from two small script changes (home.js reveals the
+    concept cards from their grid; glass-boot.js, covered in tests/test_demo_js.py)."""
+
+    @classmethod
+    def setUpClass(cls):
+        build()
+        cls.home_css = (OUT / 'assets/home.css').read_text()
+        cls.pages_css = (OUT / 'assets/pages.css').read_text()
+        cls.services_css = (OUT / 'assets/services.css').read_text()
+        cls.work_css = (OUT / 'assets/work.css').read_text()
+        cls.home_js = (OUT / 'assets/home.js').read_text()
+
+    def test_hero_sticky_exit_is_at_most_120svh(self):
+        # Item 2: 160svh left about one screen with only a faded C after the copy had gone.
+        rule = rules_for(media_blocks(self.home_css, 'min-width:761px'), '.motion .hero')
+        self.assertEqual(len(rule), 1)
+        self.assertLessEqual(int(re.search(r'height:(\d+)svh', rule[0]).group(1)), 120)
+        self.assertGreater(int(re.search(r'height:(\d+)svh', rule[0]).group(1)), 100)  # still a sticky exit (the 3D tilt)
+        self.assertNotIn('160svh', self.home_css)
+        self.assertIn('position:sticky;top:0', rules_for(media_blocks(self.home_css, 'min-width:761px'), '.motion .hero-pin')[0])
+
+    def test_portrait_tablet_hero_puts_the_copy_below_the_glass(self):
+        # Item 1: at 768x1024 the wordmark sat behind "Your work is". Portrait tablets stack like a phone: the wide still
+        # across the top (no new image, so the Task 59 preloads stay exact), the copy below its wordmark.
+        query = 'min-width:761px) and (max-width:1023px) and (orientation:portrait'
+        block = media_blocks(self.home_css, query)
+        self.assertTrue(block)
+        self.assertGreater(self.home_css.index('@media(' + query + '){'), self.home_css.index('@media(max-width:1023px){'))
+        gl = rules_for(block, '.hero-gl')[0]
+        self.assertIn('background-size:100% auto', gl)
+        self.assertIn('background-position:50% 0', gl)
+        self.assertNotIn('url(', gl)  # the wide still from the base rule, which the preload already covers
+        self.assertIn('rgba(246,245,241,.96) 0%', rules_for(block, '.hero-gl::after')[0])  # the phone's bottom-up veil
+        padding = rules_for(block, '.hero-in')[0]
+        top = re.search(r'padding-top:max\(calc\((\d+)vw \+ (\d+)px\),(\d+)svh\)', padding)
+        self.assertIsNotNone(top, padding)
+        # The wide still is 2160x1350 (16:10, so 62.5vw tall at 100% width) and its wordmark ends at about 72% of its
+        # height: 45vw. The copy starts below that, and below the lite C (the upper ~42% of the hero).
+        self.assertGreaterEqual(int(top.group(1)), 46)
+        self.assertGreaterEqual(int(top.group(3)), 44)
+        self.assertEqual(jpeg_size(ROOT / 'assets/glass/hero-glass-poster.jpg'), (2160, 1350))
+        self.assertIn('min(10vw,7.5svh)', rules_for(block, '.hero-h')[0])  # buttons stay on the first screen
+
+    def test_project_cards_go_two_up_between_861_and_1199px(self):
+        # Item 5: three columns gave Greenline and Fade & Co 2-4 words a line at 1024 and 150% zoom.
+        block = media_blocks(self.home_css, 'min-width:861px) and (max-width:1199px')
+        self.assertIn('grid-column:1/-1', rules_for(block, '.teaser-card:first-child')[0])
+        self.assertIn('grid-column:span 6', rules_for(block, '.teaser-card')[0])
+        self.assertIn('margin-top:0', rules_for(block, '.teaser-card:last-child')[0])
+        self.assertIn('@media(max-width:860px){', self.home_css)  # phones still stack them
+
+    def test_landscape_phones_get_no_gap_before_the_project_cards(self):
+        # Item 3: at 844x390 about one screen was empty between the intro and the first card.
+        block = media_blocks(self.home_css, 'max-height:500px')
+        for selector in ('.work', '.work-head'):
+            with self.subTest(selector=selector):
+                values = [int(v) for v in re.findall(r'padding(?:-block|-bottom|-top)?:(\d+)px', rules_for(block, selector)[0])]
+                self.assertTrue(values)
+                self.assertLessEqual(max(values), 64)
+        self.assertIn('margin-top:0', rules_for(block, '.teaser-card:last-child')[0])
+        # The reveal's trigger is the grid, which never moves; a card's own box starts 160px lower and pushed back.
+        self.assertIn('scrollTrigger: once(card.parentNode || card) });', self.home_js)
+        # the cards' parent is the .teaser grid: its three direct children
+        self.assertRegex(main_of((OUT / 'index.html').read_text()), r'(?s)<div class="teaser">\s*(?:<article class="teaser-card"(?:(?!</article>).)*</article>\s*){3}</div>')
+        self.assertNotIn('scrollTrigger: once(card)', self.home_js)
+
+    def test_pricing_and_404_buttons_fit_a_landscape_phone(self):
+        # Item 4: at 844x390 the hero buttons were below the fold. Both pages load pages.css.
+        for route in ('pricing/index.html', '404.html'):
+            self.assertIn('<link rel="stylesheet" href="/assets/pages.css">', (OUT / route).read_text())
+        block = media_blocks(self.pages_css, 'max-height:500px')
+        for hero, scope in (('.pr-hero', '.pr-hero'), ('.pg-hero:has(>.nf)', '.nf')):
+            with self.subTest(hero=hero):
+                self.assertLessEqual(int(re.search(r'padding-top:(\d+)px', rules_for(block, hero)[0]).group(1)), 96)
+                self.assertRegex(rules_for(block, scope + ' .pk')[0], r'font-size:clamp\([\d.]+rem,\d+svh,[\d.]+rem\)')
+                self.assertIn('gap:8px', rules_for(block, scope + ' .pg-actions')[0])
+                self.assertIn('width:auto', rules_for(block, scope + ' .pg-actions .button')[0])
+        self.assertIn('class="pg-hero pr-hero"', (OUT / 'pricing/index.html').read_text())
+        self.assertIn('<section class="pg-hero" aria-labelledby="nf-title"><div class="wrap nf">', (OUT / '404.html').read_text())
+
+    def test_services_stack_hides_descriptions_but_keeps_number_and_title(self):
+        # Item 6: at 430 the covered panes cut their descriptions mid-word.
+        narrow = media_blocks(self.services_css, 'max-width:1023px')
+        self.assertEqual(rules_for(narrow, '.sv-pane-f'), ['display:none'])
+        self.assertNotIn('display:none', ''.join(rules_for(base_rules(self.services_css), '.sv-pane-f')))
+        for selector in ('.sv-pane-n', '.sv-pane b', '.sv-pane'):
+            for rule in rules_for(self.services_css, selector):
+                self.assertNotIn('display:none', rule)
+
+    def test_demo_table_has_a_visible_scroll_cue_below_1100px(self):
+        # Item 7: the Draft reply column sat off to the right with no cue. A line of text and a CSS-only edge shadow.
+        main = main_of((OUT / 'demo/index.html').read_text())
+        self.assertIn('<p class="table-hint">Scroll the table sideways to see every column, including Draft reply.</p>'
+                      '<div class="table-wrap" role="region" aria-labelledby="demo-table-title" tabindex="0"><table', main)
+        self.assertIn('display:none', rules_for(base_rules(self.pages_css), '.table-hint')[0])
+        block = media_blocks(self.pages_css, 'max-width:1099px')
+        self.assertIn('display:block', rules_for(block, '.table-hint')[0])
+        shadow = rules_for(block, '.table-wrap')[0]
+        self.assertIn('no-repeat local', shadow)  # the cover rides with the table's far end
+        self.assertIn('no-repeat scroll', shadow)  # the shadow stays at the box's edge
+        self.assertNotIn('overflow', shadow)  # the scrolling itself is unchanged (site.css)
+        self.assertIn('.table-wrap{overflow-x:auto}', (OUT / 'assets/site.css').read_text())
+
+    def test_work_cover_meets_the_index_on_its_photo(self):
+        # Item 8: the cover opens with a clear strip of photo above its copy, the veil clear at the top edge, on every width.
+        base = base_rules(self.work_css)
+        cover = rules_for(base, '.cs-cover')[0]
+        self.assertRegex(cover, r'padding-top:clamp\(\d+px,\d+vw,\d+px\)')
+        self.assertGreaterEqual(int(re.search(r'padding-top:clamp\((\d+)px', cover).group(1)), 96)
+        veil = rules_for(base, '.cs-cover::after')[0]
+        self.assertIn('rgba(14,14,13,0) 0%', veil)
+        phone = rules_for(media_blocks(self.work_css, 'max-width:860px'), '.cs-cover::after')[0]
+        self.assertIn('rgba(14,14,13,0) 0%', phone)
+        self.assertNotRegex(phone, r'background:rgba\(')  # no flat dark veil over the whole photo
+        # Each "The action it asks for" row sits inside its own case study's body, never in a cover or between sections.
+        work = (OUT / 'work/index.html').read_text()
+        for article in re.findall(r'<article class="cs [^"]+".*?</article>', work, re.S):
+            with self.subTest(article=article[:40]):
+                self.assertEqual(article.count('<dt>The action it asks for</dt>'), 1)
+                body = article[article.index('<div class="wrap cs-body">'):]
+                self.assertIn('<dt>The action it asks for</dt>', body)
 
 
 if __name__ == '__main__':

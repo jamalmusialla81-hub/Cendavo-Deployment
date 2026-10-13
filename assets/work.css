@@ -44,10 +44,12 @@
 .cs-screens{padding-bottom:clamp(40px,5vw,72px)}
 /* Harbourside: the one dark photographic cover; the scrim keeps the white type above 4.5:1 wherever it sits */
 .cs-hb{padding-top:0}
-.cs-cover{position:relative;isolation:isolate;display:flex;align-items:flex-end;min-height:clamp(440px,62vw,720px);overflow:hidden;background:var(--ink);color:#fff}
+/* Task 60: the cover meets the index on its photo, never on a dark band: the photo always has a clear strip above the
+   copy (padding-top; the copy's own scrim starts below it) and the veil starts clear at the top edge. */
+.cs-cover{position:relative;isolation:isolate;display:flex;align-items:flex-end;min-height:clamp(440px,62vw,720px);overflow:hidden;padding-top:clamp(120px,14vw,200px);background:var(--ink);color:#fff}
 .cs-cover-media{position:absolute;inset:0;z-index:-1;margin:0;overflow:hidden}
 .cs-cover-media img{width:100%;height:100%;object-fit:cover}
-.cs-cover::after{content:"";position:absolute;inset:0;z-index:-1;background:linear-gradient(180deg,rgba(14,14,13,.2) 0%,rgba(14,14,13,.55) 30%,rgba(14,14,13,.88) 50%,rgba(14,14,13,.92) 100%)}
+.cs-cover::after{content:"";position:absolute;inset:0;z-index:-1;background:linear-gradient(180deg,rgba(14,14,13,0) 0%,rgba(14,14,13,.5) 30%,rgba(14,14,13,.88) 50%,rgba(14,14,13,.92) 100%)}
 .cs-cover-in{position:relative;padding-top:96px;padding-bottom:clamp(36px,4vw,56px)}
 /* The copy carries its own scrim: clear at its top edge, ink at .88 from 64px down (above the label, inside the 96px
    padding) to the bottom, across the full width. However the title wraps, the type sits on .88 ink or darker. */
@@ -177,7 +179,7 @@
 .wk-demo-list{grid-template-columns:minmax(0,1fr)}
 }
 @media(max-width:860px){
-.cs-cover::after{background:rgba(14,14,13,.8)}
+.cs-cover::after{background:linear-gradient(180deg,rgba(14,14,13,0) 0%,rgba(14,14,13,.8) 40%)}
 .cs-brief,.cs-does,.gl-cover-copy,.gl-cover-media{grid-column:1/-1}
 .gl-cover-media{margin-top:32px}
 .cs-facts{grid-template-columns:minmax(0,1fr)}

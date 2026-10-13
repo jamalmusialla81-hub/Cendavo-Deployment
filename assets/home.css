@@ -1,9 +1,5 @@
-/* Cendavo homepage, Liquid Glass (Task 37) over the Daylight content: the WebGL glass hero (a CSS poster underneath),
-   the showreel opening from a glass lens, the film-filled marquee, concept cards with glass bodies and hover loops, the
-   before/after in a glass browser frame, What we do on still glass cards and the dark glass closing panel over footage.
-   Loaded only on /, like home.js. Tokens, buttons, focus rings and the glass panel (.lg) come from site.css and
-   glass.css; the "after" mini-site in the comparison comes from kit.css. Nothing is hidden outside the guarded block at
-   the end, and there only while motion-boot.js holds .ph-wait. */
+/* Cendavo homepage (Liquid Glass, Task 37), loaded only on /, like home.js. Tokens, buttons and the glass panel (.lg)
+   come from site.css and glass.css. Nothing is hidden outside the guarded block at the end, and only while .ph-wait. */
 .band-warm{background:var(--warm)}
 /* Task 43: homepage sections meet edge to edge, so each gets a little under the site-wide --section; two together no
    longer leave a 240px gap. */
@@ -12,10 +8,8 @@
 /* The glass nav pill floats over the hero instead of pushing it down. */
 .site-header{margin-bottom:-76px}
 
-/* Hero. The glass logo is a WebGL scene (glass-scene.js) on capable desktops; everyone else, and everyone until it is
-   ready, sees the still render as the host's background. A light veil keeps the headline on an even, light ground. On
-   motion-capable wide screens the hero is taller than the screen and its stage stays pinned by CSS (sticky) while the
-   copy and cards leave and the 3D scene tilts away. */
+/* Hero: the WebGL glass logo (glass-scene.js) where capable, the still render as the host's background otherwise, under
+   a light veil. On motion-capable wide screens the hero is taller than the screen and its stage is sticky. */
 .hero{position:relative}
 /* A column, so where its height is released the copy still fills the screen and the tag adds height (Task 46). */
 .hero-pin{position:relative;display:flex;flex-direction:column;height:100svh;min-height:640px;overflow:hidden}
@@ -57,11 +51,8 @@
 .hero-cap{position:absolute;z-index:2;right:var(--gut);bottom:88px;display:flex;align-items:baseline;gap:10px;margin:0;padding:10px 16px;border-radius:999px;font:640 .875rem/1.3 var(--font-display);pointer-events:none}
 .hero-cap span{font:400 .82rem/1.4 var(--font-text);color:var(--ink-soft)}
 
-/* Showreel: the frame opens from a rounded glass lens to its full size as it scrolls in (home.js, clip-path). Task 44:
-   no box: no radius, no frame shadow, its edges feather into the page (a mask), full-bleed on wide screens; the chapters
-   are page typography below the film, never over it; one small glass chip (Pause/Play) sits in the top corner, clear of
-   the film's own subtitles at its foot. reel.js reveals the chapters, swaps the native controls for that button and, on a
-   phone, the vertical cut. The frame's shape is set per screen size, so the swap never shifts layout. */
+/* Showreel: the frame opens from a glass lens as it scrolls in (home.js, clip-path); no box, its edges feather into the
+   page; the chapters sit below the film; one glass Pause/Play chip in the top corner (reel.js). */
 .reel{padding-block:var(--home-sec)}
 .reel-grid{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));column-gap:var(--col-gap);align-items:start}
 .reel-head{grid-column:1/-1;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));align-items:end;gap:16px 32px;margin-bottom:clamp(32px,4vw,56px)}
@@ -82,9 +73,8 @@
 .ch-t{font:500 .8125rem/1 var(--font-text);font-variant-numeric:tabular-nums}
 .reel-cap{width:min(100%,calc(62svh * 16 / 9));margin:14px auto 0;color:var(--mute);font-size:.92rem}
 
-/* Marquee: "New websites, Redesigns, Care plans" cut out of the footage loop (the type is an SVG mask; until the loop
-   plays, ink shows through), then glass pills sliding over a strip of real photos. Decorative and aria-hidden; a
-   visually hidden line says the same. home.js moves the mask and the two tracks (transform) and Pause motion stops them. */
+/* Marquee: the words cut out of the footage loop (an SVG mask), then glass pills over a strip of photos. Decorative and
+   aria-hidden (a visually hidden line says the same); home.js moves them and Pause motion stops them. */
 .marq{overflow:hidden;padding-block:clamp(56px,7vw,112px)}
 /* Task 45: white frosted-glass type on the light base: a light fill with the footage only faintly through it, over a
    separate rim layer (the same letters as an outline, the same --mqx) that gives the edges contrast. No filter on the
@@ -102,9 +92,8 @@
 .mq-tile .mq-pill{position:absolute;left:50%;top:50%;max-width:calc(100% - 24px);transform:translate(-50%,-50%);padding-block:8px;line-height:1.15;text-align:center;white-space:normal}
 .mq-pill{display:inline-flex;align-items:center;min-height:52px;padding:0 22px;border-radius:999px;font:620 1rem/1 var(--font-display);white-space:nowrap}
 
-/* Concept projects: three cards of uneven size (a wide lead card, two tall ones, the last set lower). The photo turns into
-   the concept site's loop on hover (fine pointers) or when centred (touch), through reel.js; a light sweep follows the
-   pointer. The text sits on a frosted glass body overlapping the photo. The title link covers the whole card. */
+/* Concept projects: a wide lead card and two tall ones; the photo turns into the concept's loop on hover or when centred
+   (reel.js); the text sits on a frosted glass body; the title link covers the card. */
 .work{padding-block:var(--home-sec)}
 .work-head{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));align-items:end;gap:32px;padding-bottom:clamp(40px,4vw,64px)}
 .work-head h2{margin:0;font-size:clamp(2.75rem,1rem + 5.4vw,6.6rem);font-weight:780;font-stretch:78%;letter-spacing:-.03em}
@@ -264,8 +253,9 @@
 .band :focus-visible{outline-color:#fff}
 
 /* Responsive */
+/* Task 60: a 20svh sticky exit (was 60svh: a near-empty screen). */
 @media(min-width:761px){
-.motion .hero{height:160svh}
+.motion .hero{height:120svh}
 .motion .hero-pin{position:sticky;top:0}
 }
 @media(min-width:961px){
@@ -277,6 +267,13 @@
 }
 @media(max-width:1199px){
 .hero-cards{display:none}
+}
+/* Task 60: 861-1199px: the lead card takes the row, the other two share the next. */
+@media(min-width:861px) and (max-width:1199px){
+.teaser-card:first-child{grid-column:1/-1}
+.teaser-card{grid-column:span 6}
+.teaser-card:last-child{margin-top:0}
+.teaser-card:first-child .teaser-img{aspect-ratio:16/8}
 }
 @media(max-width:1023px){
 .hero-copy{grid-column:1/-1;grid-row:auto;max-width:640px}
@@ -308,6 +305,14 @@
 .hero-gl{background-image:url("/assets/glass/hero-glass-poster-m.jpg");background-position:50% 0;background-size:100% auto}
 .hero-gl::after{background:linear-gradient(0deg,rgba(246,245,241,.96) 0%,rgba(246,245,241,.85) 42%,rgba(246,245,241,0) 64%)}
 .hero-in{padding-top:52svh;padding-bottom:32px}
+}
+/* Task 60: portrait tablets stack like a phone: the wide still across the top (wordmark foot ~45vw), the copy below it
+   and below the lite C (glass-boot.js), a headline capped by height so the buttons stay in view. */
+@media(min-width:761px) and (max-width:1023px) and (orientation:portrait){
+.hero-gl{background-position:50% 0;background-size:100% auto}
+.hero-gl::after{background:linear-gradient(0deg,rgba(246,245,241,.96) 0%,rgba(246,245,241,.85) 42%,rgba(246,245,241,0) 64%)}
+.hero-in{padding-top:max(calc(46vw + 12px),46svh);padding-bottom:32px}
+.hero-h{font-size:clamp(2.6rem,min(10vw,7.5svh),6rem)}
 }
 @media(max-width:640px){
 .actions .button,.band .button{width:100%}
@@ -343,6 +348,11 @@
 .hero-sub{margin-top:10px;font-size:1rem}
 .hero .actions{margin-top:14px}
 .hero-cap{margin-bottom:16px}
+/* Task 60: the projects follow their intro closely (no stagger, less padding, shorter photos). */
+.work{padding-block:40px}
+.work-head{padding-bottom:24px}
+.teaser-card:last-child{margin-top:0}
+.teaser-img,.teaser-card:first-child .teaser-img{aspect-ratio:16/7}
 }
 
 /* Motion: only for people who have not asked for reduced motion; only transform and opacity move.

@@ -10,8 +10,8 @@
    describes the hero, and the CSS poster underneath stays in place if anything here fails. Task 48: the helpers the inner
    pages share (the C's paths, rounded screens, silhouettes, the renderer's options) live in glass-shapes.js; only this
    homepage scene needs SVGLoader and BufferGeometryUtils (the CENDAVO wordmark has holes). It draws with the WebGL2
-   context glass-boot.js tested, and returns true once it has taken it. Task 57: on capable phones glass-boot.js sets
-   G.lite and this scene runs in lite mode (LITE): the C alone at lower detail (no wordmark), one screen's still poster (no
+   context glass-boot.js tested, and returns true once it has taken it. Task 57: on capable phones (Task 60: also on
+   their side, and on 761-1023px tablets) glass-boot.js sets G.lite and this scene runs in lite mode (LITE): the C alone at lower detail (no wordmark), one screen's still poster (no
    video), DPR 1.25, no pointer; scroll progress comes from the hero's own position (home.js drives G.heroP on wide screens
    only). A frame-time watchdog (shouldBail) gives the still back if the phone cannot keep up. */
 import * as THREE from './vendor/three/three.module.min.js';
