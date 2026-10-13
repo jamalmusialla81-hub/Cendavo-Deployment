@@ -1,6 +1,6 @@
 /* Cendavo Liquid Glass hero (Task 37), ported from docs/design/glass/prototype/gl-scene.js. An ES module imported by
-   glass-boot.js only after load and idle, only on capable desktops, never with reduced motion or Save-Data. Three.js r170
-   and its two helpers are vendored and imported by relative path, so no import map and no inline script are needed.
+   glass-boot.js only after load and idle, only on capable desktops (and, in lite mode, capable phones), never with
+   reduced motion or Save-Data. Three.js r170 and its two helpers are vendored and imported by relative path, so no import map and no inline script are needed.
    The C mark and the CENDAVO wordmark (Archivo outlines) are white transmission glass (MeshPhysicalMaterial) refracting a
    slow daylight colour field and two concept-site screens far behind. Yaw is clamped to about 32 degrees so the name never
    reads backwards. Task 44: the scroll exit (heroPose, pure and tested in Node) settles the C facing the camera and larger,
@@ -10,7 +10,10 @@
    describes the hero, and the CSS poster underneath stays in place if anything here fails. Task 48: the helpers the inner
    pages share (the C's paths, rounded screens, silhouettes, the renderer's options) live in glass-shapes.js; only this
    homepage scene needs SVGLoader and BufferGeometryUtils (the CENDAVO wordmark has holes). It draws with the WebGL2
-   context glass-boot.js tested, and returns true once it has taken it. */
+   context glass-boot.js tested, and returns true once it has taken it. Task 57: on capable phones glass-boot.js sets
+   G.lite and this scene runs in lite mode (LITE): the C alone at lower detail (no wordmark), one screen's still poster (no
+   video), DPR 1.25, no pointer; scroll progress comes from the hero's own position (home.js drives G.heroP on wide screens
+   only). A frame-time watchdog (shouldBail) gives the still back if the phone cannot keep up. */
 import * as THREE from './vendor/three/three.module.min.js';
 import { SVGLoader } from './vendor/three/jsm/SVGLoader.js';
 import { mergeGeometries } from './vendor/three/jsm/BufferGeometryUtils.js';
@@ -37,6 +40,22 @@ export const WORD_GLASS = { roughness: 0.3, thickness: 1.1, attenuationColor: '#
   sheen: 0.5, sheenRoughness: 0.45, envMapIntensity: 1.3 };
 export const WORD = { w: 5.4, h: 5.4 * 686 / 6219, y: -1.75, rx: 0.12, ry: -0.05 }; // width, height, offset and rest tilt
 export const MARK_Y = 0.85;
+
+/* Task 57: the phone (lite) scene's budget, exported so tests check it without a GPU. */
+export const LITE = { dpr: 1.25, curveSegments: 24, bevelSegments: 6, sphere: [16, 8], silhouette: 512, screens: ['gl'],
+  word: false, video: false, pointer: false };
+/* The watchdog: true when the median of at least BAIL.frames frame times (ms, timed after the intro) is over BAIL.ms, under
+   40 fps. A median, so one slow frame (a GC pause, a scroll jank) never trips it. Pure, tested in Node. */
+export const BAIL = { frames: 60, ms: 25 };
+export function shouldBail(frameTimes) {
+  if (!frameTimes || frameTimes.length < BAIL.frames) return false;
+  const s = frameTimes.slice().sort((a, b) => a - b), m = s.length >> 1;
+  return (s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2) > BAIL.ms;
+}
+/* the lite scene's scroll progress: how far the hero (its top and height, in px) has scrolled up out of view, 0..1 */
+export function scrollShare(top, height) {
+  return height > 0 ? clamp(-top / height, 0, 1) : 0;
+}
 
 /* Where the lockup and the two screens sit, per aspect ratio: [x, y, z, yaw, pitch] for each screen. The dark hb screen
    sits up and away (top right, far back, partly behind gl), so the letters always sit over light content. */
@@ -97,7 +116,8 @@ const blendMat = (tex) => new THREE.MeshBasicMaterial({ map: tex, transparent: f
 export function start(host, shared, gl) {
   const G = shared || window.__glass || (window.__glass = { paused: false, heroP: 0, pointer: { x: 0, y: 0 } });
   G.pointer = G.pointer || { x: 0, y: 0 };
-  const DPR_CAP = window.matchMedia('(max-width: 760px)').matches ? 1.5 : 1.75;
+  const lite = Boolean(G.lite);
+  const DPR_CAP = lite ? LITE.dpr : window.matchMedia('(max-width: 760px)').matches ? 1.5 : 1.75;
   const renderer = new THREE.WebGLRenderer(rendererOptions(gl));
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, DPR_CAP));
   renderer.toneMapping = THREE.NeutralToneMapping;
@@ -118,7 +138,7 @@ export function start(host, shared, gl) {
   /* a bright daylight studio for reflections, so the glass reads white and never chrome */
   const pmrem = new THREE.PMREMGenerator(renderer);
   const studio = new THREE.Scene();
-  studio.add(new THREE.Mesh(new THREE.SphereGeometry(20, 32, 16), new THREE.ShaderMaterial({
+  studio.add(new THREE.Mesh(new THREE.SphereGeometry(20, ...(lite ? LITE.sphere : [32, 16])), new THREE.ShaderMaterial({
     side: THREE.BackSide,
     vertexShader: 'varying vec3 vP; void main(){ vP = normalize(position); gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }',
     fragmentShader: 'varying vec3 vP; void main(){ float h = vP.y*0.5+0.5; vec3 c = mix(vec3(0.84,0.82,0.79), vec3(1.0,0.995,0.98), smoothstep(0.05,0.85,h)); gl_FragColor = vec4(c,1.0); }'
@@ -157,7 +177,7 @@ export function start(host, shared, gl) {
   scene.add(field);
 
   /* two concept-site screens, far back and lightly defocused (mip bias): the small poster first, then the live loop,
-     whose file is requested only when the scene first runs */
+     whose file is requested only when the scene first runs. Lite: one screen, its poster only (no <video>, no .mp4). */
   const loader = new THREE.TextureLoader();
   const shadowTex = shadowTexture();
   const videos = [];
@@ -176,6 +196,7 @@ export function start(host, shared, gl) {
     const sh = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.MeshBasicMaterial({ map: shadowTex, transparent: true, depthWrite: false, toneMapped: false, opacity: 0.5 }));
     sh.scale.set(w * 1.5, h * 1.3, 1); sh.position.set(0.3, -0.45, -0.8);
     grp.add(sh, frame, scr);
+    if (lite) return grp;
     const v = document.createElement('video');
     v.muted = true; v.loop = true; v.playsInline = true; v.preload = 'none';
     v.setAttribute('muted', ''); v.setAttribute('playsinline', '');
@@ -184,7 +205,8 @@ export function start(host, shared, gl) {
     videos.push(v);
     return grp;
   }
-  const screens = { gl: screen(SCREENS.gl), hb: screen(SCREENS.hb) };
+  const screens = { gl: screen(SCREENS.gl) }; // LITE.screens: gl only
+  if (!lite) screens.hb = screen(SCREENS.hb);
   Object.values(screens).forEach((s) => scene.add(s));
 
   /* the glass */
@@ -194,26 +216,33 @@ export function start(host, shared, gl) {
     sheen: 0.25, sheenColor: new THREE.Color(0xffffff), sheenRoughness: 0.35,
     attenuationColor: new THREE.Color('#ffffff'), attenuationDistance: 12, envMapIntensity: 1.15
   });
-  const markGeo = extrude(svgOf(MARK, [0, 0, 200, 200]), { depth: 40, bevelEnabled: true, bevelThickness: 14, bevelSize: 8, bevelSegments: 16, curveSegments: 56 });
+  const markGeo = extrude(svgOf(MARK, [0, 0, 200, 200]), { depth: 40, bevelEnabled: true, bevelThickness: 14, bevelSize: 8,
+    bevelSegments: lite ? LITE.bevelSegments : 16, curveSegments: lite ? LITE.curveSegments : 56 });
   const markS = 3.5 / 152; markGeo.scale(markS, markS, markS);
-  const wordGeo = extrude(svgOf([WORD_PATH], WORD_VB), { depth: 380, bevelEnabled: true, bevelThickness: 100, bevelSize: 30, bevelSegments: 10, curveSegments: 12 });
-  const wordW = WORD.w, wordS = wordW / WORD_VB[2]; wordGeo.scale(wordS, wordS, wordS);
-  /* the name: milky white frosted glass (WORD_GLASS), its edges kept by the white halo and the soft contact shadow */
-  const wordGlass = glass.clone();
-  const { attenuationColor: wordTint, ...wordProps } = WORD_GLASS;
-  Object.assign(wordGlass, wordProps);
-  wordGlass.attenuationColor = new THREE.Color(wordTint);
   const logo = new THREE.Group();
   const markPivot = new THREE.Group(); markPivot.add(new THREE.Mesh(markGeo, glass));
-  const wordPivot = new THREE.Group(); wordPivot.add(new THREE.Mesh(wordGeo, wordGlass));
+  const wordPivot = new THREE.Group();
   logo.add(markPivot, wordPivot);
   scene.add(logo);
+  const wordW = WORD.w;
+  /* the name: milky white frosted glass (WORD_GLASS), its edges kept by the white halo and the soft contact shadow. Lite
+     draws no name at all (no mesh, no halo, no shadow). */
+  if (!lite) {
+    const wordGeo = extrude(svgOf([WORD_PATH], WORD_VB), { depth: 380, bevelEnabled: true, bevelThickness: 100, bevelSize: 30, bevelSegments: 10, curveSegments: 12 });
+    const wordS = wordW / WORD_VB[2]; wordGeo.scale(wordS, wordS, wordS);
+    const wordGlass = glass.clone();
+    const { attenuationColor: wordTint, ...wordProps } = WORD_GLASS;
+    Object.assign(wordGlass, wordProps);
+    wordGlass.attenuationColor = new THREE.Color(wordTint);
+    wordPivot.add(new THREE.Mesh(wordGeo, wordGlass));
+  }
 
   /* a soft white halo and a cast shadow behind each part, so the letters read white and crisp (transmission samples only
      opaque objects, so these blend as "opaque" materials drawn last) */
   function backing(paths, vb, w, pivot, haloA, shadeA) {
-    const halo = silhouette(paths, vb, { px: 1024, pad: 0.22, blur: 46, color: `rgba(255,255,255,${haloA})` });
-    const shade = silhouette(paths, vb, { px: 1024, pad: 0.22, blur: 10, color: `rgba(52,40,24,${shadeA})` });
+    const px = lite ? LITE.silhouette : 1024, k = px / 1024; // blur scales with the canvas, so the look holds
+    const halo = silhouette(paths, vb, { px, pad: 0.22, blur: 46 * k, color: `rgba(255,255,255,${haloA})` });
+    const shade = silhouette(paths, vb, { px, pad: 0.22, blur: 10 * k, color: `rgba(52,40,24,${shadeA})` });
     const hw = w * halo.scaleW, sw = w * shade.scaleW;
     const hm = new THREE.Mesh(new THREE.PlaneGeometry(hw, hw / halo.aspect), blendMat(halo.tex));
     const sm = new THREE.Mesh(new THREE.PlaneGeometry(sw, sw / shade.aspect), blendMat(shade.tex));
@@ -223,17 +252,18 @@ export function start(host, shared, gl) {
     return { hm, sm };
   }
   backing(MARK, [24, 24, 135, 152], 3.5 * 135 / 152, markPivot, 0.5, 0.45);
-  const wordBack = backing([WORD_PATH], WORD_VB, wordW, wordPivot, 0.3, 0.5);
+  const wordBack = lite ? null : backing([WORD_PATH], WORD_VB, wordW, wordPivot, 0.3, 0.5);
   /* Task 45: the name leaves by shrinking back into the depth while its halo and shadow fade (their blend materials honour
      opacity); the glass itself is never made transparent, so it neither recompiles nor flickers. Hidden at 0. */
   function wordOut(v) {
     wordPivot.visible = v > 0.001;
+    if (!wordBack) return;
     wordPivot.scale.setScalar(v);
     wordPivot.position.z = -(1 - v) * 1.5;
     wordBack.hm.material.opacity = v; wordBack.sm.material.opacity = v;
   }
   /* the name's shadow is a soft contact shadow below the letters, not a glow around them */
-  wordBack.sm.position.set(0.04, -0.42, -0.35); wordBack.sm.scale.set(1.02, 0.55, 1);
+  if (wordBack) { wordBack.sm.position.set(0.04, -0.42, -0.35); wordBack.sm.scale.set(1.02, 0.55, 1); }
   wordPivot.rotation.set(WORD.rx, WORD.ry, 0); // only a slight tilt, so the letters never smear
 
   const key = new THREE.DirectionalLight(0xffffff, 1.5); key.position.set(-3, 5, 6); scene.add(key);
@@ -259,6 +289,8 @@ export function start(host, shared, gl) {
   /* motion: frame-rate independent (damped toward the pointer and the hero's scroll progress) */
   const clock = new THREE.Clock();
   let elapsed = 0, introT = 0, running = false, inView = true;
+  const times = []; // lite: frame times (ms) after the intro, for the watchdog
+  const still = { x: 0, y: 0 }; // lite's pointer: always centred
   const sm = { px: 0, py: 0, p: 0 };
   function placeScreen(name, p, t, i) {
     const s = screens[name], c = L[name];
@@ -271,9 +303,13 @@ export function start(host, shared, gl) {
   function frame(dt) {
     elapsed += dt; introT += dt;
     const t = elapsed;
-    sm.px = damp(sm.px, G.pointer.x || 0, 2.5, dt);
-    sm.py = damp(sm.py, G.pointer.y || 0, 2.5, dt);
-    sm.p = damp(sm.p, G.heroP || 0, 6, dt);
+    /* lite: no pointer (touch is for scrolling), and the scroll progress is the hero's own (home.js sets G.heroP on wide
+       screens only); one layout read per frame, with no write before it */
+    const pointer = lite ? still : G.pointer;
+    const heroP = lite ? scrollShare(host.getBoundingClientRect().top, host.clientHeight) : G.heroP;
+    sm.px = damp(sm.px, pointer.x || 0, 2.5, dt);
+    sm.py = damp(sm.py, pointer.y || 0, 2.5, dt);
+    sm.p = damp(sm.p, heroP || 0, 6, dt);
     const e = smooth(sm.p);
     fieldMat.uniforms.uTime.value = t;
     const k = easeOut(clamp(introT / 2.6, 0, 1));
@@ -286,23 +322,40 @@ export function start(host, shared, gl) {
     wordOut(pose.word);
     sweep.position.set(Math.cos(t * 0.45) * 6, 3 + Math.sin(t * 0.3) * 2, 4 + Math.sin(t * 0.45) * 3);
     placeScreen('gl', sm.p, t, 0);
-    placeScreen('hb', sm.p, t, 1);
+    if (screens.hb) placeScreen('hb', sm.p, t, 1);
     camera.position.x = damp(camera.position.x, sm.px * 0.3, 3, dt);
     camera.position.y = damp(camera.position.y, -sm.py * 0.18, 3, dt);
     camera.position.z = 14 - e * 1.2;
     camera.lookAt(e * L.logo.x * 0.5, 0, 0);
     renderer.render(scene, camera);
   }
-  const loop = () => frame(Math.min(clock.getDelta(), 1 / 20));
+  /* Task 57: in lite mode a phone that cannot hold 40 fps after the intro stops the scene and gives the still back */
+  let bailed = false;
+  function bail() {
+    bailed = true; times.length = 0;
+    setRunning(false); // stops the loop at once; bailed keeps it stopped
+    const done = () => { host.classList.remove('is-live'); renderer.forceContextLoss(); };
+    const fade = canvas.animate && !G.paused && canvas.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 500, fill: 'forwards' });
+    if (fade) fade.onfinish = done; else done();
+  }
+  const loop = () => {
+    const dt = Math.min(clock.getDelta(), 1 / 20); // the 50 ms clamp is above the 25 ms bar, so the median is unchanged
+    frame(dt);
+    if (!lite || introT < 2.6) return;
+    times.push(dt * 1000);
+    if (times.length < BAIL.frames) return;
+    if (shouldBail(times)) bail(); else times.length = 0;
+  };
   const play = (v) => {
     if (!v.src) { v.src = v.dataset.src; v.load(); }
     const r = v.play(); if (r && r.catch) r.catch(() => {});
   };
   /* runs only while on screen, with the tab visible and Pause motion off */
   function setRunning(want) {
-    const on = Boolean(want) && inView && !G.paused && !document.hidden && host.classList.contains('is-live');
+    const on = Boolean(want) && !bailed && inView && !G.paused && !document.hidden && host.classList.contains('is-live');
     if (on === running) return;
     running = on;
+    times.length = 0; // a pause (or the first frame back) is never timed
     if (on) { clock.getDelta(); renderer.setAnimationLoop(loop); videos.forEach(play); }
     else { renderer.setAnimationLoop(null); videos.forEach((v) => v.pause()); }
   }

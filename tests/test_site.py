@@ -2757,7 +2757,9 @@ class LiquidGlassTests(unittest.TestCase):
         self.assertIn('new IntersectionObserver(', self.scene)
         self.assertIn("document.addEventListener('visibilitychange', () => setRunning(true));", self.scene)
         self.assertIn('(G.pauseFns = G.pauseFns || []).push(() => setRunning(true));', self.scene)
-        self.assertIn("const DPR_CAP = window.matchMedia('(max-width: 760px)').matches ? 1.5 : 1.75;", self.scene)
+        # Task 57: the phone (lite) scene renders at DPR 1.25 at most (LITE.dpr, checked in tests/test_demo_js.py)
+        self.assertIn("const DPR_CAP = lite ? LITE.dpr : window.matchMedia('(max-width: 760px)').matches ? 1.5 : 1.75;", self.scene)
+        self.assertIn('const lite = Boolean(G.lite);', self.scene)
         self.assertIn('renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, DPR_CAP));', self.scene)
         # Yaw stays within about 32 degrees, so the glass name never reads backwards.
         yaw = float(re.search(r'const YAW = ([\d.]+);', self.scene).group(1))
@@ -3812,6 +3814,10 @@ class DaylightTests(unittest.TestCase):
                 self.assertEqual(jpeg_size(OUT / 'assets/glass' / name), size)
         # The still is never hidden by CSS; only a canvas that is not live is.
         self.assertEqual(rules_for(base, '.hero-gl:not(.is-live) .hero-canvas'), ['display:none'])
+        # Task 57: the canvas never takes a touch or a click (phones scroll through it; glass.js reads the pointer on window).
+        canvas = rules_for(base, '.hero-canvas')
+        self.assertEqual(len(canvas), 1)
+        self.assertIn('pointer-events:none', canvas[0])
         for selectors, body in re.findall(r'([^{}]+)\{([^{}]*)\}', re.sub(r'/\*.*?\*/', '', self.css['home.css'], flags=re.S)):
             if '.hero-gl' in selectors and 'canvas' not in selectors:
                 self.assertNotRegex(body, r'display:none|opacity:0(?![.\d])|visibility:hidden', selectors)
@@ -4687,7 +4693,7 @@ class GlassHeroAndReelTests(unittest.TestCase):
                 self.assertIsNotNone(stop)
                 self.assertLess(int(stop.group(1)), 90)  # a real fade, not a hairline
         # The canvas fills the host, so the host's mask feathers it too; the still underneath is never hidden.
-        self.assertEqual(rules_for(base_rules(self.css['home.css']), '.hero-canvas'), ['position:absolute;inset:0;width:100%;height:100%'])
+        self.assertEqual(rules_for(base_rules(self.css['home.css']), '.hero-canvas'), ['position:absolute;inset:0;width:100%;height:100%;pointer-events:none'])  # Task 57: never takes a touch
 
     def test_glass_name_is_milky_and_screens_are_sharper(self):
         self.assertNotIn('#d9e1e6', self.scene)  # the blue-grey "gunmetal" body is gone

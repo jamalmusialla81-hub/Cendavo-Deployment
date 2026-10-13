@@ -3,6 +3,7 @@ import math
 import re
 import shutil
 import subprocess
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -1998,6 +1999,7 @@ async function run(env) {
       const context = { getExtension: name => (name === 'WEBGL_lose_context' ? { loseContext() { lost++; } } : null) }; made.push({ canvas, context }); return context; } };
       return canvas; } };
   const nav = { connection: { saveData: Boolean(env.saveData) } };
+  if (env.net !== undefined) nav.connection.effectiveType = env.net;
   if (env.memory !== undefined) nav.deviceMemory = env.memory;
   if (env.cores !== undefined) nav.hardwareConcurrency = env.cores;
   const { win, listeners } = makeWindow(env, { navigator: nav, requestIdleCallback: (fn, o) => idle.push([fn, o]), setTimeout: (fn, ms) => timers.push([fn, ms]) });
@@ -2022,6 +2024,7 @@ async function run(env) {
   out.handed = handed;
   out.lost = lost;
   out.liveRemoved = host.classList.set.size === 0;
+  out.lite = win.__glass && win.__glass.lite !== undefined ? win.__glass.lite : null;
   out.decide = win.__glass && win.__glass.wantsGL ? [
     win.__glass.wantsGL({ reduce: false, saveData: false, narrow: false, lowEnd: false, webgl: true }),
     win.__glass.wantsGL({ reduce: true, saveData: false, narrow: false, lowEnd: false, webgl: true }),
@@ -2048,8 +2051,124 @@ async function run(env) {
     markSaveData: { ...desktop, kind: 'mark', saveData: true }, photosNarrow: { ...desktop, kind: 'photos', width: 760 },
     sheetsNoWebGL: { ...desktop, kind: 'sheets', noWebGL: true }, photosNoWebGL: { ...desktop, kind: 'photos', noWebGL: true },
     declines: { ...desktop, kind: 'slab', declines: true }, startThrows: { ...desktop, startThrows: true } };
+  // Task 57: phones (760px and below). Only the homepage, only on a capable phone, in lite mode.
+  const phone = { width: 390, height: 844, fine: false, reduce: false, memory: 8, cores: 8, net: '4g' };
+  Object.assign(cases, { homePhoneCapable: phone, homePhoneIPhone: { width: 390, height: 844, fine: false, reduce: false, cores: 6 },
+    homePhoneFourCores: { ...phone, cores: 4, memory: 4 }, homePhoneNoNetInfo: { ...phone, net: undefined },
+    homePhoneLowCores: { ...phone, cores: 2 }, homePhoneNoCores: { ...phone, cores: undefined },
+    homePhoneLowMem: { ...phone, cores: 8, memory: 2 }, homePhone3g: { ...phone, net: '3g' }, homePhone2g: { ...phone, net: '2g' },
+    homePhoneSlow2g: { ...phone, net: 'slow-2g' }, homePhoneSaveData: { ...phone, saveData: true }, homePhoneReduced: { ...phone, reduce: true },
+    homePhoneNoWebGL: { ...phone, noWebGL: true }, homePhoneFail: { ...phone, fail: true }, homePhoneDeclines: { ...phone, declines: true },
+    slabPhone: { ...phone, kind: 'slab' }, panesPhone: { ...phone, kind: 'panes' }, sheetsPhone: { ...phone, kind: 'sheets' },
+    photosPhone: { ...phone, kind: 'photos' }, markPhone: { ...phone, kind: 'mark' } });
   const out = {};
   for (const [name, env] of Object.entries(cases)) out[name] = await run(env);
+  console.log(JSON.stringify(out));
+})();
+"""
+
+# Task 57: glass-scene.js's start() run in Node against a recording three.js stub (no GPU). The real scene and the real
+# glass-shapes.js are copied into a temporary folder beside stub modules at the vendored paths, so every relative import
+# resolves to a stub; nothing else is replaced. Every three.js object is a recording proxy; the renderer, camera, clock,
+# texture loader, extrusions and sphere record what the scene asks of them.
+THREE_STUB = r"""
+const log = new Proxy({}, { get: (_, k) => globalThis.__log[k], set: (_, k, v) => { globalThis.__log[k] = v; return true; } });
+export function __thing(name) { return thing(name); }
+function thing(name) {
+  const target = function () {};
+  return new Proxy(target, {
+    get(t, k) { if (k === Symbol.toPrimitive) return () => 1; if (k === 'then') return undefined; if (k in t) return t[k]; return (t[k] = thing(name + '.' + String(k))); },
+    set(t, k, v) { t[k] = v; return true; },
+    apply() { return thing(name + '()'); },
+    construct() { return thing('new ' + name); },
+  });
+}
+const wrap = obj => new Proxy(obj, { get(t, k) { if (k in t) return t[k]; if (k === 'then') return undefined; return (t[k] = thing(String(k))); } });
+const special = {
+  WebGLRenderer: function (opts) {
+    log.renderer = { canvas: Boolean(opts.canvas) };
+    const canvas = opts.canvas;
+    return wrap({ domElement: canvas, setPixelRatio(v) { log.dpr = v; }, setSize() {}, render() { log.renders++; },
+      setAnimationLoop(fn) { log.loop = fn; log.loopCalls.push(fn ? 'on' : 'off'); }, compileAsync() { return Promise.resolve(); },
+      forceContextLoss() { log.lost++; (canvas.listeners.webglcontextlost || []).forEach(fn => fn({})); } });
+  },
+  PerspectiveCamera: function (fov) {
+    const position = { x: 0, y: 0, z: 0, set(x, y, z) { Object.assign(this, { x, y, z }); } };
+    return (log.camera = wrap({ fov, aspect: 1, position, updateProjectionMatrix() {}, lookAt() {} }));
+  },
+  Clock: function () { return wrap({ getDelta: () => globalThis.__dt }); },
+  TextureLoader: function () { return wrap({ load(url) { log.textures.push(url); return thing('texture'); } }); },
+  ExtrudeGeometry: function (shapes, opts) { log.extrude.push(opts); return thing('extrude'); },
+  SphereGeometry: function (...args) { log.sphere.push(args); return thing('sphere'); },
+};
+"""
+SVG_STUB = """
+export class SVGLoader { parse() { globalThis.__log.svg = (globalThis.__log.svg || 0) + 1; return { paths: [{}] }; } static createShapes() { return [{}]; } }
+"""
+MERGE_STUB = "import { __thing } from '../three.module.min.js';\nexport const mergeGeometries = () => __thing('merged');\n"
+
+SCENE_RUN_SCRIPT = r"""
+const { pathToFileURL } = require('url');
+const settle = () => new Promise(resolve => setImmediate(resolve));
+async function run(env) {
+  const log = globalThis.__log = { renders: 0, lost: 0, loop: null, loopCalls: [], textures: [], extrude: [], sphere: [], videos: 0, canvases: [], animations: [] };
+  globalThis.__dt = 1 / 60;
+  const classes = new Set();
+  const host = { clientWidth: env.width, clientHeight: 700, top: 0, children: [],
+    classList: { add: c => classes.add(c), remove: c => classes.delete(c), contains: c => classes.has(c) },
+    appendChild(c) { this.children.push(c); }, getBoundingClientRect() { return { top: host.top }; } };
+  const canvas = { listeners: {}, attrs: {}, addEventListener(t, fn) { (this.listeners[t] = this.listeners[t] || []).push(fn); },
+    setAttribute(k, v) { this.attrs[k] = v; }, animate(frames, opts) { const a = { frames, opts, onfinish: null }; log.animations.push(a); return a; } };
+  const doc = { hidden: false, listeners: {}, addEventListener(t, fn) { (this.listeners[t] = this.listeners[t] || []).push(fn); },
+    createElement(tag) {
+      if (tag === 'video') { log.videos++; return { dataset: {}, setAttribute() {}, addEventListener() {}, play() {}, pause() {}, load() {} }; }
+      const any = () => new Proxy(function () {}, { get: () => any(), apply: () => any(), set: () => true });
+      const c = { width: 0, height: 0, getContext: () => any() }; log.canvases.push(c); return c;
+    } };
+  const observers = [];
+  Object.assign(globalThis, { document: doc, Path2D: class {},
+    window: { devicePixelRatio: 3, matchMedia: q => ({ matches: q === '(max-width: 760px)' ? env.width <= 760 : false }), addEventListener() {} },
+    IntersectionObserver: class { constructor(cb) { this.cb = cb; observers.push(this); } observe() {} } });
+  const m = await import(pathToFileURL(process.argv[1]).href + '?' + env.name);
+  const G = { paused: false, heroP: 0.9, pointer: { x: 1, y: 1 }, lite: env.lite };
+  const out = { returned: m.start(host, G, { canvas, context: {} }) };
+  await settle();
+  const running = () => log.loop !== null;
+  const frames = (n, dt) => { globalThis.__dt = dt; for (let i = 0; i < n && log.loop; i++) log.loop(); };
+  Object.assign(out, { live: classes.has('is-live'), appended: host.children[0] === canvas, hidden: canvas.attrs['aria-hidden'], dpr: log.dpr,
+    handed: log.renderer.canvas, videos: log.videos, textures: log.textures.slice(), extrude: log.extrude.slice(), sphere: log.sphere,
+    silhouettes: log.canvases.map(c => c.width), running: running() });
+  // motion: the pointer (1, 1) and G.heroP (0.9) are set; lite ignores both and follows the hero's own position
+  frames(30, 1 / 60);
+  out.cameraX = log.camera.position.x; out.cameraZ = log.camera.position.z;
+  host.top = -700; frames(60, 1 / 60); out.cameraZScrolled = log.camera.position.z;
+  host.top = 0; frames(60, 1 / 60);
+  // pausing: off screen, tab hidden, Pause motion
+  const io = flag => observers.forEach(o => o.cb([{ isIntersecting: flag }]));
+  const vis = hidden => { doc.hidden = hidden; (doc.listeners.visibilitychange || []).forEach(fn => fn()); };
+  const pause = p => { G.paused = p; G.onPauseChange(p); };
+  out.pausing = [];
+  for (const [name, off, on] of [['offscreen', () => io(false), () => io(true)], ['hidden', () => vis(true), () => vis(false)], ['paused', () => pause(true), () => pause(false)]]) {
+    off(); const stopped = !running(); on(); out.pausing.push([name, stopped, running()]);
+  }
+  // the watchdog: smooth frames well past the intro never trip it; then slow ones (50 ms, 20 fps)
+  frames(300, 1 / 60);
+  out.smoothRunning = running();
+  frames(env.slowFrames || 80, 0.05);
+  out.slowRunning = running();
+  out.fadeOut = log.animations.length > 1 ? log.animations[log.animations.length - 1].frames : null;
+  out.liveDuringFade = classes.has('is-live');
+  if (out.fadeOut) log.animations[log.animations.length - 1].onfinish();
+  out.liveAfter = classes.has('is-live');
+  out.lost = log.lost;
+  io(true); vis(false); out.restarted = running();
+  return out;
+}
+(async () => {
+  const out = {};
+  out.lite = await run({ name: 'lite', lite: true, width: 390 });
+  out.liteFew = await run({ name: 'liteFew', lite: true, width: 390, slowFrames: 59 });
+  out.desktop = await run({ name: 'desktop', lite: false, width: 1440 });
   console.log(JSON.stringify(out));
 })();
 """
@@ -2321,9 +2440,13 @@ const { pathToFileURL } = require('url');
         self.assertEqual(r['complete']['loadListeners'], 0)  # already loaded: straight to idle
         self.assertEqual(r['complete']['imports'], ['/assets/glass-scene.js'])
         self.assertEqual(r['unknownDevice']['imports'], ['/assets/glass-scene.js'])  # browsers that do not report memory or cores
-        # Reduced motion, Save-Data, 760px or less, under 4 GB, 4 cores or fewer, no WebGL, no hero: the scene is never
-        # imported (and, except without WebGL, no WebGL context is ever created to find out).
-        for name in ('reduced', 'saveData', 'narrow', 'lowMemory', 'fourCores', 'noWebGL', 'noHost'):
+        # Reduced motion, Save-Data, under 4 GB, 4 cores or fewer, no WebGL, no hero: the scene is never imported (and,
+        # except without WebGL, no WebGL context is ever created to find out). Task 57: 760px or less is a phone, which
+        # loads the homepage scene in lite mode when capable (test_capable_phones_get_the_lite_homepage_scene_only).
+        self.assertIs(desktop['lite'], False)  # desktops never run lite
+        self.assertEqual(r['narrow']['imports'], ['/assets/glass-scene.js'])
+        self.assertIs(r['narrow']['lite'], True)
+        for name in ('reduced', 'saveData', 'lowMemory', 'fourCores', 'noWebGL', 'noHost'):
             with self.subTest(case=name):
                 self.assertIsNone(r[name]['error'])
                 self.assertEqual(r[name]['imports'], [])
@@ -2339,6 +2462,155 @@ const { pathToFileURL } = require('url');
         for banned in ('URLSearchParams', 'location', '?poster', 'http', 'importmap'):
             self.assertNotIn(banned, js)
         self.assertIn("const MODULES = { home: '/assets/glass-scene.js', slab: '/assets/glass-page.js', panes: '/assets/glass-page.js', sheets: '/assets/glass-page.js',\n    photos: '/assets/glass-page.js', mark: '/assets/glass-page.js' };", js)
+
+    def test_capable_phones_get_the_lite_homepage_scene_only(self):
+        # Task 57: at 760px and below the homepage scene loads, after load and idle, in lite mode (G.lite), only on a phone
+        # with 4+ cores, 4 GB+ memory where the browser reports it (iPhones do not), not on slow-2g/2g/3g, never with
+        # Save-Data or reduced motion. Inner pages keep the still on every phone.
+        r = self.node_json(GLASS_BOOT_SCRIPT, GLASS_BOOT)
+        for name in ('homePhoneCapable', 'homePhoneIPhone', 'homePhoneFourCores', 'homePhoneNoNetInfo'):
+            with self.subTest(case=name):
+                c = r[name]
+                self.assertIsNone(c['error'])
+                self.assertEqual((c['beforeLoad'], c['afterLoad']), (0, 0))  # never before load and idle
+                self.assertEqual(c['idleTimeout'], 1500)
+                self.assertEqual(c['imports'], ['/assets/glass-scene.js'])
+                self.assertEqual(c['started'], {'host': 'host', 'shared': True})
+                self.assertIs(c['lite'], True)
+                self.assertEqual(c['contexts'], ['webgl2'])
+                self.assertTrue(c['handed'])
+                self.assertEqual(c['lost'], 0)
+        for name in ('homePhoneLowCores', 'homePhoneNoCores', 'homePhoneLowMem', 'homePhone3g', 'homePhone2g', 'homePhoneSlow2g',
+                     'homePhoneSaveData', 'homePhoneReduced', 'homePhoneNoWebGL', 'slabNarrow', 'photosNarrow', 'slabPhone',
+                     'panesPhone', 'sheetsPhone', 'photosPhone', 'markPhone'):
+            with self.subTest(case=name):
+                c = r[name]
+                self.assertIsNone(c['error'])
+                self.assertEqual(c['imports'], [])
+                self.assertIsNone(c['started'])
+                self.assertNotEqual(c['lite'], True)
+                if name != 'homePhoneNoWebGL':
+                    self.assertEqual(c['contexts'], [])  # no WebGL context is made to find out
+        self.assertEqual(r['homePhoneNoWebGL']['lost'], 0)
+        # A failed import or a declined start on a phone: the context is released and the still stays.
+        for name in ('homePhoneFail', 'homePhoneDeclines'):
+            with self.subTest(case=name):
+                self.assertEqual(r[name]['imports'], ['/assets/glass-scene.js'])
+                self.assertEqual(r[name]['lost'], 1)
+                self.assertTrue(r[name]['liveRemoved'])
+        self.assertIsNone(r['homePhoneFail']['started'])
+        # The lite flag reaches the scene through the shared state only: never a page attribute.
+        js = GLASS_BOOT.read_text(encoding='utf-8')
+        self.assertIn('(G.lite = lite, import(SCENE))', js)
+        self.assertNotIn('setAttribute', js)
+        self.assertNotIn('dataset', js)
+
+    def run_scene(self):
+        # Task 57: the real glass-scene.js and glass-shapes.js beside stub modules at the vendored paths (see THREE_STUB).
+        scene, shapes = GLASS_SCENE.read_text(encoding='utf-8'), (GLASS_SCENE.parent / 'glass-shapes.js').read_text(encoding='utf-8')
+        names = sorted(set(re.findall(r'THREE\.(\w+)', scene + shapes)))
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / 'vendor/three/jsm').mkdir(parents=True)
+            (root / 'package.json').write_text('{"type": "module"}')
+            shutil.copy(GLASS_SCENE, root / 'glass-scene.js')
+            shutil.copy(GLASS_SCENE.parent / 'glass-shapes.js', root / 'glass-shapes.js')
+            exports = ''.join("export const {0} = special.{0} || thing('{0}');\n".format(n) for n in names)
+            (root / 'vendor/three/three.module.min.js').write_text(THREE_STUB + exports)
+            (root / 'vendor/three/jsm/SVGLoader.js').write_text(SVG_STUB)
+            (root / 'vendor/three/jsm/BufferGeometryUtils.js').write_text(MERGE_STUB)
+            return self.node_json(SCENE_RUN_SCRIPT, root / 'glass-scene.js')
+
+    def test_lite_scene_draws_the_c_and_one_still_screen_and_pauses(self):
+        # Task 57: start() as shipped, in lite mode (G.lite) and on a desktop, against the recording three.js stub.
+        r = self.run_scene()
+        lite, desk = r['lite'], r['desktop']
+        for name, c in (('lite', lite), ('desktop', desk)):
+            with self.subTest(case=name):
+                self.assertIs(c['returned'], True)
+                self.assertTrue(c['live'] and c['appended'] and c['handed'])
+                self.assertEqual(c['hidden'], 'true')  # the canvas is aria-hidden; the host's label describes the hero
+                # pausing: off screen, tab hidden and Pause motion each stop the loop; each release starts it again
+                self.assertEqual(c['pausing'], [['offscreen', True, True], ['hidden', True, True], ['paused', True, True]])
+        # Lite: DPR 1.25 (devicePixelRatio 3), no <video>, one screen's still poster only, the C alone at lower detail, a
+        # lower-detail studio sphere and half-size silhouettes.
+        self.assertEqual(lite['dpr'], 1.25)
+        self.assertEqual(lite['videos'], 0)
+        self.assertEqual(lite['textures'], ['/assets/video/loop-gl-desktop-poster-800.jpg'])
+        for url in lite['textures']:
+            self.assertTrue(url.startswith('/') and not url.startswith('//'))
+            self.assertNotIn('.mp4', url)
+        self.assertEqual(len(lite['extrude']), 1)  # the C only: no CENDAVO wordmark
+        self.assertLessEqual(lite['extrude'][0]['curveSegments'], 24)
+        self.assertLessEqual(lite['extrude'][0]['bevelSegments'], 6)
+        self.assertEqual(lite['sphere'], [[20, 16, 8]])
+        self.assertEqual(len(lite['silhouettes']), 3)  # the contact shadow and the C's halo and shade: no name backing
+        self.assertLessEqual(max(lite['silhouettes']), 512)
+        # Lite ignores the pointer (camera x stays put) and G.heroP (0.9 here), and turns with the hero's own scroll position.
+        self.assertEqual(lite['cameraX'], 0)
+        self.assertEqual(lite['cameraZ'], 14)
+        self.assertLess(lite['cameraZScrolled'], 13)
+        # The watchdog: smooth frames never trip it; 60+ slow frames after the intro stop the loop, fade the canvas out,
+        # then give the still back (is-live off) and release the GPU context; nothing restarts it.
+        self.assertTrue(lite['smoothRunning'])
+        self.assertFalse(lite['slowRunning'])
+        self.assertEqual(lite['fadeOut'], [{'opacity': 1}, {'opacity': 0}])
+        self.assertTrue(lite['liveDuringFade'])
+        self.assertFalse(lite['liveAfter'])
+        self.assertEqual(lite['lost'], 1)
+        self.assertFalse(lite['restarted'])
+        self.assertTrue(r['liteFew']['slowRunning'])  # 59 slow frames are too few to judge
+        self.assertEqual(r['liteFew']['lost'], 0)
+        # The desktop scene is unchanged: both screens, their loops, the wordmark, full detail, pointer and G.heroP, and
+        # no watchdog.
+        self.assertEqual(desk['dpr'], 1.75)
+        self.assertEqual(desk['videos'], 2)
+        self.assertEqual(len(desk['textures']), 2)
+        self.assertEqual([(e['curveSegments'], e['bevelSegments']) for e in desk['extrude']], [(56, 16), (12, 10)])
+        self.assertEqual(desk['sphere'], [[20, 32, 16]])
+        self.assertGreater(desk['cameraX'], 0)
+        self.assertLess(desk['cameraZ'], 14)
+        self.assertTrue(desk['slowRunning'])
+        self.assertEqual(desk['lost'], 0)
+
+    def test_lite_watchdog_and_scroll_share_are_pure(self):
+        # Task 57: shouldBail (median frame time over 25 ms, under 40 fps, across at least 60 frames) and scrollShare, as
+        # the real module exports them, plus the LITE budget.
+        script = r'''
+const { pathToFileURL } = require('url');
+(async () => {
+  const m = await import(pathToFileURL(process.argv[1]).href);
+  const n = (k, ms) => Array(k).fill(ms);
+  const input = [n(60, 16.7), n(60, 30), n(120, 50), n(59, 40), [], null, n(60, 25), n(60, 25.01), n(30, 20).concat(n(30, 30)),
+    n(40, 16).concat(n(20, 200)), n(20, 16).concat(n(40, 40))];
+  const copy = n(60, 30), before = copy.slice(); m.shouldBail(copy);
+  console.log(JSON.stringify({ lite: m.LITE, bail: m.BAIL, results: input.map(t => m.shouldBail(t)), untouched: JSON.stringify(copy) === JSON.stringify(before),
+    share: [[0, 700], [-350, 700], [-700, 700], [-2000, 700], [200, 700], [-10, 0]].map(([t, h]) => m.scrollShare(t, h)) }));
+})();
+'''
+        r = self.node_json(script, GLASS_SCENE)
+        # fast, slow, very slow, too few, empty, none, exactly 25 ms (40 fps: keeps going), just over, an even-count median of
+        # exactly 25, a third of frames hitching (median fast), two thirds slow
+        self.assertEqual(r['results'], [False, True, True, False, False, False, False, True, False, False, True])
+        self.assertTrue(r['untouched'])  # sorts a copy, never the caller's samples
+        self.assertEqual(r['bail'], {'frames': 60, 'ms': 25})
+        self.assertEqual(r['share'], [0, 0.5, 1, 1, 0, 0])
+        lite = r['lite']
+        self.assertLessEqual(lite['dpr'], 1.25)
+        self.assertLessEqual(lite['curveSegments'], 24)
+        self.assertLessEqual(lite['bevelSegments'], 6)
+        self.assertEqual(lite['screens'], ['gl'])
+        self.assertIs(lite['word'], False)
+        self.assertIs(lite['video'], False)
+        self.assertIs(lite['pointer'], False)
+        self.assertLess(lite['sphere'][0], 32)
+        # the lite path adds no request: the only URLs the scene builds are local, and the .mp4 path is skipped in lite mode
+        code = GLASS_SCENE.read_text(encoding='utf-8')
+        for url in re.findall(r"`(/[^`]*)`|'(/assets/[^']*)'", code):
+            self.assertTrue((url[0] or url[1]).startswith('/assets/'))
+        screen = code.split('function screen(', 1)[1].split('\n  }', 1)[0]
+        self.assertLess(screen.index('if (lite) return grp;'), screen.index("document.createElement('video')"))
+        self.assertLess(screen.index('if (lite) return grp;'), screen.index('.mp4'))
 
     def test_webgl_test_context_is_the_scenes_own_or_is_released(self):
         # Task 48: glass-boot.js tests for WebGL2 once, with the renderer's attributes, and hands that canvas and context to
