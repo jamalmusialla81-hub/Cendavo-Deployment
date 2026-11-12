@@ -170,7 +170,36 @@ def structured_data():
 HEADERS = ("/*\n  X-Content-Type-Options: nosniff\n  Referrer-Policy: strict-origin-when-cross-origin\n  X-Frame-Options: DENY\n"
            "  Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self'; font-src 'self'; img-src 'self' data:; "
            "connect-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'\n"
-           "  Strict-Transport-Security: max-age=31536000\n  Permissions-Policy: camera=(), microphone=(), geolocation=()\n")
+           "  Strict-Transport-Security: max-age=31536000\n  Permissions-Policy: camera=(), microphone=(), geolocation=()\n"
+           # Task 62: cold-call previews stay out of search. Cloudflare Pages applies every matching block, so the /* rules
+           # above (the CSP included) still apply to them.
+           "/preview/*\n  X-Robots-Tag: noindex, nofollow\n")
+# Task 62: cold-call previews (previews/<slug>/, complete concept sites for one prospect each) are published at
+# /preview/<slug>/. robots.txt disallows the path, _headers adds noindex, and the sitemap lists only NAV.
+PREVIEW_SLUG = re.compile(r'^[a-z0-9]+(?:-[a-z0-9]+)*$')
+
+
+def copy_previews(src, dest):
+    """Copy each folder directly inside src to dest/<slug>/ byte for byte (no stripping, <picture> wrapping or template).
+
+    Files at the top level (README.md), hidden files and folders, and symlinks (anywhere) are skipped, so a stray link can
+    never publish files from outside the repository. Folder names must be lowercase slugs. dest is created only when
+    there is at least one preview."""
+    if not src.is_dir():
+        return []
+    slugs = []
+    for entry in sorted(src.iterdir()):
+        if entry.name.startswith('.') or entry.is_symlink() or not entry.is_dir():
+            continue
+        if not PREVIEW_SLUG.match(entry.name):
+            raise ValueError(f'preview folder name must be a lowercase slug (a-z, 0-9, hyphens): {entry.name!r}')
+        slugs.append(entry.name)
+
+    def skipped(folder, names):
+        return {name for name in names if name.startswith('.') or Path(folder, name).is_symlink()}
+    for slug in slugs:
+        shutil.copytree(src / slug, dest / slug, ignore=skipped)
+    return slugs
 
 
 IMG_TAG = re.compile(r'<img\b[^>]*>')
@@ -233,8 +262,9 @@ def build():
         dest = OUT / ('index.html' if key == 'index' else '404.html' if key == NOT_FOUND else f'{key}/index.html')
         dest.parent.mkdir(parents=True, exist_ok=True)
         dest.write_text(html)
+    copy_previews(ROOT / 'previews', OUT / 'preview')
     (OUT / '_headers').write_text(HEADERS)
-    (OUT / 'robots.txt').write_text(f'User-agent: *\nAllow: /\nSitemap: {BASE_URL}/sitemap.xml\n')
+    (OUT / 'robots.txt').write_text(f'User-agent: *\nAllow: /\nDisallow: /preview/\nSitemap: {BASE_URL}/sitemap.xml\n')
     # lastmod is the build date: every page is rebuilt on every deploy.
     lastmod = date.today().isoformat()
     (OUT / 'sitemap.xml').write_text('<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">' + ''.join(f'<url><loc>{BASE_URL}{href}</loc><lastmod>{lastmod}</lastmod></url>' for _, href in NAV) + '</urlset>')

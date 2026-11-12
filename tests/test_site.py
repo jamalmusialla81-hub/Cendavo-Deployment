@@ -25,6 +25,13 @@ def without_structured_data(route, html):
     return LD_JSON.sub('', html)
 
 
+def site_files(pattern='*', root=OUT):
+    """The main site's built files: everything under root except preview/ (Task 62: cold-call previews are copied as
+    they are and stay out of the main site's checks and budgets)."""
+    previews = root / 'preview'
+    return [p for p in root.rglob(pattern) if p != previews and previews not in p.parents]
+
+
 class ContactEmailTests(unittest.TestCase):
     """Night Shift Task 31: cendavo.au@gmail.com on Contact, in the privacy note and in every footer, defined once per language."""
     ROUTES = ['index.html', 'work/index.html', 'services/index.html', 'pricing/index.html', 'demo/index.html',
@@ -1267,7 +1274,8 @@ OWNER_DRAFT = Path(__file__).resolve().parents[1] / 'docs/OWNER_DRAFT_POLICIES.m
 HEADERS = ("/*\n  X-Content-Type-Options: nosniff\n  Referrer-Policy: strict-origin-when-cross-origin\n  X-Frame-Options: DENY\n"
            "  Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self'; font-src 'self'; img-src 'self' data:; "
            "connect-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'\n"
-           "  Strict-Transport-Security: max-age=31536000\n  Permissions-Policy: camera=(), microphone=(), geolocation=()\n")
+           "  Strict-Transport-Security: max-age=31536000\n  Permissions-Policy: camera=(), microphone=(), geolocation=()\n"
+           "/preview/*\n  X-Robots-Tag: noindex, nofollow\n")
 
 
 class InnerPageTests(unittest.TestCase):
@@ -2837,7 +2845,7 @@ class GlassPolishTests(unittest.TestCase):
 
     def test_the_old_showreel_is_gone_from_the_build(self):
         self.assertEqual(list((OUT / 'assets/video').glob('cendavo-showreel*')), [])
-        for path in OUT.rglob('*'):
+        for path in site_files():
             if path.is_file() and path.suffix in ('.html', '.js', '.css', '.txt', '.xml'):
                 with self.subTest(path=str(path.relative_to(OUT))):
                     self.assertNotIn('cendavo-showreel', path.read_text(errors='ignore'))
@@ -5265,7 +5273,7 @@ class SeoAndHeaderTests(unittest.TestCase):
         self.assertEqual(json.loads(inner)['description'], '</script><script>alert(1)</script>')
 
     def test_no_other_page_carries_structured_data(self):
-        pages = [p for p in OUT.rglob('*.html') if p != OUT / 'index.html' and 'assets' not in p.parts]
+        pages = [p for p in site_files('*.html') if p != OUT / 'index.html' and 'assets' not in p.parts]
         self.assertIn(OUT / '404.html', pages)
         self.assertGreaterEqual(len(pages), 7)
         for page in pages:
@@ -5273,7 +5281,8 @@ class SeoAndHeaderTests(unittest.TestCase):
                 self.assertNotIn('ld+json', page.read_text())
 
     def test_robots_points_at_the_sitemap(self):
-        self.assertEqual((OUT / 'robots.txt').read_text(), f'User-agent: *\nAllow: /\nSitemap: {self.BASE}/sitemap.xml\n')
+        self.assertEqual((OUT / 'robots.txt').read_text(),
+                         f'User-agent: *\nAllow: /\nDisallow: /preview/\nSitemap: {self.BASE}/sitemap.xml\n')
 
     def test_every_sitemap_entry_has_one_shared_valid_lastmod(self):
         from datetime import date
@@ -5301,7 +5310,9 @@ class SeoAndHeaderTests(unittest.TestCase):
         self.assertNotIn('includeSubDomains', headers)
         self.assertNotIn('preload', headers)
         self.assertNotIn('interest-cohort', headers)  # retired FLoC feature, left out on purpose
-        self.assertEqual(len(lines), 7)
+        # Seven lines of site-wide rules, then Task 62's two-line /preview/* block.
+        self.assertEqual(len(lines), 9)
+        self.assertEqual(lines[7:], ['/preview/*', '  X-Robots-Tag: noindex, nofollow'])
 
 
 
@@ -5683,6 +5694,105 @@ class FinalQaPolishTests(unittest.TestCase):
                 self.assertEqual(article.count('<dt>The action it asks for</dt>'), 1)
                 body = article[article.index('<div class="wrap cs-body">'):]
                 self.assertIn('<dt>The action it asks for</dt>', body)
+
+
+class PreviewHostingTests(unittest.TestCase):
+    """Night Shift Task 62 (owner-mandated): previews/<slug>/ is copied verbatim to dist/preview/<slug>/, kept out of
+    search (robots Disallow, X-Robots-Tag noindex) and the sitemap, and left out of the main site's checks."""
+    FILES = {'index.html': b'<!doctype html><!-- concept by Cendavo --><title>Demo</title>\n',
+             'style.css': b'/* keep me */\nbody{margin:0}\n', 'img/x.png': b'\x89PNG\r\n\x1a\n\x00\x01binary'}
+
+    @classmethod
+    def setUpClass(cls):
+        build()
+
+    def setUp(self):
+        import shutil
+        import tempfile
+        self.tmp = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, self.tmp)
+        self.src, self.dest = self.tmp / 'previews', self.tmp / 'out' / 'preview'
+        self.src.mkdir()
+        (self.src / 'README.md').write_text('# Cold-call previews\n')
+
+    def tree(self, root):
+        return {str(p.relative_to(root)): p.read_bytes() for p in root.rglob('*') if p.is_file()}
+
+    def test_preview_folders_are_copied_byte_for_byte_without_extras(self):
+        from scripts.build_site import copy_previews
+        import os
+        outside = self.tmp / 'secret.txt'
+        outside.write_text('not for publishing')
+        demo = self.src / 'demo-plumber'
+        for name, data in self.FILES.items():
+            (demo / name).parent.mkdir(parents=True, exist_ok=True)
+            (demo / name).write_bytes(data)
+        (self.src / '.DS_Store').write_bytes(b'mac')
+        (demo / '.DS_Store').write_bytes(b'mac')
+        (self.src / '.hidden-preview').mkdir()
+        (self.src / '.hidden-preview' / 'index.html').write_text('hidden')
+        os.symlink(outside, demo / 'leak.txt')
+        os.symlink(self.tmp, demo / 'img' / 'up')
+        os.symlink(demo, self.src / 'linked-preview')
+        self.assertEqual(copy_previews(self.src, self.dest), ['demo-plumber'])
+        self.assertEqual(sorted(p.name for p in self.dest.iterdir()), ['demo-plumber'])
+        self.assertEqual(self.tree(self.dest / 'demo-plumber'), self.FILES)
+        self.assertIn(b'<!-- concept by Cendavo -->', (self.dest / 'demo-plumber/index.html').read_bytes())
+        self.assertNotIn(b'<picture', (self.dest / 'demo-plumber/index.html').read_bytes())
+        self.assertFalse((self.dest / 'README.md').exists())
+        self.assertFalse(any(p.is_symlink() or p.name.startswith('.') for p in self.dest.rglob('*')))
+        self.assertNotIn(b'not for publishing', b''.join(self.tree(self.dest).values()))
+
+    def test_bad_folder_names_stop_the_build(self):
+        from scripts.build_site import copy_previews
+        for name in ('Bad_Name', 'UPPER', 'trailing-', 'two--hyphens', 'sp ace'):
+            with self.subTest(name=name):
+                (self.src / name).mkdir()
+                with self.assertRaises(ValueError):
+                    copy_previews(self.src, self.dest)
+                (self.src / name).rmdir()
+                self.assertFalse(self.dest.exists())
+
+    def test_readme_only_or_missing_folder_creates_no_preview_directory(self):
+        from scripts.build_site import copy_previews
+        self.assertEqual(copy_previews(self.src, self.dest), [])
+        self.assertFalse(self.dest.exists())
+        self.assertEqual(copy_previews(self.tmp / 'absent', self.dest), [])
+        self.assertFalse(self.dest.exists())
+
+    def test_build_publishes_the_repository_previews_verbatim(self):
+        source = (ROOT / 'scripts/build_site.py').read_text()
+        self.assertIn("copy_previews(ROOT / 'previews', OUT / 'preview')", source)
+        slugs = sorted(p.name for p in (ROOT / 'previews').iterdir()
+                       if p.is_dir() and not p.is_symlink() and not p.name.startswith('.'))
+        self.assertEqual((OUT / 'preview').exists(), bool(slugs))
+        for slug in slugs:
+            with self.subTest(slug=slug):
+                expected = {k: v for k, v in self.tree(ROOT / 'previews' / slug).items()
+                            if not any(part.startswith('.') for part in Path(k).parts)}
+                self.assertEqual(self.tree(OUT / 'preview' / slug), expected)
+
+    def test_previews_are_kept_out_of_search_and_the_sitemap(self):
+        robots = (OUT / 'robots.txt').read_text().splitlines()
+        self.assertIn('Disallow: /preview/', robots)
+        self.assertIn('Allow: /', robots)
+        headers = (OUT / '_headers').read_text()
+        self.assertTrue(headers.endswith('/preview/*\n  X-Robots-Tag: noindex, nofollow\n'))
+        self.assertTrue(headers.startswith(HEADERS.split('/preview/*')[0]))  # the site-wide /* block (CSP) is unchanged
+        sitemap = (OUT / 'sitemap.xml').read_text()
+        self.assertNotIn('/preview', sitemap)
+        self.assertEqual(len(re.findall(r'<url>', sitemap)), 7)
+
+    def test_site_wide_scans_skip_the_preview_folder(self):
+        root = self.tmp / 'dist'
+        (root / 'preview' / 'demo-plumber').mkdir(parents=True)
+        (root / 'preview' / 'demo-plumber' / 'index.html').write_text('<script type="application/ld+json">{}</script>')
+        (root / 'about').mkdir()
+        (root / 'about' / 'index.html').write_text('<p>About</p>')
+        (root / 'index.html').write_text('<p>Home</p>')
+        self.assertEqual(sorted(str(p.relative_to(root)) for p in site_files('*.html', root)),
+                         ['about/index.html', 'index.html'])
+        self.assertFalse(any('preview' in p.parts for p in site_files(root=root)))
 
 
 if __name__ == '__main__':
