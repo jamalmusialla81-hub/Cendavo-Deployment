@@ -181,3 +181,19 @@
 .nf-sug a::after{transition:transform var(--dur-1) var(--ease-out)}
 .nf-sug a:hover::after{transform:translateX(4px) rotate(45deg)}
 }
+
+
+/* Search-service guides use the shared site typography and compact card system. */
+.seo-eyebrow{margin:0 0 20px;color:var(--amber-ink);font:700 .8125rem/1.4 var(--font-display);letter-spacing:.12em;text-transform:uppercase}
+.seo-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:18px;margin-top:36px}
+.seo-card{display:flex;flex-direction:column;align-items:flex-start;gap:14px;min-width:0;padding:clamp(22px,3vw,36px);background:#fff;border:1px solid var(--line-2);border-radius:20px}
+.seo-card h3{margin:0;font:740 clamp(1.3rem,1.15rem + .6vw,1.75rem)/1.12 var(--font-display);letter-spacing:-.025em}
+.seo-card p{margin:0;color:var(--ink-2);line-height:1.6}
+.seo-card a{margin-top:auto;padding-top:10px;text-decoration:underline;text-underline-offset:.2em;font-weight:700}
+.seo-card a:hover{color:var(--amber-ink)}
+.seo-prose{margin-top:28px;max-width:70ch;color:var(--ink-2);font-size:1.12rem;line-height:1.75}
+.seo-prose p{margin:0 0 1.2em}
+.seo-prose ul{margin:0 0 1.2em;padding-left:1.4em}
+.seo-prose li{margin:.45em 0}
+.seo-hero .pg-sub{max-width:45rem}
+@media(max-width:800px){.seo-grid{grid-template-columns:1fr}.seo-card{gap:12px}}

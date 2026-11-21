@@ -1,5 +1,9 @@
 # Cendavo
 
+**Sydney website design, redesign and maintenance for local service businesses:** [cendavo.au](https://cendavo.au/).
+
+Explore [website design](https://cendavo.au/website-design-sydney/), [website redesign](https://cendavo.au/website-redesign-sydney/) and [website maintenance](https://cendavo.au/website-maintenance-sydney/) services, or [request a free consultation](https://cendavo.au/contact/). The examples on the Cendavo site are clearly labelled fictional concept projects.
+
 Cendavo is a small Sydney studio that designs, redesigns and looks after websites for local service businesses. This repository holds the studio's own website and its enquiry backend. The site shows fictional concept projects, each labelled "Concept project · fictional business". It names no real clients, testimonials or results and publishes no prices: pricing is a fixed quote after a free consultation.
 
 **Status:** the current "Night Shift" design is on branch `design/night-shift`. It is **not deployed** and needs the owner's visual approval before it is merged to `main`. See [progress and open decisions](docs/PROGRESS.md).
