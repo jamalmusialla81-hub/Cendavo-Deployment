@@ -341,8 +341,9 @@ class InspectTests(unittest.TestCase):
         self.assertEqual(json.loads(out.call_args.args[0])['task']['row']['state'], 'completed')
 
 
-@unittest.skipUnless(fp.detect() in ('linux', 'wsl2') and shutil.which('bwrap') and not NESTED,
-                     'requires Linux/WSL2 with bubblewrap, outside an existing sandbox')
+@unittest.skipUnless(fp.detect() in ('linux', 'wsl2') and shutil.which('bwrap') and
+                     shutil.which('socat') and not NESTED and fp.check_checks_sandbox(fp.detect())['ok'],
+                     'requires Linux/WSL2 with working bubblewrap and socat, outside an existing sandbox')
 class LinuxBubblewrapBehaviourTests(unittest.TestCase):
     """Real bubblewrap boundaries (run these on Linux/WSL2; see docs/WINDOWS.md)."""
 
