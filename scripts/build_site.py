@@ -31,7 +31,7 @@ TITLES.update({
     'website-design-sydney': 'Website Design Sydney | Websites for Local Businesses — Cendavo',
     'website-redesign-sydney': 'Website Redesign Sydney | Improve Your Existing Site — Cendavo',
     'website-maintenance-sydney': 'Website Maintenance Sydney | Care Plans — Cendavo',
-    'services': 'Website Design, Redesign & Maintenance Sydney — Cendavo',
+    'services': 'Website Design, Redesign and Maintenance Sydney — Cendavo',
 })
 DESCRIPTIONS.update({
     'website-design-sydney': 'Sydney website design for trades, barbers, cleaners, detailers and other local service businesses. Plan a practical, mobile-friendly website with Cendavo.',
