@@ -10,7 +10,7 @@ import shutil
 ROOT = Path(__file__).resolve().parents[1]
 OUT = ROOT / 'dist'
 # The live site's origin: canonical URLs, Open Graph URLs and the sitemap are all built from this one constant.
-BASE_URL = 'https://cendavo-deployment.pages.dev'
+BASE_URL = 'https://cendavo.au'
 SHARE_IMAGE = '/assets/social/cendavo-og.jpg'  # 1200×630 share card
 # The public business address (owner-provided, Night Shift Task 31). The one Python copy: the footer uses it directly and
 # page fragments write the CONTACT_TOKEN placeholder, replaced at build time. assets/enquiry.js and functions/api/enquiry.js
