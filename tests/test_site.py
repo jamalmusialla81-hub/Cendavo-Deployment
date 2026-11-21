@@ -1596,13 +1596,14 @@ class ImagePerformanceAndSharingTests(unittest.TestCase):
         cls.html = {route: (OUT / route).read_text() for route in cls.ROUTES}
 
     def test_base_url_is_defined_once_and_used_by_the_sitemap(self):
-        from scripts.build_site import BASE_URL
+        from scripts.build_site import BASE_URL, SERVICE_SEARCH_PAGES
         self.assertEqual(BASE_URL, 'https://cendavo.au')
         source = (Path(__file__).resolve().parents[1] / 'scripts/build_site.py').read_text()
         self.assertEqual(source.count("BASE_URL = 'https://cendavo.au'"), 1)
         self.assertNotIn('cendavo-deployment.pages.dev', source)
         sitemap = (OUT / 'sitemap.xml').read_text()
-        self.assertEqual(re.findall(r'<loc>([^<]+)</loc>', sitemap), [BASE_URL + path for path in self.PATHS.values()])
+        self.assertEqual(re.findall(r'<loc>([^<]+)</loc>', sitemap), [BASE_URL + path for path in self.PATHS.values()] +
+                         [BASE_URL + path for _, path in SERVICE_SEARCH_PAGES])
 
     def test_every_photo_has_an_avif_source_ahead_of_its_jpeg(self):
         total = 0
@@ -5694,3 +5695,28 @@ class FinalQaPolishTests(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+class SydneyServiceSearchPageTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        build()
+
+    def test_service_pages_have_canonical_and_reachable_ctas(self):
+        from scripts.build_site import SERVICE_SEARCH_PAGES, BASE_URL
+        for _, path in SERVICE_SEARCH_PAGES:
+            slug = path.strip('/')
+            html = (OUT / slug / 'index.html').read_text()
+            with self.subTest(path=path):
+                self.assertIn(f'<link rel="canonical" href="{BASE_URL}{path}">', html)
+                self.assertIn('<meta name="description"', html)
+                self.assertIn('href="/contact/"', html)
+                self.assertIn('<h1', html)
+                self.assertNotIn('noindex', html)
+                self.assertIn(f'<loc>{BASE_URL}{path}</loc>', (OUT / 'sitemap.xml').read_text())
+
+    def test_services_page_links_to_each_specific_service(self):
+        from scripts.build_site import SERVICE_SEARCH_PAGES
+        html = (OUT / 'services/index.html').read_text()
+        for _, path in SERVICE_SEARCH_PAGES:
+            with self.subTest(path=path):
+                self.assertIn(f'href="{path}"', html)
