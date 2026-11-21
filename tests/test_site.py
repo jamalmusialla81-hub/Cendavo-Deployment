@@ -5287,7 +5287,8 @@ class SeoAndHeaderTests(unittest.TestCase):
         from datetime import date
         sitemap = (OUT / 'sitemap.xml').read_text()
         entries = re.findall(r'<url>(.*?)</url>', sitemap)
-        self.assertEqual(len(entries), 7)
+        from scripts.build_site import SERVICE_SEARCH_PAGES
+        self.assertEqual(len(entries), 7 + len(SERVICE_SEARCH_PAGES))
         values = []
         for entry in entries:
             with self.subTest(entry=entry):
