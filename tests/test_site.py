@@ -278,9 +278,15 @@ class SiteBuildTests(unittest.TestCase):
 
     def test_sitemap_points_at_real_project(self):
         sitemap = (OUT / 'sitemap.xml').read_text()
-        self.assertIn('https://cendavo-deployment.pages.dev/demo/', sitemap)
-        self.assertIn('https://cendavo-deployment.pages.dev/work/', sitemap)
-        self.assertNotIn('https://cendavo.pages.dev', sitemap)
+        self.assertIn('https://cendavo.au/demo/', sitemap)
+        self.assertIn('https://cendavo.au/work/', sitemap)
+        self.assertNotIn('pages.dev', sitemap)
+        robots = (OUT / 'robots.txt').read_text()
+        self.assertIn('Sitemap: https://cendavo.au/sitemap.xml', robots)
+        self.assertNotIn('pages.dev', robots)
+        for page in self.ROUTES:
+            html = (OUT / page).read_text()
+            self.assertNotIn('pages.dev', html)
 
 
 MOTION_GUARD = '@media(prefers-reduced-motion:no-preference){'
@@ -1591,9 +1597,10 @@ class ImagePerformanceAndSharingTests(unittest.TestCase):
 
     def test_base_url_is_defined_once_and_used_by_the_sitemap(self):
         from scripts.build_site import BASE_URL
-        self.assertEqual(BASE_URL, 'https://cendavo-deployment.pages.dev')
+        self.assertEqual(BASE_URL, 'https://cendavo.au')
         source = (Path(__file__).resolve().parents[1] / 'scripts/build_site.py').read_text()
-        self.assertEqual(source.count('cendavo-deployment.pages.dev'), 1)
+        self.assertEqual(source.count("BASE_URL = 'https://cendavo.au'"), 1)
+        self.assertNotIn('cendavo-deployment.pages.dev', source)
         sitemap = (OUT / 'sitemap.xml').read_text()
         self.assertEqual(re.findall(r'<loc>([^<]+)</loc>', sitemap), [BASE_URL + path for path in self.PATHS.values()])
 
@@ -5197,7 +5204,7 @@ class PerformanceTask48Tests(unittest.TestCase):
 
 class SeoAndHeaderTests(unittest.TestCase):
     """Night Shift Task 49: homepage JSON-LD, robots.txt sitemap line, sitemap lastmod and two security headers."""
-    BASE = 'https://cendavo-deployment.pages.dev'
+    BASE = 'https://cendavo.au'
     FORBIDDEN_KEYS = {'address', 'aggregateRating', 'review', 'reviews', 'sameAs', 'founder', 'telephone'}
 
     @classmethod
