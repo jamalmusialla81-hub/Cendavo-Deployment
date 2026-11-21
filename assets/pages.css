@@ -191,7 +191,7 @@
 .seo-card p{margin:0;color:var(--ink-2);line-height:1.6}
 .seo-card a{margin-top:auto;padding-top:10px;text-decoration:underline;text-underline-offset:.2em;font-weight:700}
 .seo-card a:hover{color:var(--amber-ink)}
-.seo-prose{max-width:70ch;color:var(--ink-2);font-size:1.12rem;line-height:1.75}
+.seo-prose{margin-top:28px;max-width:70ch;color:var(--ink-2);font-size:1.12rem;line-height:1.75}
 .seo-prose p{margin:0 0 1.2em}
 .seo-prose ul{margin:0 0 1.2em;padding-left:1.4em}
 .seo-prose li{margin:.45em 0}
