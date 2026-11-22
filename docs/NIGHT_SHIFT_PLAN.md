@@ -379,3 +379,18 @@ Small, focused; same budgets and tests. **Never `cd` in Bash.**
 
 ### Task 62 — host cold-call previews at /preview/<slug>/ (OWNER-MANDATED; profile `site`)
 The owner sends prospective clients links to concept sites. Add to `scripts/build_site.py`: copy every subfolder of `previews/` (skip files at the top level such as README.md) verbatim into `dist/preview/<slug>/` (no comment stripping, no `<picture>` wrapping, no template — they are complete pages). Exclude `/preview/` from `sitemap.xml`; add `Disallow: /preview/` to robots.txt; add a `_headers` block `/preview/*` with `X-Robots-Tag: noindex, nofollow` (the global CSP still applies — previews are CSP-compliant). Previews must not affect the main site's size budgets or link checks (exclude `dist/preview/` from those tests). Add tests: a fixture preview folder in a temp copy (or the README-only state) builds; robots/sitemap/headers rules present. Nothing else changes. **Never `cd` in Bash.**
+
+### Task 63 — anonymised concept-site gallery on the Work page (OWNER-MANDATED; profile `site`)
+Owner: "add previews to works", choosing to show them ANONYMISED. Ten supervisor-made, name-free screenshots are in `assets/images/concepts/` (jpg + avif, 1200 px wide). Add a section to `pages/work.html` after the three concept case studies and before the demo/closing band, titled e.g. "More concepts, built for real local trades", with this exact disclosure under the intro: "Speculative concepts we designed for local businesses we'd like to work with, shown anonymously. They aren't clients and haven't endorsed Cendavo."
+Cards (image + trade label + feature + one line), NO links to /preview/ and NO business names, suburbs, phone numbers or ratings anywhere:
+- concept-tailor-photo-quote — "Inner-west tailor" · "Photo quotes" · Pick the garment, tick the job, send a photo before coming in.
+- concept-alterations-hem-studio — "Inner-west alterations studio" · "Hem studio" · Slide to choose a hem length, then request a fitting.
+- concept-tailor-fit-guide — "Inner-west tailor" · "Fit guide" · Tap the fitting points on a suit or gown, then send an after-hours request.
+- concept-clock-picker — "Inner-west clock repairer" · "Choose your clock" · See what usually brings each clock in, then request an appointment.
+- concept-watch-symptoms — "Inner-west watch repairer" · "What's your watch doing?" · Pick the symptom and start a repair enquiry already half filled in.
+- concept-cobbler-photo-quote — "Inner-west cobbler" · "What are you bringing in?" · Pick the pair, see what usually needs doing, then send a photo for a quote.
+- concept-cobbler-wear-map — "Inner-west cobbler" · "Where's the wear?" · Tap where the shoe is worn and start a quote with the repair picked.
+- concept-barber-cut-picker — "Inner-west barber" · "Cut picker" · Pick a look, then request it or walk in.
+- concept-barber-link-in-bio — "Inner-west barber" · "Link-in-bio booking" · From the Instagram bio to a booked chair in a few taps.
+- concept-barber-four-tap — "Inner-west barber" · "Four-tap booking" · Service, day, time, done.
+Design: editorial, not a uniform 3×N card grid — e.g. a varied-size masonry/stagger or horizontal reel with glass captions consistent with the site; lazy-loaded images with width/height; good at 390 and 1440; reduced-motion safe. Alt text describes the interface shown (no names). Tests: the section exists with the disclosure text; none of these strings appear in any built page outside dist/preview: "Tony", "Balmain Alterations", "Precision Tailoring", "Just A Sec", "J.H Wood", "Jazma", "McHugh", "New in Town", "Yass", "future of hair"; no href contains "/preview/". **Never `cd` in Bash.**
