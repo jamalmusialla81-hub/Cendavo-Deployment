@@ -605,7 +605,7 @@ class DesignSystemTests(unittest.TestCase):
                 self.assertIn('aria-controls="site-nav"', html)
                 self.assertIn('<nav class="nav-links" id="site-nav" data-nav', html)
                 self.assertIn('aria-expanded="false"', html)
-        self.assertIn('<title>Cendavo — Website design for Sydney’s local service businesses</title>', self.home)
+        self.assertIn('<title>Website Design Sydney for Service Businesses | Cendavo</title>', self.home)
         self.assertRegex(self.home, r'<meta name="description" content="[^"]*websites for local service businesses in Sydney')
 
     def test_light_first_frame_and_light_form_controls(self):
@@ -1712,7 +1712,7 @@ class ImagePerformanceAndSharingTests(unittest.TestCase):
                 self.assertNotIn('noindex', html)
         # Titles and descriptions keep their wording.
         self.assertIn('<title>Pricing — Cendavo</title>', self.html['pricing/index.html'])
-        self.assertIn('<meta property="og:title" content="Cendavo — Website design for Sydney’s local service businesses">', self.html['index.html'])
+        self.assertIn('<meta property="og:title" content="Website Design Sydney for Service Businesses | Cendavo">', self.html['index.html'])
 
     def test_share_card_is_1200_by_630(self):
         card = OUT / 'assets/social/cendavo-og.jpg'

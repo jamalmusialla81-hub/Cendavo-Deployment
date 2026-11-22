@@ -19,8 +19,8 @@ CONTACT_EMAIL = 'cendavo.au@gmail.com'
 CONTACT_TOKEN = '{{CONTACT_EMAIL}}'
 MAIL_LINK = f'<a class="mail" href="mailto:{CONTACT_EMAIL}">{CONTACT_EMAIL}</a>'
 SHARE_IMAGE_ALT = 'Websites for Sydney’s local service businesses. The Cendavo logo and a Request a free consultation button.'
-TITLES = {'index': 'Cendavo — Website design for Sydney’s local service businesses', 'work': 'Work — Cendavo', 'services': 'Services — Cendavo', 'pricing': 'Pricing — Cendavo', 'demo': 'Demo project — Cendavo', 'about': 'About — Cendavo', 'contact': 'Contact — Cendavo', '404': 'Page not found — Cendavo'}
-DESCRIPTIONS = {'index': 'Cendavo designs, builds, redesigns and looks after websites for local service businesses in Sydney.', 'work': 'Concept projects by Cendavo: three fictional Sydney service businesses, designed the way we would design yours.', 'services': 'New websites, redesigns and care plans for local service businesses in Sydney, from Cendavo.', 'pricing': 'How Cendavo prices websites: a fixed quote after a free consultation, what every project includes and what affects the quote.', 'demo': 'A Cendavo demonstration project that runs in your browser with sample data only.', 'about': 'About Cendavo, a small Sydney studio that designs, builds and looks after websites for local service businesses: how we think, what you can expect and how we build.', 'contact': 'Request a website design, redesign or maintenance consultation with Cendavo in Sydney.', '404': 'This page could not be found on the Cendavo website.'}
+TITLES = {'index': 'Website Design Sydney for Service Businesses | Cendavo', 'work': 'Work — Cendavo', 'services': 'Services — Cendavo', 'pricing': 'Pricing — Cendavo', 'demo': 'Demo project — Cendavo', 'about': 'About — Cendavo', 'contact': 'Contact — Cendavo', '404': 'Page not found — Cendavo'}
+DESCRIPTIONS = {'index': 'Cendavo designs, builds, redesigns and looks after websites for local service businesses in Sydney.', 'work': 'Concept projects by Cendavo: three fictional Sydney service businesses, designed the way we would design yours.', 'services': 'New websites, redesigns and care plans for local service businesses in Sydney, from Cendavo.', 'pricing': 'How Cendavo prices websites: a fixed quote after a free consultation, what every project includes and what affects the quote.', 'demo': 'A Cendavo demonstration project that runs in your browser with sample data only.', 'about': 'Cendavo is a Sydney website studio designing, rebuilding and maintaining websites for local service businesses. Learn about our approach and process.', 'contact': 'Request a website design, redesign or maintenance consultation with Cendavo in Sydney.', '404': 'This page could not be found on the Cendavo website.'}
 # Search-intent service guides are linked from Services, not repeated in the crowded header.
 SERVICE_SEARCH_PAGES = [
     ('Website design Sydney', '/website-design-sydney/'),
@@ -28,8 +28,8 @@ SERVICE_SEARCH_PAGES = [
     ('Website maintenance Sydney', '/website-maintenance-sydney/'),
 ]
 TITLES.update({
-    'website-design-sydney': 'Website Design Sydney | Websites for Local Businesses — Cendavo',
-    'website-redesign-sydney': 'Website Redesign Sydney | Improve Your Existing Site — Cendavo',
+    'website-design-sydney': 'Website Design Sydney for Local Businesses | Cendavo',
+    'website-redesign-sydney': 'Website Redesign Sydney for Local Businesses | Cendavo',
     'website-maintenance-sydney': 'Website Maintenance Sydney | Care Plans — Cendavo',
     'services': 'Website Design, Redesign and Maintenance Sydney — Cendavo',
 })
