@@ -207,6 +207,9 @@ IMG_TAG = re.compile(r'<img\b[^>]*>')
 # marquee tile wants 960 device pixels), so with the 1600w file on offer it always took that; 800w is about 2x density
 # there, sharp enough, and half the bytes or less. Tablets and desktops keep the full srcset.
 PHONE_MEDIA = '(max-width: 640px)'
+# Task 63: the Work page's concept-site screenshots exist at one width (1200 px) only; making 800w/1600w copies would mean
+# upscaling. Exactly this single-candidate srcset may skip the 800w rule (one AVIF source, no phone source); nothing else.
+CONCEPT_SRCSET = re.compile(r'/assets/images/concepts/concept-[a-z-]+\.jpg 1200w')
 
 
 def with_avif(page):
@@ -214,7 +217,8 @@ def with_avif(page):
 
     The AVIF srcset is the img's srcset with .jpg swapped for .avif, and sizes is copied as is, so browsers pick the same
     width either way. When the srcset offers more than the 800w file, a phone-only AVIF source listing just the 800w file
-    comes first (PHONE_MEDIA). The build stops if a photo has no srcset/sizes or an AVIF file is missing."""
+    comes first (PHONE_MEDIA). The build stops if a photo has no srcset/sizes, an AVIF file is missing, or there is no
+    800w file (the one exception is a CONCEPT_SRCSET screenshot, which gets just its single AVIF source)."""
     def wrap(match):
         tag = match.group(0)
         srcset, sizes = re.search(r'\ssrcset="([^"]+)"', tag), re.search(r'\ssizes="([^"]+)"', tag)
@@ -226,7 +230,7 @@ def with_avif(page):
             if not url.startswith('/assets/images/') or not (ROOT / url.lstrip('/')).is_file():
                 raise FileNotFoundError(f'missing AVIF image: {url}')
         small = [url for url, width in candidates if width == '800']
-        if not small:
+        if not small and not CONCEPT_SRCSET.fullmatch(srcset.group(1)):
             raise ValueError(f'image needs an 800w file for phones: {tag[:100]}')
         phone = ''
         if len(candidates) > 1:

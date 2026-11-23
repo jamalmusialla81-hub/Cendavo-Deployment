@@ -160,6 +160,38 @@
 .wk-demo-list li{display:grid;gap:6px;padding-top:16px;border-top:1px solid var(--ink)}
 .wk-demo-list b{font:720 1.125rem/1.2 var(--font-display);font-stretch:94%}
 .wk-demo-list span{color:var(--ink-2);font-size:1rem}
+/* Task 63: the anonymised concept-site gallery. Static on purpose: no motion, no links, no hover (the cards are not
+   clickable). Wide screens get an uneven two-column rhythm: the 1st and 6th screens span both columns and the second card
+   of each pair sits a step lower. Captions are the homepage teaser's frosted panel (no backdrop-filter), overlapping the
+   foot of the screenshot through shared grid rows. Phones: one column. A solid paper band, so the edge after the dark
+   Fade & Co section and before the warm demo band is clean. */
+.wk-cx{background:var(--paper)}
+.wk-cx-head{display:grid;gap:18px;max-width:54rem;margin-bottom:clamp(40px,5vw,72px)}
+.wk-cx-intro{margin:0;max-width:56ch;color:var(--ink-2);font-size:1.125rem}
+.wk-cx-note{margin:0;max-width:62ch;padding:12px 16px;border-left:3px solid var(--amber-ink);border-radius:0 12px 12px 0;background:var(--warm);color:var(--ink);font-size:1rem}
+.wk-cx-list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:clamp(40px,5vw,72px) var(--col-gap);align-items:start;list-style:none;margin:0;padding:0}
+.wk-cx-card{display:grid;grid-template-columns:minmax(0,1fr);grid-template-rows:auto 56px auto}
+.wk-cx-card:nth-child(5n+1){grid-column:1/-1;grid-template-columns:repeat(12,minmax(0,1fr));grid-template-rows:auto 80px auto}
+.wk-cx-card:nth-child(5n+3),.wk-cx-card:nth-child(5n){margin-top:clamp(0px,6vw,96px)}
+.wk-cx-shot{grid-column:1/-1;grid-row:1/3;overflow:hidden;border-radius:18px;background:var(--warm-2);box-shadow:0 0 0 1px var(--line),0 24px 48px -28px rgba(58,40,12,.45)}
+.wk-cx-card:nth-child(5n+1) .wk-cx-shot{grid-column:1/10}
+.wk-cx-shot img{display:block;width:100%;height:auto}
+.wk-cx-cap{position:relative;grid-column:1/-1;grid-row:2/4;margin:0 14px;padding:16px 20px 20px;border:1px solid rgba(255,255,255,.85);border-radius:20px;background:linear-gradient(135deg,rgba(255,255,255,.95),rgba(255,255,255,.82));box-shadow:inset 0 1px 0 #fff,0 20px 40px -24px rgba(58,40,12,.4)}
+.wk-cx-card:nth-child(5n+1) .wk-cx-cap{grid-column:8/-1;margin:0}
+.wk-cx-trade{margin:0;color:var(--amber-ink);font:700 .9375rem/1.3 var(--font-display)}
+.wk-cx-cap h3{margin:6px 0 0;font-weight:760;font-stretch:88%;font-size:clamp(1.35rem,1rem + .9vw,1.9rem);line-height:1.05;letter-spacing:-.02em}
+.wk-cx-line{margin:8px 0 0;max-width:46ch;color:var(--ink-2);font-size:1rem}
+@media(max-width:1023px){
+.wk-cx-card:nth-child(5n+1){grid-template-columns:minmax(0,1fr);grid-template-rows:auto 56px auto}
+.wk-cx-card:nth-child(5n+1) .wk-cx-shot,.wk-cx-card:nth-child(5n+1) .wk-cx-cap{grid-column:1/-1}
+.wk-cx-card:nth-child(5n+1) .wk-cx-cap{margin:0 14px}
+}
+@media(max-width:640px){
+.wk-cx-list{grid-template-columns:minmax(0,1fr);row-gap:40px}
+.wk-cx-card:nth-child(5n+3),.wk-cx-card:nth-child(5n){margin-top:0}
+.wk-cx-card,.wk-cx-card:nth-child(5n+1){grid-template-rows:auto 36px auto}
+.wk-cx-cap,.wk-cx-card:nth-child(5n+1) .wk-cx-cap{margin:0 10px;padding:14px 16px 16px}
+}
 @container (max-width:460px){.q-cols{grid-template-columns:minmax(0,1fr)}.q-col{min-height:0}}
 
 @media(max-width:1023px){

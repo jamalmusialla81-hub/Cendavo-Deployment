@@ -1354,6 +1354,16 @@ class InnerPageTests(unittest.TestCase):
                         self.assertNotIn('loading', attrs)
                     if not attrs['alt'].strip():
                         self.assertTrue(hidden, 'decorative images must sit inside an aria-hidden wrapper')
+                    if CONCEPT_SHOT.fullmatch(attrs['srcset']):
+                        # Task 63: a Work concept screenshot, one 1200w file only (lazy, never the priority image).
+                        self.assertEqual(route, 'work/index.html')
+                        self.assertEqual(attrs['srcset'], f"{attrs['src']} 1200w")
+                        self.assertEqual(attrs.get('loading'), 'lazy')
+                        self.assertNotIn('fetchpriority', attrs)
+                        width, height = jpeg_size(OUT / attrs['src'].lstrip('/'))
+                        self.assertEqual(width, 1200)
+                        self.assertEqual((int(attrs['width']), int(attrs['height'])), (width, height))
+                        continue
                     candidates = dict(reversed(part.split()) for part in attrs['srcset'].split(','))
                     self.assertEqual(set(candidates), photo_widths(attrs['sizes']))
                     small = candidates['800w']
@@ -1553,6 +1563,11 @@ class InnerPageTests(unittest.TestCase):
         self.assertEqual(weights, {400, 700})
 
 
+# Task 63: the only srcset allowed without 800w/1600w files, the Work page's single-width concept screenshots (the same
+# pattern as scripts/build_site.py's CONCEPT_SRCSET, restated here so a looser build rule cannot loosen the tests).
+CONCEPT_SHOT = re.compile(r'/assets/images/concepts/concept-[a-z-]+\.jpg 1200w')
+
+
 def photo_widths(sizes):
     """Task 59: the srcset widths a photo offers. Shown at a fixed 400 CSS px or less (marquee tiles at 320px, thumbnails
     at 200px and below), only the 800w file: at least 2x density there, where DPR3 phones used to fetch 1600w. Anything
@@ -1631,7 +1646,13 @@ class ImagePerformanceAndSharingTests(unittest.TestCase):
                     urls = [part.split()[0] for part in source['srcset'].split(',')]
                     self.assertEqual(len(urls), len(jpegs))
                     for url in urls:
-                        self.assertRegex(url, r'^/assets/images/[a-z-]+-(?:800|1600)\.avif$')
+                        if CONCEPT_SHOT.fullmatch(attrs['srcset']):
+                            # Task 63: the concept screenshot's single 1200w AVIF, with no phone-only source.
+                            self.assertEqual((route, len(sources)), ('work/index.html', 1))
+                            self.assertEqual(source['srcset'], f"{url} 1200w")
+                            self.assertRegex(url, r'^/assets/images/concepts/concept-[a-z-]+\.avif$')
+                        else:
+                            self.assertRegex(url, r'^/assets/images/[a-z-]+-(?:800|1600)\.avif$')
                         self.assertTrue((OUT / url.lstrip('/')).is_file(), url)
                     if len(sources) == 2:
                         phone, phone_parent = sources[0]
@@ -5793,6 +5814,145 @@ class PreviewHostingTests(unittest.TestCase):
         self.assertEqual(sorted(str(p.relative_to(root)) for p in site_files('*.html', root)),
                          ['about/index.html', 'index.html'])
         self.assertFalse(any('preview' in p.parts for p in site_files(root=root)))
+
+
+class ConceptGalleryTests(unittest.TestCase):
+    """Night Shift Task 63 (owner-mandated): the Work page's anonymised concept-site gallery. Ten name-free screenshots,
+    a visible disclosure, no links to /preview/, no business names anywhere on the main site, static (no motion or JS)."""
+    DISCLOSURE = ("Speculative concepts we designed for local businesses we'd like to work with, shown anonymously. "
+                  "They aren't clients and haven't endorsed Cendavo.")
+    CARDS = (('concept-tailor-photo-quote', 'Inner-west tailor', 'Photo quotes',
+              'Pick the garment, tick the job, send a photo before coming in.'),
+             ('concept-alterations-hem-studio', 'Inner-west alterations studio', 'Hem studio',
+              'Slide to choose a hem length, then request a fitting.'),
+             ('concept-tailor-fit-guide', 'Inner-west tailor', 'Fit guide',
+              'Tap the fitting points on a suit or gown, then send an after-hours request.'),
+             ('concept-clock-picker', 'Inner-west clock repairer', 'Choose your clock',
+              'See what usually brings each clock in, then request an appointment.'),
+             ('concept-watch-symptoms', 'Inner-west watch repairer', "What's your watch doing?",
+              'Pick the symptom and start a repair enquiry already half filled in.'),
+             ('concept-cobbler-photo-quote', 'Inner-west cobbler', 'What are you bringing in?',
+              'Pick the pair, see what usually needs doing, then send a photo for a quote.'),
+             ('concept-cobbler-wear-map', 'Inner-west cobbler', "Where's the wear?",
+              'Tap where the shoe is worn and start a quote with the repair picked.'),
+             ('concept-barber-cut-picker', 'Inner-west barber', 'Cut picker', 'Pick a look, then request it or walk in.'),
+             ('concept-barber-link-in-bio', 'Inner-west barber', 'Link-in-bio booking',
+              'From the Instagram bio to a booked chair in a few taps.'),
+             ('concept-barber-four-tap', 'Inner-west barber', 'Four-tap booking', 'Service, day, time, done.'))
+    BANNED = ('Tony', 'Balmain Alterations', 'Precision Tailoring', 'Just A Sec', 'J.H Wood', 'Jazma', 'McHugh',
+              'New in Town', 'Yass', 'future of hair')
+    TEXT_SUFFIXES = ('.html', '.css', '.js', '.txt', '.xml')
+
+    @classmethod
+    def setUpClass(cls):
+        build()
+        cls.main = main_of((OUT / 'work/index.html').read_text())
+        sections = re.findall(r'<section class="sec wk-cx" aria-labelledby="wk-concepts-title">(.*?)</section>', cls.main, re.S)
+        assert len(sections) == 1, sections
+        cls.section = sections[0]
+        cls.css = re.sub(r'/\*.*?\*/', '', (OUT / 'assets/work.css').read_text(), flags=re.S)
+
+    def test_section_sits_after_fade_and_co_and_before_the_demo(self):
+        start = self.main.index('<section class="sec wk-cx"')
+        self.assertLess(self.main.index('id="fade-co"'), start)
+        self.assertLess(self.main.rindex('</article>'), start)
+        self.assertLess(start, self.main.index('id="demo"'))
+        self.assertRegex(self.section, r'<h2 id="wk-concepts-title"[^>]*>More concepts, built for real local trades</h2>')
+
+    def test_disclosure_is_visible_ahead_of_the_cards(self):
+        note = re.search(r'<p class="wk-cx-note">([^<]+)</p>', self.section)
+        self.assertIsNotNone(note)
+        self.assertEqual(normalise_copy(note.group(1)), normalise_copy(self.DISCLOSURE))
+        self.assertLess(note.start(), self.section.index('<li'))
+        # Not hidden or shrunk: the note's own rule is full-size body copy.
+        rule = ''.join(rules_for(base_rules(self.css), '.wk-cx-note'))
+        self.assertIn('font-size:1rem', rule)
+        self.assertNotRegex(rule, r'display:none|visibility:hidden|opacity:0')
+
+    def test_ten_cards_in_the_owner_order_with_verbatim_copy(self):
+        cards = re.findall(r'<li class="wk-cx-card">(.*?)</li>', self.section, re.S)
+        self.assertEqual(len(cards), len(self.CARDS))
+        self.assertEqual(self.section.count('<li'), len(self.CARDS))
+        for card, (slug, trade, feature, line) in zip(cards, self.CARDS):
+            with self.subTest(slug=slug):
+                self.assertEqual(card.count('<img '), 1)
+                self.assertIn(f'src="/assets/images/concepts/{slug}.jpg"', card)
+                got = re.search(r'<p class="wk-cx-trade">([^<]+)</p><h3>([^<]+)</h3><p class="wk-cx-line">([^<]+)</p>', card)
+                self.assertIsNotNone(got)
+                self.assertEqual(tuple(map(normalise_copy, got.groups())), tuple(map(normalise_copy, (trade, feature, line))))
+
+    def test_screenshots_are_lazy_sized_and_described(self):
+        parser = PictureCollector()
+        parser.feed(self.section)
+        self.assertEqual(len(parser.images), len(self.CARDS))
+        for (attrs, parent, sources), (slug, *_) in zip(parser.images, self.CARDS):
+            with self.subTest(slug=slug):
+                src = f'/assets/images/concepts/{slug}.jpg'
+                self.assertEqual(attrs['src'], src)
+                self.assertEqual(attrs['srcset'], f'{src} 1200w')
+                self.assertTrue(attrs.get('sizes'))
+                self.assertEqual((attrs.get('loading'), attrs.get('decoding')), ('lazy', 'async'))
+                self.assertNotIn('fetchpriority', attrs)
+                width, height = jpeg_size(OUT / src.lstrip('/'))
+                self.assertEqual((attrs['width'], attrs['height']), (str(width), str(height)))
+                self.assertGreaterEqual(len(attrs['alt'].strip()), 40)
+                self.assertEqual(parent, 'picture')
+                self.assertEqual([(s.get('type'), s.get('srcset'), s.get('media')) for s, _ in sources],
+                                 [('image/avif', src.replace('.jpg', '.avif') + ' 1200w', None)])
+                for banned in self.BANNED:
+                    self.assertNotIn(banned, attrs['alt'])
+
+    def test_avif_exception_is_only_for_concept_screenshots(self):
+        from scripts.build_site import with_avif
+        concept = ('<img src="/assets/images/concepts/concept-clock-picker.jpg" srcset="/assets/images/concepts/'
+                   'concept-clock-picker.jpg 1200w" sizes="50vw" width="1200" height="750" alt="x">')
+        self.assertEqual(with_avif(concept), '<picture><source type="image/avif" srcset="/assets/images/concepts/'
+                         f'concept-clock-picker.avif 1200w" sizes="50vw">{concept}</picture>')
+        rejected = ('/assets/images/barber-chair-1600.jpg 1600w',  # an ordinary photo without its 800w file
+                    '/assets/images/concepts/concept-clock-picker.jpg 1600w',  # wrong width
+                    '/assets/images/concepts/concept-clock-picker.jpg 1200w, /assets/images/barber-chair-1600.jpg 1600w')
+        for srcset in rejected:
+            with self.subTest(srcset=srcset), self.assertRaises((ValueError, FileNotFoundError)):
+                with_avif(f'<img src="/x.jpg" srcset="{srcset}" sizes="50vw" alt="">')
+
+    def test_no_links_and_no_preview_hrefs_on_the_main_site(self):
+        self.assertNotIn('<a', self.section)
+        self.assertNotIn('href', self.section)
+        for page in site_files('*.html'):
+            with self.subTest(page=str(page.relative_to(OUT))):
+                for href in re.findall(r'href="([^"]*)"', page.read_text()):
+                    self.assertNotIn('/preview/', href)
+
+    def test_no_business_names_anywhere_on_the_main_site(self):
+        files = [p for p in site_files() if p.is_file() and (p.suffix in self.TEXT_SUFFIXES or p.name == '_headers')]
+        self.assertGreater(len(files), 10)
+        for path in files:
+            text = path.read_text()
+            for banned in self.BANNED:
+                with self.subTest(file=str(path.relative_to(OUT)), banned=banned):
+                    self.assertNotIn(banned, text)
+
+    def test_gallery_is_static(self):
+        from scripts.build_site import PAGE_SCRIPTS, GSAP_CORE, SCENES, REEL
+        self.assertEqual(PAGE_SCRIPTS['work'], GSAP_CORE + SCENES + REEL)
+        self.assertNotIn('data-', self.section)
+        self.assertNotIn('tabindex', self.section)
+        gallery = [(selectors, body) for selectors, body in re.findall(r'([^{}@]+)\{([^{}]*)\}', self.css) if 'wk-cx' in selectors]
+        self.assertGreater(len(gallery), 10)
+        for selectors, body in gallery:
+            with self.subTest(selectors=selectors.strip()):
+                self.assertNotRegex(body, r'animation|transition|transform|scroll-snap|backdrop-filter')
+                self.assertNotIn(':hover', selectors)
+        self.assertNotIn('wk-cx', ''.join(without_blocks(self.css, '@media(prefers-reduced-motion:no-preference){')[1]))
+
+    def test_layout_is_uneven_on_wide_screens_and_one_column_on_phones(self):
+        base = base_rules(self.css)
+        self.assertIn('grid-template-columns:repeat(2,minmax(0,1fr))', ''.join(rules_for(base, '.wk-cx-list')))
+        self.assertIn('grid-column:1/-1', ''.join(rules_for(base, '.wk-cx-card:nth-child(5n+1)')))
+        self.assertIn('margin-top:clamp(', ''.join(rules_for(base, '.wk-cx-card:nth-child(5n+3)')))
+        phone = media_blocks(self.css, 'max-width:640px')
+        self.assertIn('grid-template-columns:minmax(0,1fr)', ''.join(rules_for(phone, '.wk-cx-list')))
+        self.assertIn('margin-top:0', ''.join(rules_for(phone, '.wk-cx-card:nth-child(5n+3)')))
 
 
 if __name__ == '__main__':
