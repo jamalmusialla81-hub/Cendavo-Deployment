@@ -285,9 +285,15 @@ class SiteBuildTests(unittest.TestCase):
 
     def test_sitemap_points_at_real_project(self):
         sitemap = (OUT / 'sitemap.xml').read_text()
-        self.assertIn('https://cendavo-deployment.pages.dev/demo/', sitemap)
-        self.assertIn('https://cendavo-deployment.pages.dev/work/', sitemap)
-        self.assertNotIn('https://cendavo.pages.dev', sitemap)
+        self.assertIn('https://cendavo.au/demo/', sitemap)
+        self.assertIn('https://cendavo.au/work/', sitemap)
+        self.assertNotIn('pages.dev', sitemap)
+        robots = (OUT / 'robots.txt').read_text()
+        self.assertIn('Sitemap: https://cendavo.au/sitemap.xml', robots)
+        self.assertNotIn('pages.dev', robots)
+        for page in self.ROUTES:
+            html = (OUT / page).read_text()
+            self.assertNotIn('pages.dev', html)
 
 
 MOTION_GUARD = '@media(prefers-reduced-motion:no-preference){'
@@ -606,7 +612,7 @@ class DesignSystemTests(unittest.TestCase):
                 self.assertIn('aria-controls="site-nav"', html)
                 self.assertIn('<nav class="nav-links" id="site-nav" data-nav', html)
                 self.assertIn('aria-expanded="false"', html)
-        self.assertIn('<title>Cendavo — Website design for Sydney’s local service businesses</title>', self.home)
+        self.assertIn('<title>Website Design Sydney for Service Businesses | Cendavo</title>', self.home)
         self.assertRegex(self.home, r'<meta name="description" content="[^"]*websites for local service businesses in Sydney')
 
     def test_light_first_frame_and_light_form_controls(self):
@@ -1613,12 +1619,14 @@ class ImagePerformanceAndSharingTests(unittest.TestCase):
         cls.html = {route: (OUT / route).read_text() for route in cls.ROUTES}
 
     def test_base_url_is_defined_once_and_used_by_the_sitemap(self):
-        from scripts.build_site import BASE_URL
-        self.assertEqual(BASE_URL, 'https://cendavo-deployment.pages.dev')
+        from scripts.build_site import BASE_URL, SERVICE_SEARCH_PAGES
+        self.assertEqual(BASE_URL, 'https://cendavo.au')
         source = (Path(__file__).resolve().parents[1] / 'scripts/build_site.py').read_text()
-        self.assertEqual(source.count('cendavo-deployment.pages.dev'), 1)
+        self.assertEqual(source.count("BASE_URL = 'https://cendavo.au'"), 1)
+        self.assertNotIn('cendavo-deployment.pages.dev', source)
         sitemap = (OUT / 'sitemap.xml').read_text()
-        self.assertEqual(re.findall(r'<loc>([^<]+)</loc>', sitemap), [BASE_URL + path for path in self.PATHS.values()])
+        self.assertEqual(re.findall(r'<loc>([^<]+)</loc>', sitemap), [BASE_URL + path for path in self.PATHS.values()] +
+                         [BASE_URL + path for _, path in SERVICE_SEARCH_PAGES])
 
     def test_every_photo_has_an_avif_source_ahead_of_its_jpeg(self):
         total = 0
@@ -1733,7 +1741,7 @@ class ImagePerformanceAndSharingTests(unittest.TestCase):
                 self.assertNotIn('noindex', html)
         # Titles and descriptions keep their wording.
         self.assertIn('<title>Pricing — Cendavo</title>', self.html['pricing/index.html'])
-        self.assertIn('<meta property="og:title" content="Cendavo — Website design for Sydney’s local service businesses">', self.html['index.html'])
+        self.assertIn('<meta property="og:title" content="Website Design Sydney for Service Businesses | Cendavo">', self.html['index.html'])
 
     def test_share_card_is_1200_by_630(self):
         card = OUT / 'assets/social/cendavo-og.jpg'
@@ -5226,7 +5234,7 @@ class PerformanceTask48Tests(unittest.TestCase):
 
 class SeoAndHeaderTests(unittest.TestCase):
     """Night Shift Task 49: homepage JSON-LD, robots.txt sitemap line, sitemap lastmod and two security headers."""
-    BASE = 'https://cendavo-deployment.pages.dev'
+    BASE = 'https://cendavo.au'
     FORBIDDEN_KEYS = {'address', 'aggregateRating', 'review', 'reviews', 'sameAs', 'founder', 'telephone'}
 
     @classmethod
@@ -5309,7 +5317,8 @@ class SeoAndHeaderTests(unittest.TestCase):
         from datetime import date
         sitemap = (OUT / 'sitemap.xml').read_text()
         entries = re.findall(r'<url>(.*?)</url>', sitemap)
-        self.assertEqual(len(entries), 7)
+        from scripts.build_site import SERVICE_SEARCH_PAGES
+        self.assertEqual(len(entries), 7 + len(SERVICE_SEARCH_PAGES))
         values = []
         for entry in entries:
             with self.subTest(entry=entry):
@@ -5802,7 +5811,7 @@ class PreviewHostingTests(unittest.TestCase):
         self.assertTrue(headers.startswith(HEADERS.split('/preview/*')[0]))  # the site-wide /* block (CSP) is unchanged
         sitemap = (OUT / 'sitemap.xml').read_text()
         self.assertNotIn('/preview', sitemap)
-        self.assertEqual(len(re.findall(r'<url>', sitemap)), 7)
+        self.assertEqual(len(re.findall(r'<url>', sitemap)), 10)  # 7 nav pages + 3 Sydney service guides
 
     def test_site_wide_scans_skip_the_preview_folder(self):
         root = self.tmp / 'dist'
@@ -5957,3 +5966,28 @@ class ConceptGalleryTests(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+class SydneyServiceSearchPageTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        build()
+
+    def test_service_pages_have_canonical_and_reachable_ctas(self):
+        from scripts.build_site import SERVICE_SEARCH_PAGES, BASE_URL
+        for _, path in SERVICE_SEARCH_PAGES:
+            slug = path.strip('/')
+            html = (OUT / slug / 'index.html').read_text()
+            with self.subTest(path=path):
+                self.assertIn(f'<link rel="canonical" href="{BASE_URL}{path}">', html)
+                self.assertIn('<meta name="description"', html)
+                self.assertIn('href="/contact/"', html)
+                self.assertIn('<h1', html)
+                self.assertNotIn('noindex', html)
+                self.assertIn(f'<loc>{BASE_URL}{path}</loc>', (OUT / 'sitemap.xml').read_text())
+
+    def test_services_page_links_to_each_specific_service(self):
+        from scripts.build_site import SERVICE_SEARCH_PAGES
+        html = (OUT / 'services/index.html').read_text()
+        for _, path in SERVICE_SEARCH_PAGES:
+            with self.subTest(path=path):
+                self.assertIn(f'href="{path}"', html)

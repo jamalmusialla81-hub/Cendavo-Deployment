@@ -10,7 +10,7 @@ import shutil
 ROOT = Path(__file__).resolve().parents[1]
 OUT = ROOT / 'dist'
 # The live site's origin: canonical URLs, Open Graph URLs and the sitemap are all built from this one constant.
-BASE_URL = 'https://cendavo-deployment.pages.dev'
+BASE_URL = 'https://cendavo.au'
 SHARE_IMAGE = '/assets/social/cendavo-og.jpg'  # 1200×630 share card
 # The public business address (owner-provided, Night Shift Task 31). The one Python copy: the footer uses it directly and
 # page fragments write the CONTACT_TOKEN placeholder, replaced at build time. assets/enquiry.js and functions/api/enquiry.js
@@ -19,8 +19,26 @@ CONTACT_EMAIL = 'cendavo.au@gmail.com'
 CONTACT_TOKEN = '{{CONTACT_EMAIL}}'
 MAIL_LINK = f'<a class="mail" href="mailto:{CONTACT_EMAIL}">{CONTACT_EMAIL}</a>'
 SHARE_IMAGE_ALT = 'Websites for Sydney’s local service businesses. The Cendavo logo and a Request a free consultation button.'
-TITLES = {'index': 'Cendavo — Website design for Sydney’s local service businesses', 'work': 'Work — Cendavo', 'services': 'Services — Cendavo', 'pricing': 'Pricing — Cendavo', 'demo': 'Demo project — Cendavo', 'about': 'About — Cendavo', 'contact': 'Contact — Cendavo', '404': 'Page not found — Cendavo'}
-DESCRIPTIONS = {'index': 'Cendavo designs, builds, redesigns and looks after websites for local service businesses in Sydney.', 'work': 'Concept projects by Cendavo: three fictional Sydney service businesses, designed the way we would design yours.', 'services': 'New websites, redesigns and care plans for local service businesses in Sydney, from Cendavo.', 'pricing': 'How Cendavo prices websites: a fixed quote after a free consultation, what every project includes and what affects the quote.', 'demo': 'A Cendavo demonstration project that runs in your browser with sample data only.', 'about': 'About Cendavo, a small Sydney studio that designs, builds and looks after websites for local service businesses: how we think, what you can expect and how we build.', 'contact': 'Request a website design, redesign or maintenance consultation with Cendavo in Sydney.', '404': 'This page could not be found on the Cendavo website.'}
+TITLES = {'index': 'Website Design Sydney for Service Businesses | Cendavo', 'work': 'Work — Cendavo', 'services': 'Services — Cendavo', 'pricing': 'Pricing — Cendavo', 'demo': 'Demo project — Cendavo', 'about': 'About — Cendavo', 'contact': 'Contact — Cendavo', '404': 'Page not found — Cendavo'}
+DESCRIPTIONS = {'index': 'Cendavo designs, builds, redesigns and looks after websites for local service businesses in Sydney.', 'work': 'Concept projects by Cendavo: three fictional Sydney service businesses, designed the way we would design yours.', 'services': 'New websites, redesigns and care plans for local service businesses in Sydney, from Cendavo.', 'pricing': 'How Cendavo prices websites: a fixed quote after a free consultation, what every project includes and what affects the quote.', 'demo': 'A Cendavo demonstration project that runs in your browser with sample data only.', 'about': 'Cendavo is a Sydney website studio designing, rebuilding and maintaining websites for local service businesses. Learn about our approach and process.', 'contact': 'Request a website design, redesign or maintenance consultation with Cendavo in Sydney.', '404': 'This page could not be found on the Cendavo website.'}
+# Search-intent service guides are linked from Services, not repeated in the crowded header.
+SERVICE_SEARCH_PAGES = [
+    ('Website design Sydney', '/website-design-sydney/'),
+    ('Website redesign Sydney', '/website-redesign-sydney/'),
+    ('Website maintenance Sydney', '/website-maintenance-sydney/'),
+]
+TITLES.update({
+    'website-design-sydney': 'Website Design Sydney for Local Businesses | Cendavo',
+    'website-redesign-sydney': 'Website Redesign Sydney for Local Businesses | Cendavo',
+    'website-maintenance-sydney': 'Website Maintenance Sydney | Care Plans — Cendavo',
+    'services': 'Website Design, Redesign and Maintenance Sydney — Cendavo',
+})
+DESCRIPTIONS.update({
+    'website-design-sydney': 'Sydney website design for trades, barbers, cleaners, detailers and other local service businesses. Plan a practical, mobile-friendly website with Cendavo.',
+    'website-redesign-sydney': 'Website redesign in Sydney for local businesses with an outdated or hard-to-use site. See what Cendavo reviews before recommending a rebuild.',
+    'website-maintenance-sydney': 'Website maintenance and care plans for Sydney service businesses: ongoing updates, backups and agreed small changes. Ask Cendavo for a fixed quote.',
+    'services': 'Sydney website design, redesign and ongoing maintenance for local service businesses. Explore Cendavo’s services and request a free consultation.',
+})
 # The 404 page is built to dist/404.html (Cloudflare Pages serves it, with a 404 status, for unknown URLs). It is not in
 # NAV or the sitemap, carries noindex and no canonical or sharing metadata.
 NOT_FOUND = '404'
@@ -271,7 +289,7 @@ def build():
     (OUT / 'robots.txt').write_text(f'User-agent: *\nAllow: /\nDisallow: /preview/\nSitemap: {BASE_URL}/sitemap.xml\n')
     # lastmod is the build date: every page is rebuilt on every deploy.
     lastmod = date.today().isoformat()
-    (OUT / 'sitemap.xml').write_text('<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">' + ''.join(f'<url><loc>{BASE_URL}{href}</loc><lastmod>{lastmod}</lastmod></url>' for _, href in NAV) + '</urlset>')
+    (OUT / 'sitemap.xml').write_text('<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">' + ''.join(f'<url><loc>{BASE_URL}{href}</loc><lastmod>{lastmod}</lastmod></url>' for _, href in NAV + SERVICE_SEARCH_PAGES) + '</urlset>')
     print(f'Built {len(list((ROOT / "pages").glob("*.html")))} pages in {OUT}')
 
 
